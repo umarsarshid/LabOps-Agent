@@ -13,10 +13,13 @@ namespace labops::cli {
 
 namespace {
 
+// Exit code contract is centralized here so every subcommand remains
+// consistent and automation can rely on deterministic behavior.
 constexpr int kExitSuccess = 0;
 constexpr int kExitFailure = 1;
 constexpr int kExitUsage = 2;
 
+// One usage text source avoids divergence between help and error paths.
 void PrintUsage(std::ostream& out) {
   out << "usage:\n"
       << "  labops run <scenario.json>\n"
@@ -24,6 +27,9 @@ void PrintUsage(std::ostream& out) {
       << "  labops version\n";
 }
 
+// Early-stage scenario preflight checks. These are intentionally lightweight
+// and filesystem-focused; full schema validation belongs in the scenarios
+// module as that gets implemented.
 bool ValidateScenarioPath(const std::string& scenario_path, std::string& error) {
   if (scenario_path.empty()) {
     error = "scenario path cannot be empty";
@@ -102,6 +108,7 @@ int CommandRun(const std::vector<std::string_view>& args) {
     return kExitFailure;
   }
 
+  // Placeholder behavior until run execution/collection is implemented.
   std::cout << "run queued: " << scenario_path << '\n';
   return kExitSuccess;
 }
@@ -117,6 +124,8 @@ int Dispatch(int argc, char** argv) {
   const std::string_view command(argv[1]);
   const std::vector<std::string_view> args(argv + 2, argv + argc);
 
+  // Explicit command dispatch keeps behavior obvious and easy to evolve while
+  // command count is still small.
   if (command == "version") {
     return CommandVersion(args);
   }
