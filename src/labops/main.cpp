@@ -1,6 +1,5 @@
-#include <iostream>
+#include "labops/cli/router.hpp"
 
-int main() {
-  std::cout << "labops: hello" << std::endl;
-  return 0;
+int main(int argc, char** argv) {
+  return labops::cli::Dispatch(argc, argv);
 }
