@@ -12,6 +12,7 @@ As the system grows, many modules need common utilities (errors, clocks, structu
 - Time and monotonic clock helpers.
 - Shared serialization helpers and constants.
 - Project-wide logging interfaces.
+- Canonical schema contracts under `schema/` for cross-module run metadata.
 
 ## Guardrails
 
