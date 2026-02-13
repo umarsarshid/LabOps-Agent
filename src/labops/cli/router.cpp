@@ -2,6 +2,8 @@
 
 #include "artifacts/run_writer.hpp"
 #include "core/schema/run_contract.hpp"
+#include "events/event_model.hpp"
+#include "events/jsonl_writer.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -167,6 +169,23 @@ core::schema::RunInfo BuildRunInfo(const RunOptions& options,
   return run_info;
 }
 
+// Emit a minimal event immediately so every run has at least one timeline
+// record. This validates the end-to-end event pipeline before real stream
+// events are wired in.
+events::Event BuildSampleEvent(const core::schema::RunInfo& run_info,
+                               std::chrono::system_clock::time_point now) {
+  events::Event event;
+  event.ts = now;
+  event.type = events::EventType::kRunStarted;
+  event.payload = {
+      {"run_id", run_info.run_id},
+      {"scenario_id", run_info.config.scenario_id},
+      {"backend", run_info.config.backend},
+      {"note", "sample_event"},
+  };
+  return event;
+}
+
 int CommandRun(const std::vector<std::string_view>& args) {
   RunOptions options;
   std::string error;
@@ -189,8 +208,16 @@ int CommandRun(const std::vector<std::string_view>& args) {
     return kExitFailure;
   }
 
+  const events::Event sample_event = BuildSampleEvent(run_info, now);
+  fs::path events_path;
+  if (!events::AppendEventJsonl(sample_event, options.output_dir, events_path, error)) {
+    std::cerr << "error: " << error << '\n';
+    return kExitFailure;
+  }
+
   std::cout << "run queued: " << options.scenario_path << '\n';
   std::cout << "artifact: " << written_path.string() << '\n';
+  std::cout << "events: " << events_path.string() << '\n';
   return kExitSuccess;
 }
 

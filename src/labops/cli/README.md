@@ -13,6 +13,7 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Preserve stable exit-code semantics for automation.
 - Print deterministic command outputs.
 - Parse run artifact options (currently `--out <dir>`).
+- Trigger initial artifact/event emission for `run` command execution.
 
 ## Design intent
 
