@@ -19,6 +19,14 @@ add_library(labops_schema
 target_include_directories(labops_schema PUBLIC src)
 target_compile_features(labops_schema PUBLIC cxx_std_20)
 
+# Artifact writers convert in-memory run contracts into stable on-disk outputs.
+add_library(labops_artifacts
+  src/artifacts/run_writer.cpp
+)
+target_include_directories(labops_artifacts PUBLIC src)
+target_compile_features(labops_artifacts PUBLIC cxx_std_20)
+target_link_libraries(labops_artifacts PUBLIC labops_schema)
+
 add_executable(labops
   src/labops/cli/router.cpp
   src/labops/main.cpp
@@ -27,7 +35,7 @@ add_executable(labops
 # Expose `src/` as the include root so includes stay stable as the tree grows.
 target_include_directories(labops PRIVATE src)
 target_compile_features(labops PRIVATE cxx_std_20)
-target_link_libraries(labops PRIVATE labops_schema)
+target_link_libraries(labops PRIVATE labops_artifacts labops_schema)
 
 # Early smoke-test target that validates the schema contract and JSON output
 # remain stable. This is intentionally lightweight until broader test
@@ -39,3 +47,11 @@ add_executable(run_contract_json_smoke
 target_link_libraries(run_contract_json_smoke PRIVATE labops_schema)
 target_compile_features(run_contract_json_smoke PRIVATE cxx_std_20)
 add_test(NAME run_contract_json_smoke COMMAND run_contract_json_smoke)
+
+# Smoke test for artifact emission behavior and output path contracts.
+add_executable(run_writer_smoke
+  tests/artifacts/run_writer_smoke.cpp
+)
+target_link_libraries(run_writer_smoke PRIVATE labops_artifacts labops_schema)
+target_compile_features(run_writer_smoke PRIVATE cxx_std_20)
+add_test(NAME run_writer_smoke COMMAND run_writer_smoke)

@@ -12,6 +12,7 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Enforce usage errors consistently.
 - Preserve stable exit-code semantics for automation.
 - Print deterministic command outputs.
+- Parse run artifact options (currently `--out <dir>`).
 
 ## Design intent
 

@@ -13,6 +13,11 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 - Diff/report files against baseline.
 - Structured bundle directories ready to share with engineers.
 
+## Current contents
+
+- `run_writer.hpp/.cpp`: writes canonical `run.json` files into an output
+  directory (`--out <dir>` from CLI) and ensures directory creation.
+
 ## Design principle
 
 Artifact structure should be stable and easy to parse by both humans and automation.

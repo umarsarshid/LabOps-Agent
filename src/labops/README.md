@@ -12,6 +12,13 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
 - Top-level command routing and argument handling.
 - Command-level output and exit code contracts.
 
+## Current command contract
+
+- `labops version`: prints tool version.
+- `labops validate <scenario.json>`: validates scenario file preflight checks.
+- `labops run <scenario.json> --out <dir>`: emits `<dir>/run.json` metadata
+  artifact and reports its path.
+
 ## What should not live here
 
 - Camera/stream runtime logic.
