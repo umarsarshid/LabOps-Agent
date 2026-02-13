@@ -4,6 +4,7 @@
 #include "artifacts/metrics_writer.hpp"
 #include "artifacts/run_writer.hpp"
 #include "artifacts/scenario_writer.hpp"
+#include "artifacts/bundle_zip_writer.hpp"
 #include "backends/camera_backend.hpp"
 #include "backends/sim/scenario_config.hpp"
 #include "backends/sim/sim_camera_backend.hpp"
@@ -43,7 +44,7 @@ constexpr int kExitUsage = 2;
 // One usage text source avoids divergence between help and error paths.
 void PrintUsage(std::ostream& out) {
   out << "usage:\n"
-      << "  labops run <scenario.json> [--out <dir>]\n"
+      << "  labops run <scenario.json> [--out <dir>] [--zip]\n"
       << "  labops validate <scenario.json>\n"
       << "  labops version\n";
 }
@@ -132,6 +133,7 @@ int CommandValidate(const std::vector<std::string_view>& args) {
 struct RunOptions {
   std::string scenario_path;
   fs::path output_dir = "out";
+  bool zip_bundle = false;
 };
 
 struct RunPlan {
@@ -147,6 +149,10 @@ bool ParseRunOptions(const std::vector<std::string_view>& args, RunOptions& opti
                      std::string& error) {
   for (std::size_t i = 0; i < args.size(); ++i) {
     const std::string_view token = args[i];
+    if (token == "--zip") {
+      options.zip_bundle = true;
+      continue;
+    }
     if (token == "--out") {
       if (i + 1 >= args.size()) {
         error = "missing value for --out";
@@ -569,6 +575,14 @@ int CommandRun(const std::vector<std::string_view>& args) {
     return kExitFailure;
   }
 
+  fs::path bundle_zip_path;
+  if (options.zip_bundle) {
+    if (!artifacts::WriteBundleZip(bundle_dir, bundle_zip_path, error)) {
+      std::cerr << "error: failed to write support bundle zip: " << error << '\n';
+      return kExitFailure;
+    }
+  }
+
   std::cout << "run queued: " << options.scenario_path << '\n';
   std::cout << "bundle: " << bundle_dir.string() << '\n';
   std::cout << "scenario: " << scenario_artifact_path.string() << '\n';
@@ -577,6 +591,9 @@ int CommandRun(const std::vector<std::string_view>& args) {
   std::cout << "metrics_csv: " << metrics_csv_path.string() << '\n';
   std::cout << "metrics_json: " << metrics_json_path.string() << '\n';
   std::cout << "manifest: " << bundle_manifest_path.string() << '\n';
+  if (options.zip_bundle) {
+    std::cout << "bundle_zip: " << bundle_zip_path.string() << '\n';
+  }
   std::cout << "fps: avg=" << fps_report.avg_fps
             << " rolling_samples=" << fps_report.rolling_samples.size() << '\n';
   std::cout << "drops: total=" << fps_report.dropped_frames_total

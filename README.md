@@ -28,7 +28,7 @@ Agent diagnosis/planning is still upcoming.
 - CLI commands:
   - `labops version`
   - `labops validate <scenario.json>`
-  - `labops run <scenario.json> [--out <dir>]`
+  - `labops run <scenario.json> [--out <dir>] [--zip]`
 - Scenario loader + schema validation in `labops validate` with actionable
   field-level errors.
 - Starter scenario set in `scenarios/`:
@@ -41,6 +41,7 @@ Agent diagnosis/planning is still upcoming.
   - `<out>/<run_id>/run.json`
   - `<out>/<run_id>/events.jsonl`
   - `<out>/<run_id>/bundle_manifest.json`
+  - optional `<out>/<run_id>.zip` support bundle when `--zip` is requested
 - Stream lifecycle event emission in `labops run`:
   - `CONFIG_APPLIED`
   - `STREAM_STARTED`
@@ -115,6 +116,12 @@ cmake --build build
 ./build/labops run scenarios/dropped_frames.json --out out-drops/
 ```
 
+### 6) Create support zip on demand (optional)
+
+```bash
+./build/labops run scenarios/sim_baseline.json --out out/ --zip
+```
+
 Expected bundle layout per run:
 - `<out-dir>/<run_id>/scenario.json`
 - `<out-dir>/<run_id>/run.json`
@@ -122,6 +129,7 @@ Expected bundle layout per run:
 - `<out-dir>/<run_id>/metrics.csv`
 - `<out-dir>/<run_id>/metrics.json`
 - `<out-dir>/<run_id>/bundle_manifest.json`
+- optional `<out-dir>/<run_id>.zip` when `--zip` is used
 
 If you want to author new scenarios, follow `docs/scenario_schema.md`.
 
@@ -132,6 +140,12 @@ If you want to author new scenarios, follow `docs/scenario_schema.md`.
 - `labops run` now writes a dedicated bundle directory per run:
   - `<out>/<run_id>/`
 - This keeps repeated runs under the same `--out` root isolated and easy to share.
+
+### Support Zip
+
+- `labops run --zip` writes an additional support archive:
+  - `<out>/<run_id>.zip`
+- Zip generation is opt-in so default runs avoid extra packaging overhead.
 
 ### scenario.json
 

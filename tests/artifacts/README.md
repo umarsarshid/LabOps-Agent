@@ -18,6 +18,8 @@ this folder guard against accidental output-shape or file-path regressions.
 - `bundle_manifest_writer_smoke.cpp`: verifies
   `WriteBundleManifestJson(...)` emits `bundle_manifest.json` including each
   artifact path with hash and size fields.
+- `bundle_zip_writer_smoke.cpp`: verifies `WriteBundleZip(...)` emits a valid
+  zip file (`PK` signature) and includes expected bundle entries.
 
 ## Connection to the project
 

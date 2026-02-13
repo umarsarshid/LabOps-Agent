@@ -58,6 +58,7 @@ target_compile_features(labops_metrics PUBLIC cxx_std_20)
 # Artifact writers convert in-memory run contracts into stable on-disk outputs.
 add_library(labops_artifacts
   src/artifacts/bundle_manifest_writer.cpp
+  src/artifacts/bundle_zip_writer.cpp
   src/artifacts/metrics_writer.cpp
   src/artifacts/scenario_writer.cpp
   src/artifacts/run_writer.cpp
@@ -111,6 +112,14 @@ add_executable(bundle_manifest_writer_smoke
 target_link_libraries(bundle_manifest_writer_smoke PRIVATE labops_artifacts)
 target_compile_features(bundle_manifest_writer_smoke PRIVATE cxx_std_20)
 add_test(NAME bundle_manifest_writer_smoke COMMAND bundle_manifest_writer_smoke)
+
+# Smoke test for support-bundle zip writer contract.
+add_executable(bundle_zip_writer_smoke
+  tests/artifacts/bundle_zip_writer_smoke.cpp
+)
+target_link_libraries(bundle_zip_writer_smoke PRIVATE labops_artifacts)
+target_compile_features(bundle_zip_writer_smoke PRIVATE cxx_std_20)
+add_test(NAME bundle_zip_writer_smoke COMMAND bundle_zip_writer_smoke)
 
 # Smoke test for append-only event log emission.
 add_executable(events_jsonl_smoke
@@ -196,6 +205,17 @@ target_include_directories(bundle_layout_consistency_smoke PRIVATE src)
 target_link_libraries(bundle_layout_consistency_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
 target_compile_features(bundle_layout_consistency_smoke PRIVATE cxx_std_20)
 add_test(NAME bundle_layout_consistency_smoke COMMAND bundle_layout_consistency_smoke)
+
+# Integration smoke test validating `--zip` behavior:
+# zip is generated only when explicitly requested.
+add_executable(bundle_zip_on_demand_smoke
+  tests/labops/bundle_zip_on_demand_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(bundle_zip_on_demand_smoke PRIVATE src)
+target_link_libraries(bundle_zip_on_demand_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(bundle_zip_on_demand_smoke PRIVATE cxx_std_20)
+add_test(NAME bundle_zip_on_demand_smoke COMMAND bundle_zip_on_demand_smoke)
 
 # Scenario schema validation smoke tests.
 add_executable(scenario_validation_smoke

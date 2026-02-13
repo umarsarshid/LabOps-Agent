@@ -24,6 +24,8 @@ surface (argument parsing + runtime orchestration + artifact/event output).
   the same `--out` root and verifies standardized bundle layout
   (`<out>/<run_id>/...`) with required artifact files per run, including
   `bundle_manifest.json`.
+- `bundle_zip_on_demand_smoke.cpp`: verifies `--zip` creates
+  `<out>/<run_id>.zip` and default runs do not emit zip files.
 
 ## Connection to the project
 

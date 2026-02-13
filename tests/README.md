@@ -20,6 +20,7 @@ LabOps must be predictable. Tests verify command contracts, scenario validation,
 - Artifact-specific writer contract tests under `tests/artifacts/`.
 - CLI integration smoke tests under `tests/labops/` for end-to-end run traces.
 - Bundle layout consistency smoke coverage for `<out>/<run_id>/...` contracts.
+- Optional support-zip smoke coverage for `--zip` bundle packaging.
 - Seeded determinism smoke coverage to prevent non-repeatable sim behavior.
 - Metric smoke tests under `tests/metrics/` for FPS/drop/jitter formulas and
   CSV/JSON output contracts.

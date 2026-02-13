@@ -14,6 +14,7 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 - `metrics.csv` for plotting and spreadsheet workflows.
 - `metrics.json` for machine parsing by agent logic.
 - `bundle_manifest.json` listing artifact files, sizes, and hashes.
+- optional `<run_id>.zip` support bundle archive.
 - Diff/report files against baseline.
 - Structured bundle directories (`<out>/<run_id>/`) ready to share with
   engineers.
@@ -29,6 +30,8 @@ The project promise is a clean, reproducible evidence packet. This module ensure
   `scenario.json` for reproducibility.
 - `bundle_manifest_writer.hpp/.cpp`: writes `bundle_manifest.json` with
   per-file `size_bytes` and `fnv1a_64` hash values.
+- `bundle_zip_writer.hpp/.cpp`: writes optional support zip archives
+  (`<out>/<run_id>.zip`) for bundle handoff.
 
 ## Design principle
 

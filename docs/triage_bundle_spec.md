@@ -14,6 +14,11 @@ Current output files are emitted per run under `<out>/<run_id>/`:
 - `metrics.json`: machine-friendly metric object for agent parsing.
 - `bundle_manifest.json`: artifact inventory with per-file size and hash.
 
+Optional output:
+
+- `<out>/<run_id>.zip`: support archive of the run bundle, emitted only when
+  `--zip` is requested.
+
 ## Metric Definitions
 
 All metric definitions below are authoritative for current behavior.

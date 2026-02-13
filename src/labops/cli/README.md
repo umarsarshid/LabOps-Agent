@@ -22,6 +22,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Emit standardized per-run bundles under `<out>/<run_id>/` including
   `scenario.json`, `run.json`, `events.jsonl`, metrics artifacts, and
   `bundle_manifest.json` (artifact list + hashes).
+- Optionally emit support bundle zip archives via `--zip` at
+  `<out>/<run_id>.zip`.
 
 ## Design intent
 
