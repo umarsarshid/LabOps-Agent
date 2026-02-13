@@ -11,12 +11,14 @@ This directory is the source of truth for runnable test definitions. Scenarios s
 - Baseline scenarios (known-good behavior).
 - Failure-injection scenarios (drops, jitter, disconnects).
 - Targeted investigation scenarios (trigger/ROI/pixel-format sweeps).
+- `foo.json`: minimal sample scenario matching the documented schema.
 
 ## Authoring guidance
 
 - Keep scenarios declarative.
 - Prefer explicit values over hidden defaults.
 - Name scenarios by intent so run history remains searchable.
+- Follow `docs/scenario_schema.md` for required fields and constraints.
 
 ## Connection to the project
 

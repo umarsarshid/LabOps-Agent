@@ -12,6 +12,11 @@ A repeatable lab depends on declarative scenario files. This module ensures scen
 - File loading and validation errors.
 - Normalized scenario objects passed to executors.
 
+## Current contents
+
+- `validator.hpp/.cpp`: scenario JSON loader + schema validation with
+  actionable error messages keyed by field path (used by `labops validate`).
+
 ## Design principle
 
 Fail early with clear validation messages. Invalid scenarios should never reach runtime execution.

@@ -28,6 +28,8 @@ stack are planned next.
   - `labops version`
   - `labops validate <scenario.json>`
   - `labops run <scenario.json> [--out <dir>]`
+- Scenario loader + schema validation in `labops validate` with actionable
+  field-level errors.
 - Run contract schema (`RunConfig`, `RunInfo`) with JSON serialization.
 - Artifact writer for `<out>/run.json`.
 - Event contract and append-only JSONL writer for `<out>/events.jsonl`.
@@ -62,7 +64,8 @@ stack are planned next.
 
 ## Not Implemented Yet
 
-- Strict scenario schema parser/validator (current validate is preflight-level).
+- Scenario schema expansion (current validator covers core fields and
+  constraints; deeper domain-specific rules can be added).
 - Full metrics suite completion (disconnect-specific metrics beyond current FPS+drop+jitter timing).
 - Baseline comparison and diff artifact outputs.
 - SDK-backed camera implementation (only interface boundary/stub exists).

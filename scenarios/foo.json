@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "foo",
+  "description": "Sample scenario for validate/run smoke checks.",
+  "tags": ["sample", "smoke"],
+  "duration": {
+    "duration_ms": 10000
+  },
+  "camera": {
+    "fps": 30,
+    "pixel_format": "mono8",
+    "trigger_mode": "free_run"
+  },
+  "sim_faults": {
+    "seed": 1,
+    "jitter_us": 0,
+    "drop_every_n": 0,
+    "drop_percent": 0,
+    "burst_drop": 0,
+    "reorder": 0
+  },
+  "thresholds": {
+    "min_avg_fps": 28.0,
+    "max_drop_rate_percent": 1.0
+  }
+}

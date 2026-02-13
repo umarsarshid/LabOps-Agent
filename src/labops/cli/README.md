@@ -13,6 +13,7 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Preserve stable exit-code semantics for automation.
 - Print deterministic command outputs.
 - Parse run artifact options (currently `--out <dir>`).
+- Route scenario validation through schema loader with actionable errors.
 - Execute sim backend run lifecycle and emit stream trace events.
 - Compute and write run metrics (`metrics.csv` + `metrics.json`) for FPS,
   drop, and timing/jitter reporting.

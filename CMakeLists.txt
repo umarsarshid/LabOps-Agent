@@ -41,6 +41,13 @@ add_library(labops_backends
 target_include_directories(labops_backends PUBLIC src)
 target_compile_features(labops_backends PUBLIC cxx_std_20)
 
+# Scenario loader/validation module.
+add_library(labops_scenarios
+  src/scenarios/validator.cpp
+)
+target_include_directories(labops_scenarios PUBLIC src)
+target_compile_features(labops_scenarios PUBLIC cxx_std_20)
+
 # Metrics formulas and writers for run performance outputs.
 add_library(labops_metrics
   src/metrics/fps.cpp
@@ -65,7 +72,7 @@ add_executable(labops
 # Expose `src/` as the include root so includes stay stable as the tree grows.
 target_include_directories(labops PRIVATE src)
 target_compile_features(labops PRIVATE cxx_std_20)
-target_link_libraries(labops PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_schema)
+target_link_libraries(labops PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
 
 # Early smoke-test target that validates the schema contract and JSON output
 # remain stable. This is intentionally lightweight until broader test
@@ -125,9 +132,19 @@ add_executable(run_stream_trace_smoke
   src/labops/cli/router.cpp
 )
 target_include_directories(run_stream_trace_smoke PRIVATE src)
-target_link_libraries(run_stream_trace_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_schema)
+target_link_libraries(run_stream_trace_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
 target_compile_features(run_stream_trace_smoke PRIVATE cxx_std_20)
 add_test(NAME run_stream_trace_smoke COMMAND run_stream_trace_smoke)
+
+# Integration smoke test for actionable schema validation errors through CLI.
+add_executable(validate_actionable_smoke
+  tests/labops/validate_actionable_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(validate_actionable_smoke PRIVATE src)
+target_link_libraries(validate_actionable_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(validate_actionable_smoke PRIVATE cxx_std_20)
+add_test(NAME validate_actionable_smoke COMMAND validate_actionable_smoke)
 
 # Integration smoke test that verifies deterministic stream traces for a fixed
 # scenario seed (same seed => same first K events after normalizing dynamic fields).
@@ -136,9 +153,17 @@ add_executable(sim_determinism_golden_smoke
   src/labops/cli/router.cpp
 )
 target_include_directories(sim_determinism_golden_smoke PRIVATE src)
-target_link_libraries(sim_determinism_golden_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_schema)
+target_link_libraries(sim_determinism_golden_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
 target_compile_features(sim_determinism_golden_smoke PRIVATE cxx_std_20)
 add_test(NAME sim_determinism_golden_smoke COMMAND sim_determinism_golden_smoke)
+
+# Scenario schema validation smoke tests.
+add_executable(scenario_validation_smoke
+  tests/scenarios/scenario_validation_smoke.cpp
+)
+target_link_libraries(scenario_validation_smoke PRIVATE labops_scenarios)
+target_compile_features(scenario_validation_smoke PRIVATE cxx_std_20)
+add_test(NAME scenario_validation_smoke COMMAND scenario_validation_smoke)
 
 # Smoke test for FPS computation and metrics.csv emission.
 add_executable(fps_metrics_smoke

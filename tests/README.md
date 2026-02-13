@@ -22,6 +22,8 @@ LabOps must be predictable. Tests verify command contracts, scenario validation,
 - Seeded determinism smoke coverage to prevent non-repeatable sim behavior.
 - Metric smoke tests under `tests/metrics/` for FPS/drop/jitter formulas and
   CSV/JSON output contracts.
+- Scenario validation smoke tests under `tests/scenarios/` for actionable
+  schema errors.
 
 ## Design principle
 

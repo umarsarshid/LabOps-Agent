@@ -9,6 +9,7 @@
 #include "events/event_model.hpp"
 #include "events/jsonl_writer.hpp"
 #include "metrics/fps.hpp"
+#include "scenarios/validator.hpp"
 
 #include <cctype>
 #include <charconv>
@@ -45,9 +46,8 @@ void PrintUsage(std::ostream& out) {
       << "  labops version\n";
 }
 
-// Early-stage scenario preflight checks. These are intentionally lightweight
-// and filesystem-focused; full schema validation belongs in the scenarios
-// module as that gets implemented.
+// Filesystem preflight checks run before schema validation. This keeps path and
+// file-type failures separate from field-level schema issues.
 bool ValidateScenarioPath(const std::string& scenario_path, std::string& error) {
   if (scenario_path.empty()) {
     error = "scenario path cannot be empty";
@@ -106,6 +106,20 @@ int CommandValidate(const std::vector<std::string_view>& args) {
   const std::string scenario_path(args.front());
   if (!ValidateScenarioPath(scenario_path, error)) {
     std::cerr << "error: " << error << '\n';
+    return kExitFailure;
+  }
+
+  scenarios::ValidationReport report;
+  if (!scenarios::ValidateScenarioFile(scenario_path, report, error)) {
+    std::cerr << "error: " << error << '\n';
+    return kExitFailure;
+  }
+
+  if (!report.valid) {
+    std::cerr << "invalid scenario: " << scenario_path << '\n';
+    for (const auto& issue : report.issues) {
+      std::cerr << "  - " << issue.path << ": " << issue.message << '\n';
+    }
     return kExitFailure;
   }
 
