@@ -11,7 +11,8 @@ isolation.
 Simple flow:
 - You run a scenario.
 - LabOps executes the backend with deterministic controls.
-- It records `run.json`, `events.jsonl`, `metrics.csv`, and `metrics.json`.
+- It records a per-run bundle with `scenario.json`, `run.json`,
+  `events.jsonl`, `metrics.csv`, and `metrics.json`.
 - Tests verify contracts and determinism so behavior stays reproducible.
 
 ## Current Status
@@ -35,8 +36,10 @@ Agent diagnosis/planning is still upcoming.
   - `dropped_frames.json`
   - `trigger_roi.json`
 - Run contract schema (`RunConfig`, `RunInfo`) with JSON serialization.
-- Artifact writer for `<out>/run.json`.
-- Event contract and append-only JSONL writer for `<out>/events.jsonl`.
+- Artifact writers for per-run bundle files:
+  - `<out>/<run_id>/scenario.json`
+  - `<out>/<run_id>/run.json`
+  - `<out>/<run_id>/events.jsonl`
 - Stream lifecycle event emission in `labops run`:
   - `CONFIG_APPLIED`
   - `STREAM_STARTED`
@@ -49,7 +52,7 @@ Agent diagnosis/planning is still upcoming.
   - computes drop stats (`total dropped`, `drop rate percent`)
   - computes inter-frame interval stats (`min/avg/p95-ish`)
   - computes inter-frame jitter stats (`min/avg/p95-ish`)
-  - writes `<out>/metrics.csv` and `<out>/metrics.json`
+  - writes `<out>/<run_id>/metrics.csv` and `<out>/<run_id>/metrics.json`
 - Backend contract (`ICameraBackend`) plus deterministic sim backend.
 - Sim features:
   - Configurable FPS, jitter, seed, frame size.
@@ -111,15 +114,27 @@ cmake --build build
 ./build/labops run scenarios/dropped_frames.json --out out-drops/
 ```
 
-Expected files per run in the chosen output directory:
-- `<out-dir>/run.json`
-- `<out-dir>/events.jsonl`
-- `<out-dir>/metrics.csv`
-- `<out-dir>/metrics.json`
+Expected bundle layout per run:
+- `<out-dir>/<run_id>/scenario.json`
+- `<out-dir>/<run_id>/run.json`
+- `<out-dir>/<run_id>/events.jsonl`
+- `<out-dir>/<run_id>/metrics.csv`
+- `<out-dir>/<run_id>/metrics.json`
 
 If you want to author new scenarios, follow `docs/scenario_schema.md`.
 
 ## Output Contracts
+
+### Bundle Directory
+
+- `labops run` now writes a dedicated bundle directory per run:
+  - `<out>/<run_id>/`
+- This keeps repeated runs under the same `--out` root isolated and easy to share.
+
+### scenario.json
+
+- Byte-for-byte snapshot copy of the source scenario used for the run.
+- Stored at `<out>/<run_id>/scenario.json`.
 
 ### run.json
 

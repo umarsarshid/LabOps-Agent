@@ -103,6 +103,28 @@ fs::path ResolveBaselineScenarioPath() {
   return {};
 }
 
+fs::path ResolveSingleBundleDir(const fs::path& out_root) {
+  if (!fs::exists(out_root)) {
+    Fail("output root does not exist");
+  }
+
+  std::vector<fs::path> bundle_dirs;
+  for (const auto& entry : fs::directory_iterator(out_root)) {
+    if (!entry.is_directory()) {
+      continue;
+    }
+    const std::string name = entry.path().filename().string();
+    if (name.rfind("run-", 0) == 0U) {
+      bundle_dirs.push_back(entry.path());
+    }
+  }
+
+  if (bundle_dirs.size() != 1U) {
+    Fail("expected exactly one run bundle directory");
+  }
+  return bundle_dirs.front();
+}
+
 } // namespace
 
 int main() {
@@ -136,7 +158,8 @@ int main() {
     Fail("labops run failed for scenarios/sim_baseline.json");
   }
 
-  const fs::path metrics_json_path = out_dir / "metrics.json";
+  const fs::path bundle_dir = ResolveSingleBundleDir(out_dir);
+  const fs::path metrics_json_path = bundle_dir / "metrics.json";
   if (!fs::exists(metrics_json_path)) {
     Fail("metrics.json was not generated for baseline scenario");
   }

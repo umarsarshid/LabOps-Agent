@@ -8,19 +8,24 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 
 ## Expected outputs
 
+- `scenario.json` snapshot of the exact scenario that was run.
 - `run.json` for run metadata.
+- `events.jsonl` append-only run timeline.
 - `metrics.csv` for plotting and spreadsheet workflows.
 - `metrics.json` for machine parsing by agent logic.
 - Diff/report files against baseline.
-- Structured bundle directories ready to share with engineers.
+- Structured bundle directories (`<out>/<run_id>/`) ready to share with
+  engineers.
 
 ## Current contents
 
 - `run_writer.hpp/.cpp`: writes canonical `run.json` files into an output
-  directory (`--out <dir>` from CLI) and ensures directory creation.
+  directory and ensures directory creation.
 - `metrics_writer.hpp/.cpp`: writes canonical metrics artifacts:
   - `metrics.csv` for plotting and spreadsheet workflows
   - `metrics.json` for machine parsing by agent logic
+- `scenario_writer.hpp/.cpp`: copies source scenario into bundle as
+  `scenario.json` for reproducibility.
 
 ## Design principle
 

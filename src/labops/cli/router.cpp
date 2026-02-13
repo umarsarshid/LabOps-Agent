@@ -2,6 +2,7 @@
 
 #include "artifacts/metrics_writer.hpp"
 #include "artifacts/run_writer.hpp"
+#include "artifacts/scenario_writer.hpp"
 #include "backends/camera_backend.hpp"
 #include "backends/sim/scenario_config.hpp"
 #include "backends/sim/sim_camera_backend.hpp"
@@ -324,6 +325,15 @@ core::schema::RunInfo BuildRunInfo(const RunOptions& options, const RunPlan& run
   return run_info;
 }
 
+// Bundle layout contract:
+// - one subdirectory per run ID
+// - all run artifacts emitted into that directory
+//
+// This keeps repeated runs under the same `--out` root isolated and shareable.
+fs::path BuildRunBundleDir(const RunOptions& options, const core::schema::RunInfo& run_info) {
+  return options.output_dir / run_info.run_id;
+}
+
 bool AppendTraceEvent(events::EventType type, std::chrono::system_clock::time_point ts,
                       std::map<std::string, std::string> payload,
                       const fs::path& output_dir,
@@ -375,6 +385,13 @@ int CommandRun(const std::vector<std::string_view>& args) {
 
   const auto created_at = std::chrono::system_clock::now();
   core::schema::RunInfo run_info = BuildRunInfo(options, run_plan, created_at);
+  const fs::path bundle_dir = BuildRunBundleDir(options, run_info);
+
+  fs::path scenario_artifact_path;
+  if (!artifacts::WriteScenarioJson(options.scenario_path, bundle_dir, scenario_artifact_path, error)) {
+    std::cerr << "error: failed to write scenario snapshot: " << error << '\n';
+    return kExitFailure;
+  }
 
   std::unique_ptr<backends::ICameraBackend> backend =
       std::make_unique<backends::sim::SimCameraBackend>();
@@ -395,7 +412,7 @@ int CommandRun(const std::vector<std::string_view>& args) {
   if (!AppendTraceEvent(events::EventType::kConfigApplied,
                         config_applied_at,
                         BuildConfigAppliedPayload(run_info, applied_params),
-                        options.output_dir,
+                        bundle_dir,
                         events_path,
                         error)) {
     std::cerr << "error: failed to append CONFIG_APPLIED event: " << error << '\n';
@@ -432,7 +449,7 @@ int CommandRun(const std::vector<std::string_view>& args) {
               {"fps", std::to_string(run_plan.sim_config.fps)},
               {"seed", std::to_string(run_plan.sim_config.seed)},
           },
-          options.output_dir,
+          bundle_dir,
           events_path,
           error)) {
     stop_if_started();
@@ -473,7 +490,7 @@ int CommandRun(const std::vector<std::string_view>& args) {
     if (!AppendTraceEvent(dropped ? events::EventType::kFrameDropped : events::EventType::kFrameReceived,
                           frame.timestamp,
                           std::move(payload),
-                          options.output_dir,
+                          bundle_dir,
                           events_path,
                           error)) {
       stop_if_started();
@@ -503,7 +520,7 @@ int CommandRun(const std::vector<std::string_view>& args) {
               {"frames_received", std::to_string(received_count)},
               {"frames_dropped", std::to_string(dropped_count)},
           },
-          options.output_dir,
+          bundle_dir,
           events_path,
           error)) {
     std::cerr << "error: failed to append STREAM_STOPPED event: " << error << '\n';
@@ -511,7 +528,7 @@ int CommandRun(const std::vector<std::string_view>& args) {
   }
 
   fs::path run_artifact_path;
-  if (!artifacts::WriteRunJson(run_info, options.output_dir, run_artifact_path, error)) {
+  if (!artifacts::WriteRunJson(run_info, bundle_dir, run_artifact_path, error)) {
     std::cerr << "error: " << error << '\n';
     return kExitFailure;
   }
@@ -527,18 +544,20 @@ int CommandRun(const std::vector<std::string_view>& args) {
   }
 
   fs::path metrics_csv_path;
-  if (!artifacts::WriteMetricsCsv(fps_report, options.output_dir, metrics_csv_path, error)) {
+  if (!artifacts::WriteMetricsCsv(fps_report, bundle_dir, metrics_csv_path, error)) {
     std::cerr << "error: failed to write metrics.csv: " << error << '\n';
     return kExitFailure;
   }
 
   fs::path metrics_json_path;
-  if (!artifacts::WriteMetricsJson(fps_report, options.output_dir, metrics_json_path, error)) {
+  if (!artifacts::WriteMetricsJson(fps_report, bundle_dir, metrics_json_path, error)) {
     std::cerr << "error: failed to write metrics.json: " << error << '\n';
     return kExitFailure;
   }
 
   std::cout << "run queued: " << options.scenario_path << '\n';
+  std::cout << "bundle: " << bundle_dir.string() << '\n';
+  std::cout << "scenario: " << scenario_artifact_path.string() << '\n';
   std::cout << "artifact: " << run_artifact_path.string() << '\n';
   std::cout << "events: " << events_path.string() << '\n';
   std::cout << "metrics_csv: " << metrics_csv_path.string() << '\n';

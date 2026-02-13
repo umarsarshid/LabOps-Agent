@@ -5,8 +5,9 @@ meaning of each metric currently produced.
 
 ## Bundle Layout
 
-Current output files in `<out>/`:
+Current output files are emitted per run under `<out>/<run_id>/`:
 
+- `scenario.json`: snapshot of the source scenario used for the run.
 - `run.json`: run metadata (scenario/backend/seed/timestamps).
 - `events.jsonl`: append-only event timeline (one JSON event per line).
 - `metrics.csv`: human-friendly metric rows for quick inspection and plotting.

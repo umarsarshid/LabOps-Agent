@@ -53,6 +53,28 @@ std::vector<std::string> ReadNonEmptyLines(const fs::path& file_path) {
   return lines;
 }
 
+fs::path ResolveSingleBundleDir(const fs::path& out_root) {
+  if (!fs::exists(out_root)) {
+    Fail("output root does not exist");
+  }
+
+  std::vector<fs::path> bundle_dirs;
+  for (const auto& entry : fs::directory_iterator(out_root)) {
+    if (!entry.is_directory()) {
+      continue;
+    }
+    const std::string name = entry.path().filename().string();
+    if (name.rfind("run-", 0) == 0U) {
+      bundle_dirs.push_back(entry.path());
+    }
+  }
+
+  if (bundle_dirs.size() != 1U) {
+    Fail("expected exactly one run bundle directory");
+  }
+  return bundle_dirs.front();
+}
+
 } // namespace
 
 int main() {
@@ -106,12 +128,17 @@ int main() {
     Fail("labops run returned non-zero exit code");
   }
 
-  const fs::path run_json = out_dir / "run.json";
-  const fs::path events_jsonl = out_dir / "events.jsonl";
-  const fs::path metrics_csv = out_dir / "metrics.csv";
-  const fs::path metrics_json = out_dir / "metrics.json";
+  const fs::path bundle_dir = ResolveSingleBundleDir(out_dir);
+  const fs::path run_json = bundle_dir / "run.json";
+  const fs::path scenario_json = bundle_dir / "scenario.json";
+  const fs::path events_jsonl = bundle_dir / "events.jsonl";
+  const fs::path metrics_csv = bundle_dir / "metrics.csv";
+  const fs::path metrics_json = bundle_dir / "metrics.json";
   if (!fs::exists(run_json)) {
     Fail("run.json was not produced");
+  }
+  if (!fs::exists(scenario_json)) {
+    Fail("scenario.json was not produced");
   }
   if (!fs::exists(events_jsonl)) {
     Fail("events.jsonl was not produced");

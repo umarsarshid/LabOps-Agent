@@ -44,6 +44,28 @@ bool ContainsEventType(const std::vector<std::string>& lines, std::string_view e
   return false;
 }
 
+fs::path ResolveSingleBundleDir(const fs::path& out_root) {
+  if (!fs::exists(out_root)) {
+    Fail("output root does not exist");
+  }
+
+  std::vector<fs::path> bundle_dirs;
+  for (const auto& entry : fs::directory_iterator(out_root)) {
+    if (!entry.is_directory()) {
+      continue;
+    }
+    const std::string name = entry.path().filename().string();
+    if (name.rfind("run-", 0) == 0U) {
+      bundle_dirs.push_back(entry.path());
+    }
+  }
+
+  if (bundle_dirs.size() != 1U) {
+    Fail("expected exactly one run bundle directory");
+  }
+  return bundle_dirs.front();
+}
+
 fs::path ResolveScenarioPath(const std::string& scenario_name) {
   // The test can run from different working directories depending on IDE/CI.
   // Probe common roots so the scenario files remain discoverable.
@@ -92,12 +114,17 @@ void RunScenarioE2E(const std::string& scenario_name, std::uint64_t run_suffix) 
     Fail("labops run returned non-zero exit code for scenario: " + scenario_name);
   }
 
-  const fs::path run_json = out_dir / "run.json";
-  const fs::path events_jsonl = out_dir / "events.jsonl";
-  const fs::path metrics_csv = out_dir / "metrics.csv";
-  const fs::path metrics_json = out_dir / "metrics.json";
+  const fs::path bundle_dir = ResolveSingleBundleDir(out_dir);
+  const fs::path run_json = bundle_dir / "run.json";
+  const fs::path scenario_json = bundle_dir / "scenario.json";
+  const fs::path events_jsonl = bundle_dir / "events.jsonl";
+  const fs::path metrics_csv = bundle_dir / "metrics.csv";
+  const fs::path metrics_json = bundle_dir / "metrics.json";
   if (!fs::exists(run_json)) {
     Fail("run.json missing for scenario: " + scenario_name);
+  }
+  if (!fs::exists(scenario_json)) {
+    Fail("scenario.json missing for scenario: " + scenario_name);
   }
   if (!fs::exists(events_jsonl)) {
     Fail("events.jsonl missing for scenario: " + scenario_name);

@@ -19,6 +19,9 @@ surface (argument parsing + runtime orchestration + artifact/event output).
 - `starter_scenarios_e2e_smoke.cpp`: runs the starter scenario set
   (`sim_baseline.json`, `dropped_frames.json`, `trigger_roi.json`) end-to-end
   and verifies run artifacts + core lifecycle events are emitted for each.
+- `bundle_layout_consistency_smoke.cpp`: runs baseline scenario twice against
+  the same `--out` root and verifies standardized bundle layout
+  (`<out>/<run_id>/...`) with required artifact files per run.
 
 ## Connection to the project
 

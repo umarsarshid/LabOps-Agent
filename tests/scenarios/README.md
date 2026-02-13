@@ -14,7 +14,8 @@ Scenario files drive repeatability. These tests ensure:
   messaging for `labops validate`.
 - `sim_baseline_metrics_integration_smoke.cpp`: runs
   `scenarios/sim_baseline.json` through `labops run` and validates
-  `metrics.json` stays within expected baseline ranges (FPS/drop/timing/jitter).
+  `<out>/<run_id>/metrics.json` stays within expected baseline ranges
+  (FPS/drop/timing/jitter).
 
 ## Connection to the project
 

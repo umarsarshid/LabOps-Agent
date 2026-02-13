@@ -46,6 +46,28 @@ bool ContainsLineType(const std::vector<std::string>& lines, std::string_view ev
   return false;
 }
 
+fs::path ResolveSingleBundleDir(const fs::path& out_root) {
+  if (!fs::exists(out_root)) {
+    Fail("output root does not exist");
+  }
+
+  std::vector<fs::path> bundle_dirs;
+  for (const auto& entry : fs::directory_iterator(out_root)) {
+    if (!entry.is_directory()) {
+      continue;
+    }
+    const std::string name = entry.path().filename().string();
+    if (name.rfind("run-", 0) == 0U) {
+      bundle_dirs.push_back(entry.path());
+    }
+  }
+
+  if (bundle_dirs.size() != 1U) {
+    Fail("expected exactly one run bundle directory");
+  }
+  return bundle_dirs.front();
+}
+
 // Normalizes fields that are expected to differ between runs (`ts_utc`,
 // `run_id`) so seeded determinism can be asserted against the remaining
 // event contract (type + payload semantics).
@@ -99,7 +121,8 @@ std::vector<std::string> RunScenario(const fs::path& scenario_path, const fs::pa
     Fail("labops run returned non-zero exit code");
   }
 
-  const fs::path events_jsonl = out_dir / "events.jsonl";
+  const fs::path bundle_dir = ResolveSingleBundleDir(out_dir);
+  const fs::path events_jsonl = bundle_dir / "events.jsonl";
   if (!fs::exists(events_jsonl)) {
     Fail("events.jsonl was not produced");
   }

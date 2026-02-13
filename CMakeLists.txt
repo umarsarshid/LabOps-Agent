@@ -58,6 +58,7 @@ target_compile_features(labops_metrics PUBLIC cxx_std_20)
 # Artifact writers convert in-memory run contracts into stable on-disk outputs.
 add_library(labops_artifacts
   src/artifacts/metrics_writer.cpp
+  src/artifacts/scenario_writer.cpp
   src/artifacts/run_writer.cpp
 )
 target_include_directories(labops_artifacts PUBLIC src)
@@ -93,6 +94,14 @@ add_executable(run_writer_smoke
 target_link_libraries(run_writer_smoke PRIVATE labops_artifacts labops_schema)
 target_compile_features(run_writer_smoke PRIVATE cxx_std_20)
 add_test(NAME run_writer_smoke COMMAND run_writer_smoke)
+
+# Smoke test for scenario snapshot writer contract.
+add_executable(scenario_writer_smoke
+  tests/artifacts/scenario_writer_smoke.cpp
+)
+target_link_libraries(scenario_writer_smoke PRIVATE labops_artifacts)
+target_compile_features(scenario_writer_smoke PRIVATE cxx_std_20)
+add_test(NAME scenario_writer_smoke COMMAND scenario_writer_smoke)
 
 # Smoke test for append-only event log emission.
 add_executable(events_jsonl_smoke
@@ -167,6 +176,17 @@ target_include_directories(starter_scenarios_e2e_smoke PRIVATE src)
 target_link_libraries(starter_scenarios_e2e_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
 target_compile_features(starter_scenarios_e2e_smoke PRIVATE cxx_std_20)
 add_test(NAME starter_scenarios_e2e_smoke COMMAND starter_scenarios_e2e_smoke)
+
+# Integration smoke test validating standardized bundle layout:
+# `<out>/<run_id>/...` with required artifact set for each run.
+add_executable(bundle_layout_consistency_smoke
+  tests/labops/bundle_layout_consistency_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(bundle_layout_consistency_smoke PRIVATE src)
+target_link_libraries(bundle_layout_consistency_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(bundle_layout_consistency_smoke PRIVATE cxx_std_20)
+add_test(NAME bundle_layout_consistency_smoke COMMAND bundle_layout_consistency_smoke)
 
 # Scenario schema validation smoke tests.
 add_executable(scenario_validation_smoke
