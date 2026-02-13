@@ -176,6 +176,17 @@ target_link_libraries(scenario_validation_smoke PRIVATE labops_scenarios)
 target_compile_features(scenario_validation_smoke PRIVATE cxx_std_20)
 add_test(NAME scenario_validation_smoke COMMAND scenario_validation_smoke)
 
+# Integration smoke test that runs the checked-in baseline scenario through
+# `labops run` and asserts output metrics remain within expected ranges.
+add_executable(sim_baseline_metrics_integration_smoke
+  tests/scenarios/sim_baseline_metrics_integration_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(sim_baseline_metrics_integration_smoke PRIVATE src)
+target_link_libraries(sim_baseline_metrics_integration_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(sim_baseline_metrics_integration_smoke PRIVATE cxx_std_20)
+add_test(NAME sim_baseline_metrics_integration_smoke COMMAND sim_baseline_metrics_integration_smoke)
+
 # Smoke test for FPS computation and metrics.csv emission.
 add_executable(fps_metrics_smoke
   tests/metrics/fps_metrics_smoke.cpp

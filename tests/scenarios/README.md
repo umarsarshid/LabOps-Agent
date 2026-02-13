@@ -1,16 +1,20 @@
 # tests/scenarios
 
-Scenario validation smoke tests.
+Scenario contract and scenario-driven integration smoke tests.
 
 ## Why this folder exists
 
-Scenario files drive repeatability. These tests ensure invalid inputs fail with
-clear, actionable messages before runtime execution begins.
+Scenario files drive repeatability. These tests ensure:
+- invalid inputs fail with clear, actionable messages before runtime execution
+- baseline scenarios can run end-to-end and produce sane metric ranges
 
 ## Current contents
 
 - `scenario_validation_smoke.cpp`: validates core schema checks and parse error
   messaging for `labops validate`.
+- `sim_baseline_metrics_integration_smoke.cpp`: runs
+  `scenarios/sim_baseline.json` through `labops run` and validates
+  `metrics.json` stays within expected baseline ranges (FPS/drop/timing/jitter).
 
 ## Connection to the project
 

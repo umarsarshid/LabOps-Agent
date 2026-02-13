@@ -23,7 +23,7 @@ LabOps must be predictable. Tests verify command contracts, scenario validation,
 - Metric smoke tests under `tests/metrics/` for FPS/drop/jitter formulas and
   CSV/JSON output contracts.
 - Scenario validation smoke tests under `tests/scenarios/` for actionable
-  schema errors.
+  schema errors plus baseline-scenario metric-range integration checks.
 
 ## Design principle
 

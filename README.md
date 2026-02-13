@@ -65,6 +65,7 @@ stack are planned next.
   - Jitter injection smoke test.
   - Drop injection smoke test.
   - Determinism golden smoke test (same seed => same first K normalized events).
+  - Baseline scenario integration smoke test validating expected metric ranges.
   - Catch2 core unit tests for schema/event JSON serialization (when available).
 
 ## Not Implemented Yet
