@@ -12,6 +12,12 @@ LabOps must be predictable. Tests verify command contracts, scenario validation,
 - Integration tests: multi-module flows (scenario -> run -> events -> metrics -> artifacts).
 - Golden/regression tests: stable output checks for JSON/CSV/report formats.
 
+## Current framework split
+
+- Catch2 unit tests under `tests/core/` (schema/event JSON contracts).
+- Lightweight smoke executables for artifact/event path validation in other
+  subfolders.
+
 ## Design principle
 
 Tests should favor determinism and clear failure messages so regressions are easy to triage.

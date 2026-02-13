@@ -10,6 +10,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Catch2 unit tests are optional locally (offline dev environments) and
+# enabled explicitly in CI where dependency fetching is allowed.
+option(LABOPS_ENABLE_CATCH2_TESTS "Enable Catch2-based unit tests" ON)
+option(LABOPS_FETCH_CATCH2 "Fetch Catch2 when not available locally" OFF)
+
 # Shared schema library for run contracts. Keeping this in a standalone target
 # makes it easy for CLI, tests, and future modules to reuse the same contract
 # and serialization behavior.
@@ -48,6 +53,7 @@ target_link_libraries(labops PRIVATE labops_artifacts labops_events labops_schem
 # Early smoke-test target that validates the schema contract and JSON output
 # remain stable. This is intentionally lightweight until broader test
 # infrastructure is introduced.
+include(CTest)
 enable_testing()
 add_executable(run_contract_json_smoke
   tests/schema/run_contract_json_smoke.cpp
@@ -71,3 +77,32 @@ add_executable(events_jsonl_smoke
 target_link_libraries(events_jsonl_smoke PRIVATE labops_events)
 target_compile_features(events_jsonl_smoke PRIVATE cxx_std_20)
 add_test(NAME events_jsonl_smoke COMMAND events_jsonl_smoke)
+
+if(LABOPS_ENABLE_CATCH2_TESTS)
+  find_package(Catch2 3 QUIET)
+
+  if((NOT Catch2_FOUND) AND LABOPS_FETCH_CATCH2)
+    include(FetchContent)
+    FetchContent_Declare(
+      Catch2
+      URL https://github.com/catchorg/Catch2/archive/refs/tags/v3.8.1.tar.gz
+      DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    )
+    FetchContent_MakeAvailable(Catch2)
+    find_package(Catch2 3 QUIET)
+  endif()
+
+  if(Catch2_FOUND)
+    add_executable(core_unit_tests
+      tests/core/event_json_test.cpp
+      tests/core/schema_json_test.cpp
+    )
+    target_link_libraries(core_unit_tests PRIVATE Catch2::Catch2WithMain labops_events labops_schema)
+    target_compile_features(core_unit_tests PRIVATE cxx_std_20)
+
+    include(Catch)
+    catch_discover_tests(core_unit_tests)
+  else()
+    message(WARNING "Catch2 not found. Skipping core_unit_tests. Set LABOPS_FETCH_CATCH2=ON to fetch it.")
+  endif()
+endif()
