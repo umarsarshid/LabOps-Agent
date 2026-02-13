@@ -1,46 +1,62 @@
 # LabOps Agent
 
-C++-first autopilot lab assistant for repeatable camera testing and triage.
+C++-first autopilot lab assistant for repeatable camera testing and faster triage.
 
 ## What This Project Is
 
-LabOps Agent is being built to run camera tests in a consistent way, capture evidence automatically, and speed up root-cause isolation.
+LabOps Agent runs camera scenarios the same way every time, captures evidence
+automatically, and prepares the foundation for AI-assisted root-cause
+isolation.
 
-Simple version:
+Simple flow:
 - You run a scenario.
-- LabOps records run metadata and timeline events.
-- It writes artifacts in a predictable format.
-- The system is structured so metrics, baselines, and agent-led diagnosis can be added incrementally.
+- LabOps executes the backend with deterministic controls.
+- It records `run.json` and `events.jsonl`.
+- Tests verify contracts and determinism so behavior stays reproducible.
 
-## What Is Implemented Today
+## Current Status
 
-- Build and CLI foundation.
-- Cross-platform CI build matrix (`ubuntu`, `macos`, `windows`).
-- CI test execution via `ctest`.
-- CLI subcommands:
+The repo currently has a working CLI, deterministic sim backend, artifact/event
+output pipeline, and CI-validated tests. The agent diagnosis loop and metrics
+stack are planned next.
+
+## Implemented Today
+
+- Project/build foundation with CMake.
+- Cross-platform CI (`ubuntu`, `macos`, `windows`) with `ctest`.
+- CLI commands:
   - `labops version`
   - `labops validate <scenario.json>`
   - `labops run <scenario.json> [--out <dir>]`
-- Run schema contracts (`RunConfig`, `RunInfo`) with JSON serialization.
-- Artifact writer for `run.json`.
-- Event model (`EventType`, `Event`) with JSON serialization.
-- Append-only `events.jsonl` writer (one JSON object per line).
-- `labops run` now emits:
-  - `<out>/run.json`
-  - `<out>/events.jsonl` (sample `run_started` event)
-- Smoke tests for schema, artifacts, and events.
-- Catch2 integration for core unit tests (schema JSON + event JSON).
+- Run contract schema (`RunConfig`, `RunInfo`) with JSON serialization.
+- Artifact writer for `<out>/run.json`.
+- Event contract and append-only JSONL writer for `<out>/events.jsonl`.
+- Stream lifecycle event emission in `labops run`:
+  - `STREAM_STARTED`
+  - `FRAME_RECEIVED`
+  - `FRAME_DROPPED`
+  - `STREAM_STOPPED`
+- Backend contract (`ICameraBackend`) plus deterministic sim backend.
+- Sim features:
+  - Configurable FPS, jitter, seed, frame size.
+  - Fault knobs (`drop_every_n`, `drop_percent`, `burst_drop`, `reorder`).
+  - Deterministic output for the same seed/scenario.
+- Test coverage:
+  - Schema JSON smoke tests.
+  - Artifact writer smoke tests.
+  - Event JSONL smoke tests.
+  - Backend interface, frame generation, and fault injection smoke tests.
+  - CLI run trace smoke test.
+  - Determinism golden smoke test (same seed => same first K normalized events).
+  - Catch2 core unit tests for schema/event JSON serialization (when available).
 
-## What Is Not Implemented Yet
+## Not Implemented Yet
 
-- Full scenario schema parsing/validation rules (beyond file preflight checks).
-- Real execution runtime for camera streaming scenarios.
-- Sim backend behavior modeling (drops/jitter/disconnect logic).
-- Vendor SDK backend integration (only stubs/contracts planned).
-- Metrics engine (FPS, jitter, drops, disconnect windows).
-- Baseline comparison and diff reporting.
-- Agent experiment loop (change one variable at a time, isolate failures).
-- Final engineer packet assembly flow.
+- Strict scenario schema parser/validator (current validate is preflight-level).
+- Metrics computation module (FPS/jitter/drop calculations from events).
+- Baseline comparison and diff artifact outputs.
+- SDK-backed camera implementation (only interface boundary/stub exists).
+- Agent experiment planner/runner and final engineer packet generation.
 
 ## Quick Start
 
@@ -57,23 +73,30 @@ cmake --build build
 ./build/labops version
 ```
 
-### 3) Create a minimal scenario file for local checks
+### 3) Create a scenario
 
 ```bash
 cat > /tmp/labops-scenario.json <<'EOF'
 {
-  "name": "smoke"
+  "name": "smoke",
+  "duration_ms": 1200,
+  "fps": 25,
+  "jitter_us": 350,
+  "seed": 777,
+  "frame_size_bytes": 4096,
+  "drop_every_n": 4,
+  "drop_percent": 15,
+  "burst_drop": 2,
+  "reorder": 3
 }
 EOF
 ```
 
-### 4) Validate a scenario file
+### 4) Validate scenario path/preflight
 
 ```bash
 ./build/labops validate /tmp/labops-scenario.json
 ```
-
-Note: scenario preflight currently expects an existing non-empty `.json` file.
 
 ### 5) Run and emit artifacts
 
@@ -89,7 +112,7 @@ Expected files:
 
 ### run.json
 
-Current run metadata includes:
+Current fields:
 - `run_id`
 - `config.scenario_id`
 - `config.backend`
@@ -101,25 +124,32 @@ Current run metadata includes:
 
 ### events.jsonl
 
-- Append-only log.
-- One JSON event per line.
-- Current runner emits a sample `run_started` event with payload fields such as `run_id`, `scenario_id`, and `backend`.
+- Append-only timeline log.
+- One JSON object per line.
+- Current `labops run` emits stream/frame lifecycle events:
+  - `STREAM_STARTED`
+  - `FRAME_RECEIVED`
+  - `FRAME_DROPPED`
+  - `STREAM_STOPPED`
 
 ## Testing
 
-### Smoke tests (always available)
+### Run tests
 
 ```bash
 ctest --test-dir build --output-on-failure
 ```
 
-### Catch2 unit tests
+### Run determinism test directly
 
-Catch2-backed tests live under `tests/core/` and cover schema/event JSON contracts.
+```bash
+./build/sim_determinism_golden_smoke
+```
 
-Local environments without internet may skip Catch2 tests if Catch2 is not installed.
+### Catch2 unit tests (optional)
 
-To allow CMake to fetch Catch2 when network access is available:
+Catch2 tests are under `tests/core/`. If Catch2 is not installed locally, enable
+fetching:
 
 ```bash
 cmake -S . -B build -DLABOPS_FETCH_CATCH2=ON
@@ -129,25 +159,23 @@ ctest --test-dir build --output-on-failure
 
 ## CI
 
-GitHub Actions workflow:
-- Builds on `ubuntu-latest`, `macos-latest`, `windows-latest`.
-- Runs `ctest` in CI.
-- Enables Catch2 fetching in CI configure step.
+GitHub Actions:
+- Builds on `ubuntu-latest`, `macos-latest`, and `windows-latest`.
+- Runs `ctest` on PRs and pushes.
 
 ## Repository Guide
 
-Detailed folder-level ownership docs are in:
 - `src/README.md`
 - `docs/README.md`
 - `tests/README.md`
 - `scenarios/README.md`
 
-Each major subfolder under `src/` and `tests/` also has its own `README.md`.
+Most `src/` and `tests/` subfolders also include focused `README.md` files.
 
 ## Near-Term Roadmap
 
-- Implement strict scenario schema loader and validation errors.
-- Implement deterministic sim run lifecycle and richer event emission.
-- Compute metrics from events.
-- Add baseline comparison and report outputs.
-- Add initial agent loop for controlled experiment iteration.
+- Add strict scenario schema + validation errors.
+- Implement metrics module from event traces.
+- Add baseline comparison/diff artifacts.
+- Start agent experiment loop (change one variable at a time).
+- Generate engineer packet output (repro steps, evidence, likely cause, next steps).
