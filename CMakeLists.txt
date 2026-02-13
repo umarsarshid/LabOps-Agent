@@ -121,6 +121,17 @@ target_link_libraries(run_stream_trace_smoke PRIVATE labops_artifacts labops_bac
 target_compile_features(run_stream_trace_smoke PRIVATE cxx_std_20)
 add_test(NAME run_stream_trace_smoke COMMAND run_stream_trace_smoke)
 
+# Integration smoke test that verifies deterministic stream traces for a fixed
+# scenario seed (same seed => same first K events after normalizing dynamic fields).
+add_executable(sim_determinism_golden_smoke
+  tests/labops/sim_determinism_golden_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(sim_determinism_golden_smoke PRIVATE src)
+target_link_libraries(sim_determinism_golden_smoke PRIVATE labops_artifacts labops_backends labops_events labops_schema)
+target_compile_features(sim_determinism_golden_smoke PRIVATE cxx_std_20)
+add_test(NAME sim_determinism_golden_smoke COMMAND sim_determinism_golden_smoke)
+
 if(LABOPS_ENABLE_CATCH2_TESTS)
   find_package(Catch2 3 QUIET)
 
