@@ -19,7 +19,18 @@ Simple flow:
 
 The repo currently has a working CLI, deterministic sim backend, scenario pack,
 artifact/event/metrics output pipeline, and CI-validated integration tests.
-Agent diagnosis/planning is still upcoming.
+Bundle packaging is implemented (manifest + optional zip), and triage bundle
+contracts are documented as an internal tooling spec in
+`docs/triage_bundle_spec.md`. Agent diagnosis/planning is still upcoming.
+
+## Milestone Progress
+
+- Milestone 0: done (repo/build/style/CI foundation)
+- Milestone 1: done (CLI skeleton + strict output contracts)
+- Milestone 2: done (sim backend + deterministic/fault-injected stream runs)
+- Milestone 3: done (FPS/drop/jitter metrics + metric artifacts)
+- Milestone 4: done (scenario schema, validation, scenario application in run)
+- Milestone 5: done (bundle layout, manifest, optional support zip, bundle docs)
 
 ## Implemented So Far
 
@@ -40,6 +51,8 @@ Agent diagnosis/planning is still upcoming.
   - `<out>/<run_id>/scenario.json`
   - `<out>/<run_id>/run.json`
   - `<out>/<run_id>/events.jsonl`
+  - `<out>/<run_id>/metrics.csv`
+  - `<out>/<run_id>/metrics.json`
   - `<out>/<run_id>/bundle_manifest.json`
   - optional `<out>/<run_id>.zip` support bundle when `--zip` is requested
 - Stream lifecycle event emission in `labops run`:
@@ -71,8 +84,13 @@ Agent diagnosis/planning is still upcoming.
   - Jitter injection smoke test.
   - Drop injection smoke test.
   - Determinism golden smoke test (same seed => same first K normalized events).
-  - Baseline scenario integration smoke test validating expected metric ranges.
-  - Catch2 core unit tests for schema/event JSON serialization (when available).
+- Baseline scenario integration smoke test validating expected metric ranges.
+- Catch2 core unit tests for schema/event JSON serialization (when available).
+- Internal triage bundle spec in `docs/triage_bundle_spec.md` covering:
+  - bundle lifecycle and directory contract
+  - required/optional artifacts with file-level contracts
+  - manifest integrity behavior
+  - operational verification checklist and compatibility guidance
 
 ## Not Implemented Yet
 
@@ -202,6 +220,9 @@ Current fields:
 
 For exact metric definitions (formulas, units, CSV/JSON contracts, and edge
 cases), see `docs/triage_bundle_spec.md`.
+For a full internal bundle contract (lifecycle, required files, manifest rules,
+verification checklist), use `docs/triage_bundle_spec.md` as the authoritative
+reference.
 
 ## Testing
 
@@ -253,8 +274,7 @@ Most `src/` and `tests/` subfolders also include focused `README.md` files.
 
 ## Near-Term Roadmap
 
-- Expand scenario schema checks and OAAT-specific validation depth.
-- Expand metrics beyond current FPS+drop+jitter coverage (disconnect windows).
 - Add baseline comparison/diff artifacts.
 - Start agent experiment loop (change one variable at a time).
 - Generate engineer packet output (repro steps, evidence, likely cause, next steps).
+- Add hardware SDK backend implementation behind `ICameraBackend`.
