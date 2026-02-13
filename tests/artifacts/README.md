@@ -15,6 +15,9 @@ this folder guard against accidental output-shape or file-path regressions.
   `WriteMetricsJson(...)` create both metrics artifacts with expected fields.
 - `scenario_writer_smoke.cpp`: verifies `WriteScenarioJson(...)` copies a
   source scenario file into `<bundle>/scenario.json`.
+- `bundle_manifest_writer_smoke.cpp`: verifies
+  `WriteBundleManifestJson(...)` emits `bundle_manifest.json` including each
+  artifact path with hash and size fields.
 
 ## Connection to the project
 

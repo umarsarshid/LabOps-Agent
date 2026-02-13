@@ -159,7 +159,11 @@ int main() {
   }
 
   const fs::path bundle_dir = ResolveSingleBundleDir(out_dir);
+  const fs::path bundle_manifest_path = bundle_dir / "bundle_manifest.json";
   const fs::path metrics_json_path = bundle_dir / "metrics.json";
+  if (!fs::exists(bundle_manifest_path)) {
+    Fail("bundle_manifest.json was not generated for baseline scenario");
+  }
   if (!fs::exists(metrics_json_path)) {
     Fail("metrics.json was not generated for baseline scenario");
   }

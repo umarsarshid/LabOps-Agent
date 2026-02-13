@@ -1,5 +1,6 @@
 #include "labops/cli/router.hpp"
 
+#include "artifacts/bundle_manifest_writer.hpp"
 #include "artifacts/metrics_writer.hpp"
 #include "artifacts/run_writer.hpp"
 #include "artifacts/scenario_writer.hpp"
@@ -555,6 +556,19 @@ int CommandRun(const std::vector<std::string_view>& args) {
     return kExitFailure;
   }
 
+  fs::path bundle_manifest_path;
+  const std::vector<fs::path> bundle_artifact_paths = {
+      scenario_artifact_path,
+      run_artifact_path,
+      events_path,
+      metrics_csv_path,
+      metrics_json_path,
+  };
+  if (!artifacts::WriteBundleManifestJson(bundle_dir, bundle_artifact_paths, bundle_manifest_path, error)) {
+    std::cerr << "error: failed to write bundle manifest: " << error << '\n';
+    return kExitFailure;
+  }
+
   std::cout << "run queued: " << options.scenario_path << '\n';
   std::cout << "bundle: " << bundle_dir.string() << '\n';
   std::cout << "scenario: " << scenario_artifact_path.string() << '\n';
@@ -562,6 +576,7 @@ int CommandRun(const std::vector<std::string_view>& args) {
   std::cout << "events: " << events_path.string() << '\n';
   std::cout << "metrics_csv: " << metrics_csv_path.string() << '\n';
   std::cout << "metrics_json: " << metrics_json_path.string() << '\n';
+  std::cout << "manifest: " << bundle_manifest_path.string() << '\n';
   std::cout << "fps: avg=" << fps_report.avg_fps
             << " rolling_samples=" << fps_report.rolling_samples.size() << '\n';
   std::cout << "drops: total=" << fps_report.dropped_frames_total

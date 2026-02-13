@@ -20,7 +20,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Compute and write run metrics (`metrics.csv` + `metrics.json`) for FPS,
   drop, and timing/jitter reporting.
 - Emit standardized per-run bundles under `<out>/<run_id>/` including
-  `scenario.json`, `run.json`, `events.jsonl`, and metrics artifacts.
+  `scenario.json`, `run.json`, `events.jsonl`, metrics artifacts, and
+  `bundle_manifest.json` (artifact list + hashes).
 
 ## Design intent
 

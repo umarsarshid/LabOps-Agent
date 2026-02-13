@@ -57,6 +57,7 @@ target_compile_features(labops_metrics PUBLIC cxx_std_20)
 
 # Artifact writers convert in-memory run contracts into stable on-disk outputs.
 add_library(labops_artifacts
+  src/artifacts/bundle_manifest_writer.cpp
   src/artifacts/metrics_writer.cpp
   src/artifacts/scenario_writer.cpp
   src/artifacts/run_writer.cpp
@@ -102,6 +103,14 @@ add_executable(scenario_writer_smoke
 target_link_libraries(scenario_writer_smoke PRIVATE labops_artifacts)
 target_compile_features(scenario_writer_smoke PRIVATE cxx_std_20)
 add_test(NAME scenario_writer_smoke COMMAND scenario_writer_smoke)
+
+# Smoke test for bundle manifest writer contract.
+add_executable(bundle_manifest_writer_smoke
+  tests/artifacts/bundle_manifest_writer_smoke.cpp
+)
+target_link_libraries(bundle_manifest_writer_smoke PRIVATE labops_artifacts)
+target_compile_features(bundle_manifest_writer_smoke PRIVATE cxx_std_20)
+add_test(NAME bundle_manifest_writer_smoke COMMAND bundle_manifest_writer_smoke)
 
 # Smoke test for append-only event log emission.
 add_executable(events_jsonl_smoke

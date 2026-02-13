@@ -12,6 +12,7 @@ Current output files are emitted per run under `<out>/<run_id>/`:
 - `events.jsonl`: append-only event timeline (one JSON event per line).
 - `metrics.csv`: human-friendly metric rows for quick inspection and plotting.
 - `metrics.json`: machine-friendly metric object for agent parsing.
+- `bundle_manifest.json`: artifact inventory with per-file size and hash.
 
 ## Metric Definitions
 
@@ -131,6 +132,25 @@ Top-level fields currently emitted:
   - `window_end_ms`
   - `frames_in_window`
   - `fps`
+
+## Bundle Manifest Contract (`bundle_manifest.json`)
+
+Top-level fields currently emitted:
+
+- `schema_version` (`"1.0"`)
+- `hash_algorithm` (`"fnv1a_64"`)
+- `files` array of objects:
+  - `path` (bundle-relative path)
+  - `size_bytes` (file size in bytes)
+  - `hash` (hex hash using `hash_algorithm`)
+
+Current run flow includes these files in the manifest:
+
+- `scenario.json`
+- `run.json`
+- `events.jsonl`
+- `metrics.csv`
+- `metrics.json`
 
 ## Edge Cases
 

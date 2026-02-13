@@ -131,6 +131,7 @@ int main() {
   const fs::path bundle_dir = ResolveSingleBundleDir(out_dir);
   const fs::path run_json = bundle_dir / "run.json";
   const fs::path scenario_json = bundle_dir / "scenario.json";
+  const fs::path bundle_manifest_json = bundle_dir / "bundle_manifest.json";
   const fs::path events_jsonl = bundle_dir / "events.jsonl";
   const fs::path metrics_csv = bundle_dir / "metrics.csv";
   const fs::path metrics_json = bundle_dir / "metrics.json";
@@ -139,6 +140,9 @@ int main() {
   }
   if (!fs::exists(scenario_json)) {
     Fail("scenario.json was not produced");
+  }
+  if (!fs::exists(bundle_manifest_json)) {
+    Fail("bundle_manifest.json was not produced");
   }
   if (!fs::exists(events_jsonl)) {
     Fail("events.jsonl was not produced");
@@ -209,6 +213,19 @@ int main() {
   AssertContains(metrics_json_content, "\"avg_fps\":");
   AssertContains(metrics_json_content, "\"drop_rate_percent\":");
   AssertContains(metrics_json_content, "\"rolling_fps\":[");
+
+  std::ifstream manifest_input(bundle_manifest_json, std::ios::binary);
+  if (!manifest_input) {
+    Fail("failed to open bundle_manifest.json");
+  }
+  const std::string manifest_content((std::istreambuf_iterator<char>(manifest_input)),
+                                     std::istreambuf_iterator<char>());
+  AssertContains(manifest_content, "\"hash_algorithm\":\"fnv1a_64\"");
+  AssertContains(manifest_content, "\"path\":\"scenario.json\"");
+  AssertContains(manifest_content, "\"path\":\"run.json\"");
+  AssertContains(manifest_content, "\"path\":\"events.jsonl\"");
+  AssertContains(manifest_content, "\"path\":\"metrics.csv\"");
+  AssertContains(manifest_content, "\"path\":\"metrics.json\"");
 
   fs::remove_all(temp_root, ec);
   std::cout << "run_stream_trace_smoke: ok\n";

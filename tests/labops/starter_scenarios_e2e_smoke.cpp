@@ -117,6 +117,7 @@ void RunScenarioE2E(const std::string& scenario_name, std::uint64_t run_suffix) 
   const fs::path bundle_dir = ResolveSingleBundleDir(out_dir);
   const fs::path run_json = bundle_dir / "run.json";
   const fs::path scenario_json = bundle_dir / "scenario.json";
+  const fs::path bundle_manifest_json = bundle_dir / "bundle_manifest.json";
   const fs::path events_jsonl = bundle_dir / "events.jsonl";
   const fs::path metrics_csv = bundle_dir / "metrics.csv";
   const fs::path metrics_json = bundle_dir / "metrics.json";
@@ -125,6 +126,9 @@ void RunScenarioE2E(const std::string& scenario_name, std::uint64_t run_suffix) 
   }
   if (!fs::exists(scenario_json)) {
     Fail("scenario.json missing for scenario: " + scenario_name);
+  }
+  if (!fs::exists(bundle_manifest_json)) {
+    Fail("bundle_manifest.json missing for scenario: " + scenario_name);
   }
   if (!fs::exists(events_jsonl)) {
     Fail("events.jsonl missing for scenario: " + scenario_name);

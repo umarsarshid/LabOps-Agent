@@ -19,8 +19,8 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
   actionable field-level errors when invalid.
 - `labops run <scenario.json> --out <dir>`: emits a per-run bundle under
   `<dir>/<run_id>/` containing `scenario.json`, `run.json`, `events.jsonl`,
-  `metrics.csv`, and `metrics.json`; runs sim backend lifecycle; and reports
-  output paths.
+  `metrics.csv`, `metrics.json`, and `bundle_manifest.json`; runs sim backend
+  lifecycle; and reports output paths.
 
 ## What should not live here
 

@@ -40,6 +40,7 @@ Agent diagnosis/planning is still upcoming.
   - `<out>/<run_id>/scenario.json`
   - `<out>/<run_id>/run.json`
   - `<out>/<run_id>/events.jsonl`
+  - `<out>/<run_id>/bundle_manifest.json`
 - Stream lifecycle event emission in `labops run`:
   - `CONFIG_APPLIED`
   - `STREAM_STARTED`
@@ -120,6 +121,7 @@ Expected bundle layout per run:
 - `<out-dir>/<run_id>/events.jsonl`
 - `<out-dir>/<run_id>/metrics.csv`
 - `<out-dir>/<run_id>/metrics.json`
+- `<out-dir>/<run_id>/bundle_manifest.json`
 
 If you want to author new scenarios, follow `docs/scenario_schema.md`.
 
@@ -135,6 +137,12 @@ If you want to author new scenarios, follow `docs/scenario_schema.md`.
 
 - Byte-for-byte snapshot copy of the source scenario used for the run.
 - Stored at `<out>/<run_id>/scenario.json`.
+
+### bundle_manifest.json
+
+- Lists bundle artifacts with relative file paths, `size_bytes`, and hash values.
+- Current hash algorithm: `fnv1a_64`.
+- Stored at `<out>/<run_id>/bundle_manifest.json`.
 
 ### run.json
 
