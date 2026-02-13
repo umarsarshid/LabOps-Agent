@@ -16,7 +16,8 @@ Hardware is expensive and not always available in every environment. The sim bac
 
 - `scenario_config.hpp/.cpp`: scenario-driven config object and adapter used to
   apply sim knobs (`fps`, `jitter_us`, `seed`, and fault settings) via backend
-  params.
+  params. The adapter can also return the exact params applied so run
+  orchestration can log a `CONFIG_APPLIED` event for traceability.
 - `sim_camera_backend.hpp/.cpp`: `SimCameraBackend` implementation of
   `ICameraBackend` with strict connect/start/stop state transitions,
   parameter mutation, config dump, and deterministic frame pulls based on

@@ -336,6 +336,24 @@ bool AppendTraceEvent(events::EventType type, std::chrono::system_clock::time_po
   return events::AppendEventJsonl(event, output_dir, events_path, error);
 }
 
+std::map<std::string, std::string>
+BuildConfigAppliedPayload(const core::schema::RunInfo& run_info,
+                          const backends::BackendConfig& applied_params) {
+  std::map<std::string, std::string> payload = {
+      {"run_id", run_info.run_id},
+      {"scenario_id", run_info.config.scenario_id},
+      {"applied_count", std::to_string(applied_params.size())},
+  };
+
+  // Prefix backend params so reserved metadata fields (`run_id`, `scenario_id`)
+  // remain unambiguous in downstream parsers.
+  for (const auto& [key, value] : applied_params) {
+    payload["param." + key] = value;
+  }
+
+  return payload;
+}
+
 int CommandRun(const std::vector<std::string_view>& args) {
   RunOptions options;
   std::string error;
@@ -366,8 +384,21 @@ int CommandRun(const std::vector<std::string_view>& args) {
     return kExitFailure;
   }
 
-  if (!backends::sim::ApplyScenarioConfig(*backend, run_plan.sim_config, error)) {
+  backends::BackendConfig applied_params;
+  if (!backends::sim::ApplyScenarioConfig(*backend, run_plan.sim_config, error, &applied_params)) {
     std::cerr << "error: backend config failed: " << error << '\n';
+    return kExitFailure;
+  }
+
+  fs::path events_path;
+  const auto config_applied_at = std::chrono::system_clock::now();
+  if (!AppendTraceEvent(events::EventType::kConfigApplied,
+                        config_applied_at,
+                        BuildConfigAppliedPayload(run_info, applied_params),
+                        options.output_dir,
+                        events_path,
+                        error)) {
+    std::cerr << "error: failed to append CONFIG_APPLIED event: " << error << '\n';
     return kExitFailure;
   }
 
@@ -390,7 +421,6 @@ int CommandRun(const std::vector<std::string_view>& args) {
     stream_started = false;
   };
 
-  fs::path events_path;
   if (!AppendTraceEvent(
           events::EventType::kStreamStarted,
           started_at,

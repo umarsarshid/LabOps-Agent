@@ -34,6 +34,7 @@ stack are planned next.
 - Artifact writer for `<out>/run.json`.
 - Event contract and append-only JSONL writer for `<out>/events.jsonl`.
 - Stream lifecycle event emission in `labops run`:
+  - `CONFIG_APPLIED`
   - `STREAM_STARTED`
   - `FRAME_RECEIVED`
   - `FRAME_DROPPED`
@@ -142,6 +143,7 @@ Current fields:
 - Append-only timeline log.
 - One JSON object per line.
 - Current `labops run` emits stream/frame lifecycle events:
+  - `CONFIG_APPLIED`
   - `STREAM_STARTED`
   - `FRAME_RECEIVED`
   - `FRAME_DROPPED`

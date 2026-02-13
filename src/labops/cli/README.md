@@ -14,6 +14,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Print deterministic command outputs.
 - Parse run artifact options (currently `--out <dir>`).
 - Route scenario validation through schema loader with actionable errors.
+- Apply scenario settings to backend params and emit `CONFIG_APPLIED` audit
+  events.
 - Execute sim backend run lifecycle and emit stream trace events.
 - Compute and write run metrics (`metrics.csv` + `metrics.json`) for FPS,
   drop, and timing/jitter reporting.

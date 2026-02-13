@@ -7,6 +7,7 @@
 
 TEST_CASE("EventType maps to stable string values", "[core][events][json]") {
   REQUIRE(labops::events::ToJson(labops::events::EventType::kRunStarted) == "run_started");
+  REQUIRE(labops::events::ToJson(labops::events::EventType::kConfigApplied) == "CONFIG_APPLIED");
   REQUIRE(labops::events::ToJson(labops::events::EventType::kInfo) == "info");
   REQUIRE(labops::events::ToJson(labops::events::EventType::kWarning) == "warning");
   REQUIRE(labops::events::ToJson(labops::events::EventType::kError) == "error");

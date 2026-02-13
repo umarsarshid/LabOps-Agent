@@ -28,7 +28,11 @@ struct SimScenarioConfig {
 };
 
 // Applies scenario config to any backend implementing `set_param`.
+//
+// When `applied_params` is provided, it is filled with the exact key/value
+// pairs that were successfully sent via `SetParam`. This allows run orchestration
+// to emit a deterministic CONFIG_APPLIED event without re-deriving values.
 bool ApplyScenarioConfig(ICameraBackend& backend, const SimScenarioConfig& config,
-                         std::string& error);
+                         std::string& error, BackendConfig* applied_params = nullptr);
 
 } // namespace labops::backends::sim

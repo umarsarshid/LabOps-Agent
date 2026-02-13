@@ -124,10 +124,13 @@ int main() {
   }
 
   const auto lines = ReadNonEmptyLines(events_jsonl);
-  if (lines.size() < 4U) {
+  if (lines.size() < 5U) {
     Fail("events trace is too short to be realistic");
   }
 
+  if (!ContainsLineType(lines, "CONFIG_APPLIED")) {
+    Fail("missing CONFIG_APPLIED event");
+  }
   if (!ContainsLineType(lines, "STREAM_STARTED")) {
     Fail("missing STREAM_STARTED event");
   }
@@ -141,8 +144,17 @@ int main() {
     Fail("missing STREAM_STOPPED event");
   }
 
-  if (lines.front().find("\"type\":\"STREAM_STARTED\"") == std::string::npos) {
-    Fail("first trace event must be STREAM_STARTED");
+  if (lines.front().find("\"type\":\"CONFIG_APPLIED\"") == std::string::npos) {
+    Fail("first trace event must be CONFIG_APPLIED");
+  }
+  if (lines.front().find("\"param.fps\":\"30\"") == std::string::npos) {
+    Fail("CONFIG_APPLIED payload missing param.fps");
+  }
+  if (lines.front().find("\"param.drop_percent\":\"20\"") == std::string::npos) {
+    Fail("CONFIG_APPLIED payload missing param.drop_percent");
+  }
+  if (lines[1].find("\"type\":\"STREAM_STARTED\"") == std::string::npos) {
+    Fail("second trace event must be STREAM_STARTED");
   }
   if (lines.back().find("\"type\":\"STREAM_STOPPED\"") == std::string::npos) {
     Fail("last trace event must be STREAM_STOPPED");

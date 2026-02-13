@@ -10,7 +10,7 @@ surface (argument parsing + runtime orchestration + artifact/event output).
 ## Current contents
 
 - `run_stream_trace_smoke.cpp`: drives `labops run` via CLI dispatch and
-  verifies `events.jsonl` contains realistic stream lifecycle events and
+  verifies `events.jsonl` contains config-audit plus realistic stream lifecycle events and
   `metrics.csv` and `metrics.json` are both emitted with expected metric fields.
 - `validate_actionable_smoke.cpp`: drives `labops validate` and verifies
   invalid schema output includes actionable field-level error paths.

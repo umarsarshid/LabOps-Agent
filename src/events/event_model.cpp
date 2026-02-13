@@ -82,6 +82,8 @@ std::string ToJson(EventType event_type) {
   switch (event_type) {
   case EventType::kRunStarted:
     return "run_started";
+  case EventType::kConfigApplied:
+    return "CONFIG_APPLIED";
   case EventType::kStreamStarted:
     return "STREAM_STARTED";
   case EventType::kFrameReceived:
