@@ -25,6 +25,9 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
 - `labops baseline capture <scenario.json>`: captures a scenario baseline into
   `baselines/<scenario_id>/` using the same run pipeline and metrics writers as
   `labops run`, so release/regression comparisons use identical evidence math.
+- `labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]`:
+  computes metric deltas and emits `diff.json` + `diff.md` (default output
+  directory is the `--run` target when `--out` is omitted).
 
 ## What should not live here
 

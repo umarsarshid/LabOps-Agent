@@ -30,6 +30,9 @@ surface (argument parsing + runtime orchestration + artifact/event output).
   <scenario.json>` writes baseline artifacts directly under
   `baselines/<scenario_id>/` and includes metrics outputs for regression
   comparison.
+- `compare_diff_smoke.cpp`: verifies `labops compare --baseline ... --run ...`
+  generates `diff.json` + `diff.md` and reports non-zero deltas for a
+  fault-injected run against baseline.
 
 ## Connection to the project
 

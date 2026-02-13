@@ -32,6 +32,10 @@ The project promise is a clean, reproducible evidence packet. This module ensure
   per-file `size_bytes` and `fnv1a_64` hash values.
 - `bundle_zip_writer.hpp/.cpp`: writes optional support zip archives
   (`<out>/<run_id>.zip`) for bundle handoff.
+- `metrics_diff_writer.hpp/.cpp`: compares baseline/run `metrics.csv` summary
+  rows and writes:
+  - `diff.json` for machine parsing
+  - `diff.md` for human triage review
 
 ## Design principle
 

@@ -14,6 +14,7 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Print deterministic command outputs.
 - Parse run artifact options (currently `--out <dir>`).
 - Parse baseline capture command contracts (`baseline capture <scenario.json>`).
+- Parse compare command contracts (`compare --baseline ... --run ... [--out ...]`).
 - Route scenario validation through schema loader with actionable errors.
 - Apply scenario settings to backend params and emit `CONFIG_APPLIED` audit
   events.
@@ -27,6 +28,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
   `<out>/<run_id>.zip`.
 - Emit scenario baseline captures under `baselines/<scenario_id>/` with
   `metrics.csv` + `metrics.json` for release-style comparison workflows.
+- Compare baseline and run metric artifacts to emit `diff.json` + `diff.md`
+  with per-metric deltas.
 
 ## Design intent
 

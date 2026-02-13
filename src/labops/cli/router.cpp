@@ -2,6 +2,7 @@
 
 #include "artifacts/bundle_manifest_writer.hpp"
 #include "artifacts/metrics_writer.hpp"
+#include "artifacts/metrics_diff_writer.hpp"
 #include "artifacts/run_writer.hpp"
 #include "artifacts/scenario_writer.hpp"
 #include "artifacts/bundle_zip_writer.hpp"
@@ -46,6 +47,7 @@ void PrintUsage(std::ostream& out) {
   out << "usage:\n"
       << "  labops run <scenario.json> [--out <dir>] [--zip]\n"
       << "  labops baseline capture <scenario.json>\n"
+      << "  labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]\n"
       << "  labops validate <scenario.json>\n"
       << "  labops version\n";
 }
@@ -148,6 +150,13 @@ struct RunPlan {
   std::chrono::milliseconds duration{1'000};
 };
 
+struct CompareOptions {
+  fs::path baseline_path;
+  fs::path run_path;
+  fs::path output_dir;
+  bool has_output_dir = false;
+};
+
 // Parse `run` args with an explicit contract:
 // - one scenario path
 // - optional `--out <dir>`
@@ -213,6 +222,62 @@ bool ParseBaselineCaptureOptions(const std::vector<std::string_view>& args, RunO
   return true;
 }
 
+// Parse compare options with explicit long flags to keep invocation readable in
+// CI and release verification scripts.
+bool ParseCompareOptions(const std::vector<std::string_view>& args, CompareOptions& options,
+                         std::string& error) {
+  for (std::size_t i = 0; i < args.size(); ++i) {
+    const std::string_view token = args[i];
+    if (token == "--baseline") {
+      if (i + 1 >= args.size()) {
+        error = "missing value for --baseline";
+        return false;
+      }
+      options.baseline_path = fs::path(args[i + 1]);
+      ++i;
+      continue;
+    }
+
+    if (token == "--run") {
+      if (i + 1 >= args.size()) {
+        error = "missing value for --run";
+        return false;
+      }
+      options.run_path = fs::path(args[i + 1]);
+      ++i;
+      continue;
+    }
+
+    if (token == "--out") {
+      if (i + 1 >= args.size()) {
+        error = "missing value for --out";
+        return false;
+      }
+      options.output_dir = fs::path(args[i + 1]);
+      options.has_output_dir = true;
+      ++i;
+      continue;
+    }
+
+    error = "unknown option: " + std::string(token);
+    return false;
+  }
+
+  if (options.baseline_path.empty()) {
+    error = "compare requires --baseline <dir|metrics.csv>";
+    return false;
+  }
+  if (options.run_path.empty()) {
+    error = "compare requires --run <dir|metrics.csv>";
+    return false;
+  }
+  if (!options.has_output_dir) {
+    options.output_dir = options.run_path;
+  }
+
+  return true;
+}
+
 bool ReadTextFile(const std::string& path, std::string& contents, std::string& error) {
   std::ifstream file(path, std::ios::binary);
   if (!file) {
@@ -222,6 +287,44 @@ bool ReadTextFile(const std::string& path, std::string& contents, std::string& e
 
   contents.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
   return true;
+}
+
+// Compare accepts either a bundle directory (containing metrics.csv) or a
+// direct path to metrics.csv to make command usage flexible for operators.
+bool ResolveMetricsCsvPath(const fs::path& input_path, fs::path& metrics_csv_path,
+                           std::string& error) {
+  if (input_path.empty()) {
+    error = "metrics input path cannot be empty";
+    return false;
+  }
+
+  std::error_code ec;
+  if (!fs::exists(input_path, ec) || ec) {
+    error = "path does not exist: " + input_path.string();
+    return false;
+  }
+
+  if (fs::is_regular_file(input_path, ec) && !ec) {
+    if (input_path.filename() != "metrics.csv") {
+      error = "metrics file path must point to metrics.csv: " + input_path.string();
+      return false;
+    }
+    metrics_csv_path = input_path;
+    return true;
+  }
+
+  if (fs::is_directory(input_path, ec) && !ec) {
+    const fs::path candidate = input_path / "metrics.csv";
+    if (!fs::exists(candidate, ec) || ec || !fs::is_regular_file(candidate, ec)) {
+      error = "metrics.csv not found in directory: " + input_path.string();
+      return false;
+    }
+    metrics_csv_path = candidate;
+    return true;
+  }
+
+  error = "path must be a directory or metrics.csv file: " + input_path.string();
+  return false;
 }
 
 // Lightweight numeric field extraction for milestone wiring.
@@ -696,6 +799,66 @@ int CommandBaseline(const std::vector<std::string_view>& args) {
   return kExitUsage;
 }
 
+int CommandCompare(const std::vector<std::string_view>& args) {
+  CompareOptions options;
+  std::string error;
+  if (!ParseCompareOptions(args, options, error)) {
+    std::cerr << "error: " << error << '\n';
+    return kExitUsage;
+  }
+
+  fs::path baseline_metrics_csv_path;
+  if (!ResolveMetricsCsvPath(options.baseline_path, baseline_metrics_csv_path, error)) {
+    std::cerr << "error: failed to resolve baseline metrics: " << error << '\n';
+    return kExitFailure;
+  }
+
+  fs::path run_metrics_csv_path;
+  if (!ResolveMetricsCsvPath(options.run_path, run_metrics_csv_path, error)) {
+    std::cerr << "error: failed to resolve run metrics: " << error << '\n';
+    return kExitFailure;
+  }
+
+  fs::path output_dir = options.output_dir;
+  if (!options.has_output_dir) {
+    std::error_code ec;
+    if (fs::is_regular_file(options.run_path, ec) && !ec) {
+      output_dir = options.run_path.parent_path();
+      if (output_dir.empty()) {
+        output_dir = ".";
+      }
+    }
+  }
+
+  artifacts::MetricsDiffReport diff_report;
+  if (!artifacts::ComputeMetricsDiffFromCsv(baseline_metrics_csv_path,
+                                            run_metrics_csv_path,
+                                            diff_report,
+                                            error)) {
+    std::cerr << "error: failed to compare metrics: " << error << '\n';
+    return kExitFailure;
+  }
+
+  fs::path diff_json_path;
+  if (!artifacts::WriteMetricsDiffJson(diff_report, output_dir, diff_json_path, error)) {
+    std::cerr << "error: failed to write diff.json: " << error << '\n';
+    return kExitFailure;
+  }
+
+  fs::path diff_markdown_path;
+  if (!artifacts::WriteMetricsDiffMarkdown(diff_report, output_dir, diff_markdown_path, error)) {
+    std::cerr << "error: failed to write diff.md: " << error << '\n';
+    return kExitFailure;
+  }
+
+  std::cout << "compare baseline: " << baseline_metrics_csv_path.string() << '\n';
+  std::cout << "compare run: " << run_metrics_csv_path.string() << '\n';
+  std::cout << "diff_json: " << diff_json_path.string() << '\n';
+  std::cout << "diff_md: " << diff_markdown_path.string() << '\n';
+  std::cout << "compared_metrics: " << diff_report.deltas.size() << '\n';
+  return kExitSuccess;
+}
+
 } // namespace
 
 int Dispatch(int argc, char** argv) {
@@ -723,6 +886,10 @@ int Dispatch(int argc, char** argv) {
 
   if (command == "baseline") {
     return CommandBaseline(args);
+  }
+
+  if (command == "compare") {
+    return CommandCompare(args);
   }
 
   if (command == "help" || command == "--help" || command == "-h") {

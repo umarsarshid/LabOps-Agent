@@ -59,6 +59,7 @@ target_compile_features(labops_metrics PUBLIC cxx_std_20)
 add_library(labops_artifacts
   src/artifacts/bundle_manifest_writer.cpp
   src/artifacts/bundle_zip_writer.cpp
+  src/artifacts/metrics_diff_writer.cpp
   src/artifacts/metrics_writer.cpp
   src/artifacts/scenario_writer.cpp
   src/artifacts/run_writer.cpp
@@ -227,6 +228,17 @@ target_include_directories(baseline_capture_smoke PRIVATE src)
 target_link_libraries(baseline_capture_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
 target_compile_features(baseline_capture_smoke PRIVATE cxx_std_20)
 add_test(NAME baseline_capture_smoke COMMAND baseline_capture_smoke)
+
+# Integration smoke test for `labops compare`:
+# compares baseline vs run metrics and emits `diff.json` + `diff.md`.
+add_executable(compare_diff_smoke
+  tests/labops/compare_diff_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(compare_diff_smoke PRIVATE src)
+target_link_libraries(compare_diff_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(compare_diff_smoke PRIVATE cxx_std_20)
+add_test(NAME compare_diff_smoke COMMAND compare_diff_smoke)
 
 # Scenario schema validation smoke tests.
 add_executable(scenario_validation_smoke

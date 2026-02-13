@@ -31,6 +31,7 @@ contracts are documented as an internal tooling spec in
 - Milestone 3: done (FPS/drop/jitter metrics + metric artifacts)
 - Milestone 4: done (scenario schema, validation, scenario application in run)
 - Milestone 5: done (bundle layout, manifest, optional support zip, bundle docs)
+- Milestone 6: done (baseline capture + compare diff outputs)
 
 ## Implemented So Far
 
@@ -41,6 +42,7 @@ contracts are documented as an internal tooling spec in
   - `labops validate <scenario.json>`
   - `labops run <scenario.json> [--out <dir>] [--zip]`
   - `labops baseline capture <scenario.json>`
+  - `labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]`
 - Scenario loader + schema validation in `labops validate` with actionable
   field-level errors.
 - Starter scenario set in `scenarios/`:
@@ -60,6 +62,10 @@ contracts are documented as an internal tooling spec in
   - `labops baseline capture <scenario.json>`
   - writes baseline artifacts directly under `baselines/<scenario_id>/`
   - baseline directory includes `metrics.csv` and `metrics.json`
+- Compare command:
+  - `labops compare --baseline ... --run ...`
+  - compares summary metrics and writes `diff.json` + `diff.md`
+  - writes compare outputs to run target by default (or `--out <dir>`)
 - Stream lifecycle event emission in `labops run`:
   - `CONFIG_APPLIED`
   - `STREAM_STARTED`
@@ -90,6 +96,8 @@ contracts are documented as an internal tooling spec in
   - Drop injection smoke test.
   - Determinism golden smoke test (same seed => same first K normalized events).
 - Baseline scenario integration smoke test validating expected metric ranges.
+- Baseline capture smoke test validating `baselines/<scenario_id>/` output contract.
+- Compare diff smoke test validating `diff.json` + `diff.md` delta generation.
 - Catch2 core unit tests for schema/event JSON serialization (when available).
 - Internal triage bundle spec in `docs/triage_bundle_spec.md` covering:
   - bundle lifecycle and directory contract
@@ -102,7 +110,6 @@ contracts are documented as an internal tooling spec in
 - Scenario schema expansion (current validator covers core fields and
   constraints; deeper domain-specific rules can be added).
 - Full metrics suite completion (disconnect-specific metrics beyond current FPS+drop+jitter timing).
-- Baseline comparison and diff artifact outputs.
 - SDK-backed camera implementation (only interface boundary/stub exists).
 - Agent experiment planner/runner and final engineer packet generation.
 
@@ -151,6 +158,12 @@ cmake --build build
 ./build/labops baseline capture scenarios/sim_baseline.json
 ```
 
+### 8) Compare baseline vs run (optional)
+
+```bash
+./build/labops compare --baseline baselines/sim_baseline --run out/<run_id>
+```
+
 Expected bundle layout per run:
 - `<out-dir>/<run_id>/scenario.json`
 - `<out-dir>/<run_id>/run.json`
@@ -183,6 +196,15 @@ If you want to author new scenarios, follow `docs/scenario_schema.md`.
 - This folder is the stable baseline target for future regression comparison.
 - Baseline capture currently emits the same core evidence set as run mode,
   including `metrics.csv` and `metrics.json`.
+
+### Compare Diff Output
+
+- `labops compare --baseline ... --run ...` reads both `metrics.csv` files and
+  computes per-metric deltas.
+- Output artifacts:
+  - `diff.json` (machine-readable deltas)
+  - `diff.md` (human-readable delta table)
+- Compare outputs default to the run target unless `--out <dir>` is provided.
 
 ### scenario.json
 
@@ -293,7 +315,6 @@ Most `src/` and `tests/` subfolders also include focused `README.md` files.
 
 ## Near-Term Roadmap
 
-- Add baseline comparison/diff artifacts.
 - Start agent experiment loop (change one variable at a time).
 - Generate engineer packet output (repro steps, evidence, likely cause, next steps).
 - Add hardware SDK backend implementation behind `ICameraBackend`.
