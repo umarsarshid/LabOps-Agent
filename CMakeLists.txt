@@ -32,6 +32,14 @@ add_library(labops_events
 target_include_directories(labops_events PUBLIC src)
 target_compile_features(labops_events PUBLIC cxx_std_20)
 
+# Camera backend contracts plus sim implementation used for hardware-free
+# development and CI.
+add_library(labops_backends
+  src/backends/sim/sim_camera_backend.cpp
+)
+target_include_directories(labops_backends PUBLIC src)
+target_compile_features(labops_backends PUBLIC cxx_std_20)
+
 # Artifact writers convert in-memory run contracts into stable on-disk outputs.
 add_library(labops_artifacts
   src/artifacts/run_writer.cpp
@@ -77,6 +85,14 @@ add_executable(events_jsonl_smoke
 target_link_libraries(events_jsonl_smoke PRIVATE labops_events)
 target_compile_features(events_jsonl_smoke PRIVATE cxx_std_20)
 add_test(NAME events_jsonl_smoke COMMAND events_jsonl_smoke)
+
+# Smoke test validating that sim backend satisfies ICameraBackend contract.
+add_executable(sim_backend_interface_smoke
+  tests/backends/sim_backend_interface_smoke.cpp
+)
+target_link_libraries(sim_backend_interface_smoke PRIVATE labops_backends)
+target_compile_features(sim_backend_interface_smoke PRIVATE cxx_std_20)
+add_test(NAME sim_backend_interface_smoke COMMAND sim_backend_interface_smoke)
 
 if(LABOPS_ENABLE_CATCH2_TESTS)
   find_package(Catch2 3 QUIET)

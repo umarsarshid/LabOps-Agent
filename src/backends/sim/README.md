@@ -12,6 +12,12 @@ Hardware is expensive and not always available in every environment. The sim bac
 - Controlled injection of faults (drops, jitter spikes, disconnect windows).
 - Repeatable timing and seeded randomness.
 
+## Current contents
+
+- `sim_camera_backend.hpp/.cpp`: `SimCameraBackend` implementation of
+  `ICameraBackend` with strict connect/start/stop state transitions,
+  parameter mutation, config dump, and deterministic frame pulls based on FPS.
+
 ## Design principle
 
 Given the same scenario and seed, sim outputs should be identical. Determinism is required for trustworthy regression tests.

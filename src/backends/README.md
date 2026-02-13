@@ -12,6 +12,13 @@ The project needs one consistent workflow that can run on different camera stack
 - Backend selection and capability mapping.
 - Isolated implementations under backend-specific subfolders.
 
+## Current contents
+
+- `camera_backend.hpp`: `ICameraBackend` contract (`connect/start/stop`,
+  `set_param`, `dump_config`, `pull_frames(duration)`).
+- `sim/`: deterministic in-repo implementation of the contract.
+- `sdk_stub/`: placeholder integration boundary for vendor SDK adapters.
+
 ## Current and planned backends
 
 - `sim/`: deterministic simulator for development and CI.

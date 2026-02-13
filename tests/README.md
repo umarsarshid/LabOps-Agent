@@ -16,7 +16,7 @@ LabOps must be predictable. Tests verify command contracts, scenario validation,
 
 - Catch2 unit tests under `tests/core/` (schema/event JSON contracts).
 - Lightweight smoke executables for artifact/event path validation in other
-  subfolders.
+  subfolders, including backend interface conformance checks.
 
 ## Design principle
 
