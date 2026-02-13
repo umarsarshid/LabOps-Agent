@@ -36,6 +36,10 @@ stack are planned next.
   - `FRAME_RECEIVED`
   - `FRAME_DROPPED`
   - `STREAM_STOPPED`
+- FPS metrics pipeline:
+  - computes `avg_fps` over run duration
+  - computes `rolling_fps` over a fixed window
+  - writes `<out>/metrics.csv`
 - Backend contract (`ICameraBackend`) plus deterministic sim backend.
 - Sim features:
   - Configurable FPS, jitter, seed, frame size.
@@ -53,7 +57,7 @@ stack are planned next.
 ## Not Implemented Yet
 
 - Strict scenario schema parser/validator (current validate is preflight-level).
-- Metrics computation module (FPS/jitter/drop calculations from events).
+- Full metrics suite (jitter/drop/disconnect calculations beyond FPS).
 - Baseline comparison and diff artifact outputs.
 - SDK-backed camera implementation (only interface boundary/stub exists).
 - Agent experiment planner/runner and final engineer packet generation.
@@ -107,6 +111,7 @@ EOF
 Expected files:
 - `out/run.json`
 - `out/events.jsonl`
+- `out/metrics.csv`
 
 ## Output Contracts
 
@@ -131,6 +136,13 @@ Current fields:
   - `FRAME_RECEIVED`
   - `FRAME_DROPPED`
   - `STREAM_STOPPED`
+
+### metrics.csv
+
+- CSV metrics artifact written by `labops run`.
+- Includes:
+  - one `avg_fps` summary row
+  - one `rolling_fps` row per rolling sample window
 
 ## Testing
 
@@ -175,7 +187,7 @@ Most `src/` and `tests/` subfolders also include focused `README.md` files.
 ## Near-Term Roadmap
 
 - Add strict scenario schema + validation errors.
-- Implement metrics module from event traces.
+- Expand metrics beyond FPS (jitter/drop/disconnect windows).
 - Add baseline comparison/diff artifacts.
 - Start agent experiment loop (change one variable at a time).
 - Generate engineer packet output (repro steps, evidence, likely cause, next steps).

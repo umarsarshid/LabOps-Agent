@@ -10,7 +10,8 @@ surface (argument parsing + runtime orchestration + artifact/event output).
 ## Current contents
 
 - `run_stream_trace_smoke.cpp`: drives `labops run` via CLI dispatch and
-  verifies `events.jsonl` contains realistic stream lifecycle events.
+  verifies `events.jsonl` contains realistic stream lifecycle events and
+  `metrics.csv` includes an `avg_fps` row.
 - `sim_determinism_golden_smoke.cpp`: runs the same seeded scenario twice and
   verifies the first `K` normalized events are identical.
 

@@ -41,6 +41,14 @@ add_library(labops_backends
 target_include_directories(labops_backends PUBLIC src)
 target_compile_features(labops_backends PUBLIC cxx_std_20)
 
+# Metrics formulas and writers for run performance outputs.
+add_library(labops_metrics
+  src/metrics/csv_writer.cpp
+  src/metrics/fps.cpp
+)
+target_include_directories(labops_metrics PUBLIC src)
+target_compile_features(labops_metrics PUBLIC cxx_std_20)
+
 # Artifact writers convert in-memory run contracts into stable on-disk outputs.
 add_library(labops_artifacts
   src/artifacts/run_writer.cpp
@@ -57,7 +65,7 @@ add_executable(labops
 # Expose `src/` as the include root so includes stay stable as the tree grows.
 target_include_directories(labops PRIVATE src)
 target_compile_features(labops PRIVATE cxx_std_20)
-target_link_libraries(labops PRIVATE labops_artifacts labops_backends labops_events labops_schema)
+target_link_libraries(labops PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_schema)
 
 # Early smoke-test target that validates the schema contract and JSON output
 # remain stable. This is intentionally lightweight until broader test
@@ -117,7 +125,7 @@ add_executable(run_stream_trace_smoke
   src/labops/cli/router.cpp
 )
 target_include_directories(run_stream_trace_smoke PRIVATE src)
-target_link_libraries(run_stream_trace_smoke PRIVATE labops_artifacts labops_backends labops_events labops_schema)
+target_link_libraries(run_stream_trace_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_schema)
 target_compile_features(run_stream_trace_smoke PRIVATE cxx_std_20)
 add_test(NAME run_stream_trace_smoke COMMAND run_stream_trace_smoke)
 
@@ -128,9 +136,17 @@ add_executable(sim_determinism_golden_smoke
   src/labops/cli/router.cpp
 )
 target_include_directories(sim_determinism_golden_smoke PRIVATE src)
-target_link_libraries(sim_determinism_golden_smoke PRIVATE labops_artifacts labops_backends labops_events labops_schema)
+target_link_libraries(sim_determinism_golden_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_schema)
 target_compile_features(sim_determinism_golden_smoke PRIVATE cxx_std_20)
 add_test(NAME sim_determinism_golden_smoke COMMAND sim_determinism_golden_smoke)
+
+# Smoke test for FPS computation and metrics.csv emission.
+add_executable(fps_metrics_smoke
+  tests/metrics/fps_metrics_smoke.cpp
+)
+target_link_libraries(fps_metrics_smoke PRIVATE labops_metrics)
+target_compile_features(fps_metrics_smoke PRIVATE cxx_std_20)
+add_test(NAME fps_metrics_smoke COMMAND fps_metrics_smoke)
 
 if(LABOPS_ENABLE_CATCH2_TESTS)
   find_package(Catch2 3 QUIET)

@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -16,6 +17,14 @@ namespace {
 void Fail(std::string_view message) {
   std::cerr << message << '\n';
   std::abort();
+}
+
+void AssertContains(std::string_view text, std::string_view needle) {
+  if (text.find(needle) == std::string_view::npos) {
+    std::cerr << "expected to find: " << needle << '\n';
+    std::cerr << "actual text: " << text << '\n';
+    std::abort();
+  }
 }
 
 bool ContainsLineType(const std::vector<std::string>& lines, std::string_view event_type) {
@@ -99,11 +108,15 @@ int main() {
 
   const fs::path run_json = out_dir / "run.json";
   const fs::path events_jsonl = out_dir / "events.jsonl";
+  const fs::path metrics_csv = out_dir / "metrics.csv";
   if (!fs::exists(run_json)) {
     Fail("run.json was not produced");
   }
   if (!fs::exists(events_jsonl)) {
     Fail("events.jsonl was not produced");
+  }
+  if (!fs::exists(metrics_csv)) {
+    Fail("metrics.csv was not produced");
   }
 
   const auto lines = ReadNonEmptyLines(events_jsonl);
@@ -130,6 +143,15 @@ int main() {
   if (lines.back().find("\"type\":\"STREAM_STOPPED\"") == std::string::npos) {
     Fail("last trace event must be STREAM_STOPPED");
   }
+
+  std::ifstream metrics_input(metrics_csv, std::ios::binary);
+  if (!metrics_input) {
+    Fail("failed to open metrics.csv");
+  }
+  const std::string metrics_content((std::istreambuf_iterator<char>(metrics_input)),
+                                    std::istreambuf_iterator<char>());
+  AssertContains(metrics_content, "metric,window_end_ms,window_ms,frames,fps");
+  AssertContains(metrics_content, "avg_fps,");
 
   fs::remove_all(temp_root, ec);
   std::cout << "run_stream_trace_smoke: ok\n";
