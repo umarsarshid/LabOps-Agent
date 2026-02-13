@@ -54,6 +54,9 @@ stack are planned next.
   - Event JSONL smoke tests.
   - Backend interface, frame generation, and fault injection smoke tests.
   - CLI run trace smoke test.
+  - Metrics writer smoke test (`metrics.csv` + `metrics.json`).
+  - Jitter injection smoke test.
+  - Drop injection smoke test.
   - Determinism golden smoke test (same seed => same first K normalized events).
   - Catch2 core unit tests for schema/event JSON serialization (when available).
 
@@ -160,6 +163,9 @@ Current fields:
   - inter-frame timing/jitter summaries
   - rolling FPS samples
 
+For exact metric definitions (formulas, units, CSV/JSON contracts, and edge
+cases), see `docs/triage_bundle_spec.md`.
+
 ## Testing
 
 ### Run tests
@@ -195,6 +201,7 @@ GitHub Actions:
 
 - `src/README.md`
 - `docs/README.md`
+- `docs/triage_bundle_spec.md`
 - `tests/README.md`
 - `scenarios/README.md`
 
