@@ -30,6 +30,9 @@ private:
   std::uint32_t ResolveFrameSizeBytes(std::string& error) const;
   std::uint64_t ResolveSeed(std::string& error) const;
   std::uint32_t ResolveDropEveryN(std::string& error) const;
+  std::uint32_t ResolveDropPercent(std::string& error) const;
+  std::uint32_t ResolveBurstDrop(std::string& error) const;
+  std::uint32_t ResolveReorder(std::string& error) const;
 
   bool connected_ = false;
   bool running_ = false;

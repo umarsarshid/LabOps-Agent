@@ -14,6 +14,8 @@ stable interface regardless of real hardware availability.
   `ICameraBackend` and supports core control/pull operations.
 - `sim_frame_generator_smoke.cpp`: validates deterministic frame generation
   fields and timing behavior (~N/FPS seconds).
+- `sim_fault_injection_smoke.cpp`: validates scenario-controlled fault
+  injection knobs and same-seed reproducibility for drop/reorder patterns.
 
 ## Connection to the project
 

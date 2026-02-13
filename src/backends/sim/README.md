@@ -14,12 +14,19 @@ Hardware is expensive and not always available in every environment. The sim bac
 
 ## Current contents
 
+- `scenario_config.hpp/.cpp`: scenario-driven config object and adapter used to
+  apply sim knobs (`fps`, `jitter_us`, `seed`, and fault settings) via backend
+  params.
 - `sim_camera_backend.hpp/.cpp`: `SimCameraBackend` implementation of
   `ICameraBackend` with strict connect/start/stop state transitions,
   parameter mutation, config dump, and deterministic frame pulls based on
   `fps`, `jitter_us`, and `seed`.
 - Generated frames include `frame_id`, timestamp, `size_bytes`, and optional
   dropped markers when `drop_every_n` is configured.
+- Fault injection knobs include:
+  - `drop_percent`
+  - `burst_drop`
+  - `reorder`
 
 ## Design principle
 

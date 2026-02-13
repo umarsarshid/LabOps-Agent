@@ -35,6 +35,7 @@ target_compile_features(labops_events PUBLIC cxx_std_20)
 # Camera backend contracts plus sim implementation used for hardware-free
 # development and CI.
 add_library(labops_backends
+  src/backends/sim/scenario_config.cpp
   src/backends/sim/sim_camera_backend.cpp
 )
 target_include_directories(labops_backends PUBLIC src)
@@ -101,6 +102,14 @@ add_executable(sim_frame_generator_smoke
 target_link_libraries(sim_frame_generator_smoke PRIVATE labops_backends)
 target_compile_features(sim_frame_generator_smoke PRIVATE cxx_std_20)
 add_test(NAME sim_frame_generator_smoke COMMAND sim_frame_generator_smoke)
+
+# Smoke test for scenario-driven fault injection reproducibility.
+add_executable(sim_fault_injection_smoke
+  tests/backends/sim_fault_injection_smoke.cpp
+)
+target_link_libraries(sim_fault_injection_smoke PRIVATE labops_backends)
+target_compile_features(sim_fault_injection_smoke PRIVATE cxx_std_20)
+add_test(NAME sim_fault_injection_smoke COMMAND sim_fault_injection_smoke)
 
 if(LABOPS_ENABLE_CATCH2_TESTS)
   find_package(Catch2 3 QUIET)

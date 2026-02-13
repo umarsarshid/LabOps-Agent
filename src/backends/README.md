@@ -18,7 +18,8 @@ The project needs one consistent workflow that can run on different camera stack
   `set_param`, `dump_config`, `pull_frames(duration)`).
   - `FrameSample` now includes `frame_id`, `timestamp`, `size_bytes`, and
     optional `dropped`.
-- `sim/`: deterministic in-repo implementation of the contract.
+- `sim/`: deterministic in-repo implementation of the contract with
+  scenario-controlled fault knobs.
 - `sdk_stub/`: placeholder integration boundary for vendor SDK adapters.
 
 ## Current and planned backends
