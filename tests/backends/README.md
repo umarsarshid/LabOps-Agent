@@ -12,6 +12,8 @@ stable interface regardless of real hardware availability.
 
 - `sim_backend_interface_smoke.cpp`: validates that sim backend implements
   `ICameraBackend` and supports core control/pull operations.
+- `sim_frame_generator_smoke.cpp`: validates deterministic frame generation
+  fields and timing behavior (~N/FPS seconds).
 
 ## Connection to the project
 

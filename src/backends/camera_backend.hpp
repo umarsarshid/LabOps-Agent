@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -14,8 +15,10 @@ namespace labops::backends {
 // (byte counts, sequence gaps, transport stats) can be added without changing
 // high-level control flow.
 struct FrameSample {
-  std::uint64_t index = 0;
-  std::chrono::system_clock::time_point ts{};
+  std::uint64_t frame_id = 0;
+  std::chrono::system_clock::time_point timestamp{};
+  std::uint32_t size_bytes = 0;
+  std::optional<bool> dropped;
 };
 
 using BackendConfig = std::map<std::string, std::string>;

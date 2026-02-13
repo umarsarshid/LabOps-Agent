@@ -94,6 +94,14 @@ target_link_libraries(sim_backend_interface_smoke PRIVATE labops_backends)
 target_compile_features(sim_backend_interface_smoke PRIVATE cxx_std_20)
 add_test(NAME sim_backend_interface_smoke COMMAND sim_backend_interface_smoke)
 
+# Smoke test for deterministic frame generation and timing envelope.
+add_executable(sim_frame_generator_smoke
+  tests/backends/sim_frame_generator_smoke.cpp
+)
+target_link_libraries(sim_frame_generator_smoke PRIVATE labops_backends)
+target_compile_features(sim_frame_generator_smoke PRIVATE cxx_std_20)
+add_test(NAME sim_frame_generator_smoke COMMAND sim_frame_generator_smoke)
+
 if(LABOPS_ENABLE_CATCH2_TESTS)
   find_package(Catch2 3 QUIET)
 

@@ -2,6 +2,7 @@
 
 #include "backends/camera_backend.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <string>
 
@@ -25,10 +26,15 @@ public:
 
 private:
   std::uint32_t ResolveFps(std::string& error) const;
+  std::uint32_t ResolveJitterUs(std::string& error) const;
+  std::uint32_t ResolveFrameSizeBytes(std::string& error) const;
+  std::uint64_t ResolveSeed(std::string& error) const;
+  std::uint32_t ResolveDropEveryN(std::string& error) const;
 
   bool connected_ = false;
   bool running_ = false;
-  std::uint64_t next_frame_index_ = 0;
+  std::uint64_t next_frame_id_ = 0;
+  std::chrono::system_clock::time_point stream_start_ts_{};
   BackendConfig params_;
 };
 

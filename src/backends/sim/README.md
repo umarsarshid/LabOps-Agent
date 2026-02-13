@@ -16,7 +16,10 @@ Hardware is expensive and not always available in every environment. The sim bac
 
 - `sim_camera_backend.hpp/.cpp`: `SimCameraBackend` implementation of
   `ICameraBackend` with strict connect/start/stop state transitions,
-  parameter mutation, config dump, and deterministic frame pulls based on FPS.
+  parameter mutation, config dump, and deterministic frame pulls based on
+  `fps`, `jitter_us`, and `seed`.
+- Generated frames include `frame_id`, timestamp, `size_bytes`, and optional
+  dropped markers when `drop_every_n` is configured.
 
 ## Design principle
 
