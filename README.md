@@ -30,6 +30,10 @@ stack are planned next.
   - `labops run <scenario.json> [--out <dir>]`
 - Scenario loader + schema validation in `labops validate` with actionable
   field-level errors.
+- Starter scenario set in `scenarios/`:
+  - `sim_baseline.json`
+  - `dropped_frames.json`
+  - `trigger_roi.json`
 - Run contract schema (`RunConfig`, `RunInfo`) with JSON serialization.
 - Artifact writer for `<out>/run.json`.
 - Event contract and append-only JSONL writer for `<out>/events.jsonl`.

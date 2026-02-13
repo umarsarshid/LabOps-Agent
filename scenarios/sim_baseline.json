@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "sim_baseline",
+  "description": "Known-good baseline stream with stable timing and no injected faults.",
+  "tags": ["baseline", "sim", "smoke"],
+  "duration": {
+    "duration_ms": 10000
+  },
+  "camera": {
+    "device_id": "sim_cam_01",
+    "pixel_format": "mono8",
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "trigger_mode": "free_run"
+  },
+  "sim_faults": {
+    "seed": 1,
+    "jitter_us": 0,
+    "drop_every_n": 0,
+    "drop_percent": 0,
+    "burst_drop": 0,
+    "reorder": 0
+  },
+  "thresholds": {
+    "min_avg_fps": 29.0,
+    "max_drop_rate_percent": 1.0,
+    "max_inter_frame_interval_p95_us": 40000,
+    "max_inter_frame_jitter_p95_us": 1000
+  }
+}

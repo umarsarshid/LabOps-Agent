@@ -16,6 +16,9 @@ surface (argument parsing + runtime orchestration + artifact/event output).
   invalid schema output includes actionable field-level error paths.
 - `sim_determinism_golden_smoke.cpp`: runs the same seeded scenario twice and
   verifies the first `K` normalized events are identical.
+- `starter_scenarios_e2e_smoke.cpp`: runs the starter scenario set
+  (`sim_baseline.json`, `dropped_frames.json`, `trigger_roi.json`) end-to-end
+  and verifies run artifacts + core lifecycle events are emitted for each.
 
 ## Connection to the project
 

@@ -157,6 +157,17 @@ target_link_libraries(sim_determinism_golden_smoke PRIVATE labops_artifacts labo
 target_compile_features(sim_determinism_golden_smoke PRIVATE cxx_std_20)
 add_test(NAME sim_determinism_golden_smoke COMMAND sim_determinism_golden_smoke)
 
+# Integration smoke test that runs starter scenarios end-to-end through the
+# CLI and validates core artifact/event outputs for each scenario.
+add_executable(starter_scenarios_e2e_smoke
+  tests/labops/starter_scenarios_e2e_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(starter_scenarios_e2e_smoke PRIVATE src)
+target_link_libraries(starter_scenarios_e2e_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(starter_scenarios_e2e_smoke PRIVATE cxx_std_20)
+add_test(NAME starter_scenarios_e2e_smoke COMMAND starter_scenarios_e2e_smoke)
+
 # Scenario schema validation smoke tests.
 add_executable(scenario_validation_smoke
   tests/scenarios/scenario_validation_smoke.cpp

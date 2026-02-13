@@ -11,6 +11,9 @@ This directory is the source of truth for runnable test definitions. Scenarios s
 - Baseline scenarios (known-good behavior).
 - Failure-injection scenarios (drops, jitter, disconnects).
 - Targeted investigation scenarios (trigger/ROI/pixel-format sweeps).
+- `sim_baseline.json`: stable known-good reference scenario.
+- `dropped_frames.json`: deterministic drop/reorder fault reproduction scenario.
+- `trigger_roi.json`: trigger + ROI starter scenario for targeted investigations.
 - `foo.json`: minimal sample scenario matching the documented schema.
 
 ## Authoring guidance

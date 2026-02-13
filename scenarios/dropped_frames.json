@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "dropped_frames",
+  "description": "Repro scenario with deterministic drop/reorder knobs enabled for triage.",
+  "tags": ["fault", "drops", "sim", "triage"],
+  "duration": {
+    "duration_ms": 1200
+  },
+  "camera": {
+    "device_id": "sim_cam_01",
+    "pixel_format": "mono8",
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "trigger_mode": "free_run"
+  },
+  "sim_faults": {
+    "seed": 777,
+    "jitter_us": 350,
+    "drop_every_n": 4,
+    "drop_percent": 15,
+    "burst_drop": 2,
+    "reorder": 3
+  },
+  "thresholds": {
+    "min_avg_fps": 15.0,
+    "max_drop_rate_percent": 80.0,
+    "max_inter_frame_interval_p95_us": 80000,
+    "max_inter_frame_jitter_p95_us": 30000
+  }
+}
