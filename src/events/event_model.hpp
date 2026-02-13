@@ -10,6 +10,10 @@ namespace labops::events {
 // compact and stable because downstream metrics and triage logic key off it.
 enum class EventType {
   kRunStarted,
+  kStreamStarted,
+  kFrameReceived,
+  kFrameDropped,
+  kStreamStopped,
   kInfo,
   kWarning,
   kError,

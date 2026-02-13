@@ -19,6 +19,13 @@ Debugging camera failures requires timeline evidence, not just summary metrics. 
 - `jsonl_writer.hpp/.cpp`: append-only writer for `events.jsonl` (one JSON
   object per line).
 
+## Current stream trace event types
+
+- `STREAM_STARTED`
+- `FRAME_RECEIVED`
+- `FRAME_DROPPED`
+- `STREAM_STOPPED`
+
 ## Key design principle
 
 Events should be machine-readable and stable enough that metrics and agent diagnosis can be derived from them without backend-specific branches everywhere.

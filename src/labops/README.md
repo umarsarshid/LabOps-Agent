@@ -17,7 +17,8 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
 - `labops version`: prints tool version.
 - `labops validate <scenario.json>`: validates scenario file preflight checks.
 - `labops run <scenario.json> --out <dir>`: emits `<dir>/run.json` metadata
-  artifact, appends `<dir>/events.jsonl`, and reports both paths.
+  artifact, runs sim backend lifecycle, appends `<dir>/events.jsonl`, and
+  reports both paths.
 
 ## What should not live here
 

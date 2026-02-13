@@ -57,7 +57,7 @@ add_executable(labops
 # Expose `src/` as the include root so includes stay stable as the tree grows.
 target_include_directories(labops PRIVATE src)
 target_compile_features(labops PRIVATE cxx_std_20)
-target_link_libraries(labops PRIVATE labops_artifacts labops_events labops_schema)
+target_link_libraries(labops PRIVATE labops_artifacts labops_backends labops_events labops_schema)
 
 # Early smoke-test target that validates the schema contract and JSON output
 # remain stable. This is intentionally lightweight until broader test
@@ -110,6 +110,16 @@ add_executable(sim_fault_injection_smoke
 target_link_libraries(sim_fault_injection_smoke PRIVATE labops_backends)
 target_compile_features(sim_fault_injection_smoke PRIVATE cxx_std_20)
 add_test(NAME sim_fault_injection_smoke COMMAND sim_fault_injection_smoke)
+
+# Integration smoke test that drives `labops run` and validates stream events.
+add_executable(run_stream_trace_smoke
+  tests/labops/run_stream_trace_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(run_stream_trace_smoke PRIVATE src)
+target_link_libraries(run_stream_trace_smoke PRIVATE labops_artifacts labops_backends labops_events labops_schema)
+target_compile_features(run_stream_trace_smoke PRIVATE cxx_std_20)
+add_test(NAME run_stream_trace_smoke COMMAND run_stream_trace_smoke)
 
 if(LABOPS_ENABLE_CATCH2_TESTS)
   find_package(Catch2 3 QUIET)
