@@ -53,6 +53,28 @@ bool WriteFpsMetricsCsv(const FpsReport& report, const fs::path& output_dir,
              << sample.fps << "\n";
   }
 
+  // Timing/jitter stats are emitted as dedicated metric rows so downstream
+  // tools can compare scenario quality without parsing event-level traces.
+  out_file << "inter_frame_interval_min_us,,,"
+           << report.inter_frame_interval_us.sample_count << ","
+           << report.inter_frame_interval_us.min_us << "\n";
+  out_file << "inter_frame_interval_avg_us,,,"
+           << report.inter_frame_interval_us.sample_count << ","
+           << report.inter_frame_interval_us.avg_us << "\n";
+  out_file << "inter_frame_interval_p95_us,,,"
+           << report.inter_frame_interval_us.sample_count << ","
+           << report.inter_frame_interval_us.p95_us << "\n";
+
+  out_file << "inter_frame_jitter_min_us,,,"
+           << report.inter_frame_jitter_us.sample_count << ","
+           << report.inter_frame_jitter_us.min_us << "\n";
+  out_file << "inter_frame_jitter_avg_us,,,"
+           << report.inter_frame_jitter_us.sample_count << ","
+           << report.inter_frame_jitter_us.avg_us << "\n";
+  out_file << "inter_frame_jitter_p95_us,,,"
+           << report.inter_frame_jitter_us.sample_count << ","
+           << report.inter_frame_jitter_us.p95_us << "\n";
+
   if (!out_file) {
     error = "failed while writing output file '" + written_path.string() + "'";
     return false;

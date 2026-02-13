@@ -148,6 +148,14 @@ target_link_libraries(fps_metrics_smoke PRIVATE labops_metrics)
 target_compile_features(fps_metrics_smoke PRIVATE cxx_std_20)
 add_test(NAME fps_metrics_smoke COMMAND fps_metrics_smoke)
 
+# Smoke test validating that timing/jitter metrics reflect injected jitter.
+add_executable(jitter_injection_smoke
+  tests/metrics/jitter_injection_smoke.cpp
+)
+target_link_libraries(jitter_injection_smoke PRIVATE labops_backends labops_metrics)
+target_compile_features(jitter_injection_smoke PRIVATE cxx_std_20)
+add_test(NAME jitter_injection_smoke COMMAND jitter_injection_smoke)
+
 if(LABOPS_ENABLE_CATCH2_TESTS)
   find_package(Catch2 3 QUIET)
 

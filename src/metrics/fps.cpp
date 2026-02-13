@@ -1,6 +1,8 @@
 #include "metrics/fps.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <numeric>
 
 namespace labops::metrics {
 
@@ -8,6 +10,27 @@ namespace {
 
 bool IsDropped(const backends::FrameSample& frame) {
   return frame.dropped.has_value() && frame.dropped.value();
+}
+
+TimingStatsUs ComputeTimingStatsUs(std::vector<double> samples_us) {
+  TimingStatsUs stats;
+  if (samples_us.empty()) {
+    return stats;
+  }
+
+  std::sort(samples_us.begin(), samples_us.end());
+  stats.sample_count = static_cast<std::uint64_t>(samples_us.size());
+  stats.min_us = samples_us.front();
+
+  const double sum_us = std::accumulate(samples_us.begin(), samples_us.end(), 0.0);
+  stats.avg_us = sum_us / static_cast<double>(samples_us.size());
+
+  // Nearest-rank p95 approximation keeps behavior deterministic and simple.
+  const std::size_t rank = static_cast<std::size_t>(
+      std::ceil(0.95 * static_cast<double>(samples_us.size())));
+  const std::size_t index = rank > 0U ? (rank - 1U) : 0U;
+  stats.p95_us = samples_us[index];
+  return stats;
 }
 
 } // namespace
@@ -64,6 +87,26 @@ bool ComputeFpsReport(const std::vector<backends::FrameSample>& frames,
     const double fps = static_cast<double>(count) / rolling_window_seconds;
     report.rolling_samples.push_back(
         {.window_end = received_timestamps[right], .frames_in_window = count, .fps = fps});
+  }
+
+  if (received_timestamps.size() >= 2U) {
+    std::vector<double> intervals_us;
+    intervals_us.reserve(received_timestamps.size() - 1U);
+    for (std::size_t i = 1; i < received_timestamps.size(); ++i) {
+      const auto delta_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                                received_timestamps[i] - received_timestamps[i - 1])
+                                .count();
+      intervals_us.push_back(static_cast<double>(delta_us));
+    }
+
+    report.inter_frame_interval_us = ComputeTimingStatsUs(intervals_us);
+
+    std::vector<double> jitter_us;
+    jitter_us.reserve(intervals_us.size());
+    for (double interval_us : intervals_us) {
+      jitter_us.push_back(std::abs(interval_us - report.inter_frame_interval_us.avg_us));
+    }
+    report.inter_frame_jitter_us = ComputeTimingStatsUs(jitter_us);
   }
 
   return true;

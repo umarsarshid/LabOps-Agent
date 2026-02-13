@@ -78,6 +78,20 @@ int main() {
   AssertNear(report.rolling_samples[2].fps, 3.0, 1e-9, "rolling fps index 2 mismatch");
   AssertNear(report.rolling_samples[3].fps, 2.0, 1e-9, "rolling fps index 3 mismatch");
 
+  if (report.inter_frame_interval_us.sample_count != 3U) {
+    Fail("unexpected inter-frame interval sample count");
+  }
+  AssertNear(report.inter_frame_interval_us.min_us, 500000.0, 1e-9, "interval min mismatch");
+  AssertNear(report.inter_frame_interval_us.avg_us, 600000.0, 1e-9, "interval avg mismatch");
+  AssertNear(report.inter_frame_interval_us.p95_us, 800000.0, 1e-9, "interval p95 mismatch");
+
+  if (report.inter_frame_jitter_us.sample_count != 3U) {
+    Fail("unexpected inter-frame jitter sample count");
+  }
+  AssertNear(report.inter_frame_jitter_us.min_us, 100000.0, 1e-9, "jitter min mismatch");
+  AssertNear(report.inter_frame_jitter_us.avg_us, 133333.333333, 1e-6, "jitter avg mismatch");
+  AssertNear(report.inter_frame_jitter_us.p95_us, 200000.0, 1e-9, "jitter p95 mismatch");
+
   const fs::path out_dir = fs::temp_directory_path() / "labops-fps-metrics-smoke";
   std::error_code cleanup_ec;
   fs::remove_all(out_dir, cleanup_ec);
@@ -95,6 +109,8 @@ int main() {
   AssertContains(content, "metric,window_end_ms,window_ms,frames,fps");
   AssertContains(content, "avg_fps,,2000,4,2.000000");
   AssertContains(content, "rolling_fps,");
+  AssertContains(content, "inter_frame_interval_avg_us,,,3,600000.000000");
+  AssertContains(content, "inter_frame_jitter_p95_us,,,3,200000.000000");
 
   fs::remove_all(out_dir, cleanup_ec);
   std::cout << "fps_metrics_smoke: ok\n";

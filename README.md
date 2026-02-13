@@ -39,6 +39,8 @@ stack are planned next.
 - FPS metrics pipeline:
   - computes `avg_fps` over run duration
   - computes `rolling_fps` over a fixed window
+  - computes inter-frame interval stats (`min/avg/p95-ish`)
+  - computes inter-frame jitter stats (`min/avg/p95-ish`)
   - writes `<out>/metrics.csv`
 - Backend contract (`ICameraBackend`) plus deterministic sim backend.
 - Sim features:
@@ -57,7 +59,7 @@ stack are planned next.
 ## Not Implemented Yet
 
 - Strict scenario schema parser/validator (current validate is preflight-level).
-- Full metrics suite (jitter/drop/disconnect calculations beyond FPS).
+- Full metrics suite completion (drop/disconnect-specific metrics beyond current FPS+jitter timing).
 - Baseline comparison and diff artifact outputs.
 - SDK-backed camera implementation (only interface boundary/stub exists).
 - Agent experiment planner/runner and final engineer packet generation.
@@ -143,6 +145,8 @@ Current fields:
 - Includes:
   - one `avg_fps` summary row
   - one `rolling_fps` row per rolling sample window
+  - inter-frame interval `min/avg/p95` rows (microseconds)
+  - inter-frame jitter `min/avg/p95` rows (microseconds)
 
 ## Testing
 
@@ -187,7 +191,7 @@ Most `src/` and `tests/` subfolders also include focused `README.md` files.
 ## Near-Term Roadmap
 
 - Add strict scenario schema + validation errors.
-- Expand metrics beyond FPS (jitter/drop/disconnect windows).
+- Expand metrics beyond current FPS+jitter coverage (drop/disconnect windows).
 - Add baseline comparison/diff artifacts.
 - Start agent experiment loop (change one variable at a time).
 - Generate engineer packet output (repro steps, evidence, likely cause, next steps).

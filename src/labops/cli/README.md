@@ -14,7 +14,7 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Print deterministic command outputs.
 - Parse run artifact options (currently `--out <dir>`).
 - Execute sim backend run lifecycle and emit stream trace events.
-- Compute and write run metrics (`metrics.csv`) for FPS reporting.
+- Compute and write run metrics (`metrics.csv`) for FPS and timing/jitter reporting.
 
 ## Design intent
 

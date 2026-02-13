@@ -152,6 +152,8 @@ int main() {
                                     std::istreambuf_iterator<char>());
   AssertContains(metrics_content, "metric,window_end_ms,window_ms,frames,fps");
   AssertContains(metrics_content, "avg_fps,");
+  AssertContains(metrics_content, "inter_frame_interval_p95_us");
+  AssertContains(metrics_content, "inter_frame_jitter_p95_us");
 
   fs::remove_all(temp_root, ec);
   std::cout << "run_stream_trace_smoke: ok\n";

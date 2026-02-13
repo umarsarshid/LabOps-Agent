@@ -19,7 +19,7 @@ LabOps must be predictable. Tests verify command contracts, scenario validation,
   subfolders, including backend interface conformance checks.
 - CLI integration smoke tests under `tests/labops/` for end-to-end run traces.
 - Seeded determinism smoke coverage to prevent non-repeatable sim behavior.
-- Metric smoke tests under `tests/metrics/` for FPS formulas and CSV output.
+- Metric smoke tests under `tests/metrics/` for FPS/jitter formulas and CSV output.
 
 ## Design principle
 

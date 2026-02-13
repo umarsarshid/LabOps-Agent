@@ -15,10 +15,13 @@ Engineers need objective numbers, not only logs. This module turns event traces 
 ## Current contents
 
 - `fps.hpp/.cpp`: computes average FPS over the run window and rolling FPS over
-  a fixed time window, using received frames only.
+  a fixed time window, using received frames only. Also computes:
+  - inter-frame interval stats (`min/avg/p95`) in microseconds
+  - inter-frame jitter stats (`min/avg/p95`) in microseconds
 - `csv_writer.hpp/.cpp`: writes `<out>/metrics.csv` with:
   - one `avg_fps` row
   - one `rolling_fps` row per rolling sample
+  - timing/jitter summary rows for inter-frame interval and jitter stats
 
 ## Design principle
 
