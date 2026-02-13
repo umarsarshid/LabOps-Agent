@@ -1,5 +1,5 @@
+#include "artifacts/metrics_writer.hpp"
 #include "backends/camera_backend.hpp"
-#include "metrics/csv_writer.hpp"
 #include "metrics/fps.hpp"
 
 #include <chrono>
@@ -103,12 +103,17 @@ int main() {
   std::error_code cleanup_ec;
   fs::remove_all(out_dir, cleanup_ec);
 
-  fs::path written_path;
-  if (!labops::metrics::WriteFpsMetricsCsv(report, out_dir, written_path, error)) {
-    Fail("WriteFpsMetricsCsv failed: " + error);
+  fs::path csv_path;
+  if (!labops::artifacts::WriteMetricsCsv(report, out_dir, csv_path, error)) {
+    Fail("WriteMetricsCsv failed: " + error);
   }
 
-  std::ifstream in(written_path, std::ios::binary);
+  fs::path json_path;
+  if (!labops::artifacts::WriteMetricsJson(report, out_dir, json_path, error)) {
+    Fail("WriteMetricsJson failed: " + error);
+  }
+
+  std::ifstream in(csv_path, std::ios::binary);
   if (!in) {
     Fail("failed to open metrics.csv");
   }
@@ -120,6 +125,16 @@ int main() {
   AssertContains(content, "rolling_fps,");
   AssertContains(content, "inter_frame_interval_avg_us,,,3,600000.000000");
   AssertContains(content, "inter_frame_jitter_p95_us,,,3,200000.000000");
+
+  std::ifstream json_in(json_path, std::ios::binary);
+  if (!json_in) {
+    Fail("failed to open metrics.json");
+  }
+  const std::string json_content((std::istreambuf_iterator<char>(json_in)),
+                                 std::istreambuf_iterator<char>());
+  AssertContains(json_content, "\"avg_fps\":2.000000");
+  AssertContains(json_content, "\"drop_rate_percent\":20.000000");
+  AssertContains(json_content, "\"rolling_fps\":[");
 
   fs::remove_all(out_dir, cleanup_ec);
   std::cout << "fps_metrics_smoke: ok\n";

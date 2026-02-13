@@ -9,7 +9,8 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 ## Expected outputs
 
 - `run.json` for run metadata.
-- `metrics.csv` (or equivalent) for numeric outcomes.
+- `metrics.csv` for plotting and spreadsheet workflows.
+- `metrics.json` for machine parsing by agent logic.
 - Diff/report files against baseline.
 - Structured bundle directories ready to share with engineers.
 
@@ -17,6 +18,9 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 
 - `run_writer.hpp/.cpp`: writes canonical `run.json` files into an output
   directory (`--out <dir>` from CLI) and ensures directory creation.
+- `metrics_writer.hpp/.cpp`: writes canonical metrics artifacts:
+  - `metrics.csv` for plotting and spreadsheet workflows
+  - `metrics.json` for machine parsing by agent logic
 
 ## Design principle
 

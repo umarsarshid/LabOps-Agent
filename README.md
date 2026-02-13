@@ -42,7 +42,7 @@ stack are planned next.
   - computes drop stats (`total dropped`, `drop rate percent`)
   - computes inter-frame interval stats (`min/avg/p95-ish`)
   - computes inter-frame jitter stats (`min/avg/p95-ish`)
-  - writes `<out>/metrics.csv`
+  - writes `<out>/metrics.csv` and `<out>/metrics.json`
 - Backend contract (`ICameraBackend`) plus deterministic sim backend.
 - Sim features:
   - Configurable FPS, jitter, seed, frame size.
@@ -115,6 +115,7 @@ Expected files:
 - `out/run.json`
 - `out/events.jsonl`
 - `out/metrics.csv`
+- `out/metrics.json`
 
 ## Output Contracts
 
@@ -149,6 +150,15 @@ Current fields:
   - drop summary rows (`drops_total`, `drop_rate_percent`)
   - inter-frame interval `min/avg/p95` rows (microseconds)
   - inter-frame jitter `min/avg/p95` rows (microseconds)
+
+### metrics.json
+
+- JSON metrics artifact written by `labops run`.
+- Includes machine-friendly structured fields for:
+  - FPS summaries
+  - drop summaries
+  - inter-frame timing/jitter summaries
+  - rolling FPS samples
 
 ## Testing
 

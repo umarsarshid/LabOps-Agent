@@ -109,6 +109,7 @@ int main() {
   const fs::path run_json = out_dir / "run.json";
   const fs::path events_jsonl = out_dir / "events.jsonl";
   const fs::path metrics_csv = out_dir / "metrics.csv";
+  const fs::path metrics_json = out_dir / "metrics.json";
   if (!fs::exists(run_json)) {
     Fail("run.json was not produced");
   }
@@ -117,6 +118,9 @@ int main() {
   }
   if (!fs::exists(metrics_csv)) {
     Fail("metrics.csv was not produced");
+  }
+  if (!fs::exists(metrics_json)) {
+    Fail("metrics.json was not produced");
   }
 
   const auto lines = ReadNonEmptyLines(events_jsonl);
@@ -156,6 +160,16 @@ int main() {
   AssertContains(metrics_content, "drop_rate_percent");
   AssertContains(metrics_content, "inter_frame_interval_p95_us");
   AssertContains(metrics_content, "inter_frame_jitter_p95_us");
+
+  std::ifstream metrics_json_input(metrics_json, std::ios::binary);
+  if (!metrics_json_input) {
+    Fail("failed to open metrics.json");
+  }
+  const std::string metrics_json_content((std::istreambuf_iterator<char>(metrics_json_input)),
+                                         std::istreambuf_iterator<char>());
+  AssertContains(metrics_json_content, "\"avg_fps\":");
+  AssertContains(metrics_json_content, "\"drop_rate_percent\":");
+  AssertContains(metrics_json_content, "\"rolling_fps\":[");
 
   fs::remove_all(temp_root, ec);
   std::cout << "run_stream_trace_smoke: ok\n";

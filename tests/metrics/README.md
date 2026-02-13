@@ -10,8 +10,8 @@ formula behavior and output artifacts so regressions are caught early.
 ## Current contents
 
 - `fps_metrics_smoke.cpp`: validates average + rolling FPS computation and
-  verifies `metrics.csv` emission contract (`avg_fps`, drop rows, and
-  timing/jitter rows).
+  verifies metrics artifact emission contracts (`metrics.csv` and
+  `metrics.json`) include expected FPS/drop/timing fields.
 - `jitter_injection_smoke.cpp`: verifies injected sim jitter changes computed
   timing metrics (`jitter avg` and `interval p95` increase with higher jitter).
 - `drop_injection_smoke.cpp`: verifies deterministic drop injection produces

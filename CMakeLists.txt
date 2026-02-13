@@ -43,7 +43,6 @@ target_compile_features(labops_backends PUBLIC cxx_std_20)
 
 # Metrics formulas and writers for run performance outputs.
 add_library(labops_metrics
-  src/metrics/csv_writer.cpp
   src/metrics/fps.cpp
 )
 target_include_directories(labops_metrics PUBLIC src)
@@ -51,11 +50,12 @@ target_compile_features(labops_metrics PUBLIC cxx_std_20)
 
 # Artifact writers convert in-memory run contracts into stable on-disk outputs.
 add_library(labops_artifacts
+  src/artifacts/metrics_writer.cpp
   src/artifacts/run_writer.cpp
 )
 target_include_directories(labops_artifacts PUBLIC src)
 target_compile_features(labops_artifacts PUBLIC cxx_std_20)
-target_link_libraries(labops_artifacts PUBLIC labops_schema)
+target_link_libraries(labops_artifacts PUBLIC labops_metrics labops_schema)
 
 add_executable(labops
   src/labops/cli/router.cpp
@@ -144,9 +144,17 @@ add_test(NAME sim_determinism_golden_smoke COMMAND sim_determinism_golden_smoke)
 add_executable(fps_metrics_smoke
   tests/metrics/fps_metrics_smoke.cpp
 )
-target_link_libraries(fps_metrics_smoke PRIVATE labops_metrics)
+target_link_libraries(fps_metrics_smoke PRIVATE labops_artifacts labops_metrics)
 target_compile_features(fps_metrics_smoke PRIVATE cxx_std_20)
 add_test(NAME fps_metrics_smoke COMMAND fps_metrics_smoke)
+
+# Artifact smoke test for metrics.csv + metrics.json writer contracts.
+add_executable(metrics_writers_smoke
+  tests/artifacts/metrics_writers_smoke.cpp
+)
+target_link_libraries(metrics_writers_smoke PRIVATE labops_artifacts labops_metrics)
+target_compile_features(metrics_writers_smoke PRIVATE cxx_std_20)
+add_test(NAME metrics_writers_smoke COMMAND metrics_writers_smoke)
 
 # Smoke test validating that timing/jitter metrics reflect injected jitter.
 add_executable(jitter_injection_smoke
@@ -160,7 +168,7 @@ add_test(NAME jitter_injection_smoke COMMAND jitter_injection_smoke)
 add_executable(drop_injection_smoke
   tests/metrics/drop_injection_smoke.cpp
 )
-target_link_libraries(drop_injection_smoke PRIVATE labops_backends labops_metrics)
+target_link_libraries(drop_injection_smoke PRIVATE labops_artifacts labops_backends labops_metrics)
 target_compile_features(drop_injection_smoke PRIVATE cxx_std_20)
 add_test(NAME drop_injection_smoke COMMAND drop_injection_smoke)
 

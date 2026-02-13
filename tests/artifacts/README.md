@@ -11,6 +11,8 @@ this folder guard against accidental output-shape or file-path regressions.
 
 - `run_writer_smoke.cpp`: verifies `WriteRunJson(...)` creates `run.json` in
   the requested output directory and emits required metadata fields.
+- `metrics_writers_smoke.cpp`: verifies `WriteMetricsCsv(...)` and
+  `WriteMetricsJson(...)` create both metrics artifacts with expected fields.
 
 ## Connection to the project
 

@@ -17,9 +17,11 @@ LabOps must be predictable. Tests verify command contracts, scenario validation,
 - Catch2 unit tests under `tests/core/` (schema/event JSON contracts).
 - Lightweight smoke executables for artifact/event path validation in other
   subfolders, including backend interface conformance checks.
+- Artifact-specific writer contract tests under `tests/artifacts/`.
 - CLI integration smoke tests under `tests/labops/` for end-to-end run traces.
 - Seeded determinism smoke coverage to prevent non-repeatable sim behavior.
-- Metric smoke tests under `tests/metrics/` for FPS/drop/jitter formulas and CSV output.
+- Metric smoke tests under `tests/metrics/` for FPS/drop/jitter formulas and
+  CSV/JSON output contracts.
 
 ## Design principle
 

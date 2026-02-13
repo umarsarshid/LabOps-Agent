@@ -1,5 +1,6 @@
 #include "labops/cli/router.hpp"
 
+#include "artifacts/metrics_writer.hpp"
 #include "artifacts/run_writer.hpp"
 #include "backends/camera_backend.hpp"
 #include "backends/sim/scenario_config.hpp"
@@ -7,7 +8,6 @@
 #include "core/schema/run_contract.hpp"
 #include "events/event_model.hpp"
 #include "events/jsonl_writer.hpp"
-#include "metrics/csv_writer.hpp"
 #include "metrics/fps.hpp"
 
 #include <cctype>
@@ -482,16 +482,23 @@ int CommandRun(const std::vector<std::string_view>& args) {
     return kExitFailure;
   }
 
-  fs::path metrics_path;
-  if (!metrics::WriteFpsMetricsCsv(fps_report, options.output_dir, metrics_path, error)) {
+  fs::path metrics_csv_path;
+  if (!artifacts::WriteMetricsCsv(fps_report, options.output_dir, metrics_csv_path, error)) {
     std::cerr << "error: failed to write metrics.csv: " << error << '\n';
+    return kExitFailure;
+  }
+
+  fs::path metrics_json_path;
+  if (!artifacts::WriteMetricsJson(fps_report, options.output_dir, metrics_json_path, error)) {
+    std::cerr << "error: failed to write metrics.json: " << error << '\n';
     return kExitFailure;
   }
 
   std::cout << "run queued: " << options.scenario_path << '\n';
   std::cout << "artifact: " << run_artifact_path.string() << '\n';
   std::cout << "events: " << events_path.string() << '\n';
-  std::cout << "metrics: " << metrics_path.string() << '\n';
+  std::cout << "metrics_csv: " << metrics_csv_path.string() << '\n';
+  std::cout << "metrics_json: " << metrics_json_path.string() << '\n';
   std::cout << "fps: avg=" << fps_report.avg_fps
             << " rolling_samples=" << fps_report.rolling_samples.size() << '\n';
   std::cout << "drops: total=" << fps_report.dropped_frames_total

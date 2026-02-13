@@ -1,7 +1,7 @@
+#include "artifacts/metrics_writer.hpp"
 #include "backends/camera_backend.hpp"
 #include "backends/sim/scenario_config.hpp"
 #include "backends/sim/sim_camera_backend.hpp"
-#include "metrics/csv_writer.hpp"
 #include "metrics/fps.hpp"
 
 #include <chrono>
@@ -134,8 +134,8 @@ int main() {
 
   std::string error;
   fs::path written_path;
-  if (!labops::metrics::WriteFpsMetricsCsv(injected, out_dir, written_path, error)) {
-    Fail("WriteFpsMetricsCsv failed: " + error);
+  if (!labops::artifacts::WriteMetricsCsv(injected, out_dir, written_path, error)) {
+    Fail("WriteMetricsCsv failed: " + error);
   }
 
   std::ifstream in(written_path, std::ios::binary);

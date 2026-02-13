@@ -19,11 +19,8 @@ Engineers need objective numbers, not only logs. This module turns event traces 
   - drop stats (`total dropped`, `drop rate percent`)
   - inter-frame interval stats (`min/avg/p95`) in microseconds
   - inter-frame jitter stats (`min/avg/p95`) in microseconds
-- `csv_writer.hpp/.cpp`: writes `<out>/metrics.csv` with:
-  - one `avg_fps` row
-  - drop summary rows (`drops_total`, `drop_rate_percent`)
-  - one `rolling_fps` row per rolling sample
-  - timing/jitter summary rows for inter-frame interval and jitter stats
+- Serialization of metric artifacts (`metrics.csv` and `metrics.json`) lives in
+  `src/artifacts/` so output contracts stay centralized.
 
 ## Design principle
 
