@@ -11,16 +11,16 @@ isolation.
 Simple flow:
 - You run a scenario.
 - LabOps executes the backend with deterministic controls.
-- It records `run.json` and `events.jsonl`.
+- It records `run.json`, `events.jsonl`, `metrics.csv`, and `metrics.json`.
 - Tests verify contracts and determinism so behavior stays reproducible.
 
 ## Current Status
 
-The repo currently has a working CLI, deterministic sim backend, artifact/event
-output pipeline, and CI-validated tests. The agent diagnosis loop and metrics
-stack are planned next.
+The repo currently has a working CLI, deterministic sim backend, scenario pack,
+artifact/event/metrics output pipeline, and CI-validated integration tests.
+Agent diagnosis/planning is still upcoming.
 
-## Implemented Today
+## Implemented So Far
 
 - Project/build foundation with CMake.
 - Cross-platform CI (`ubuntu`, `macos`, `windows`) with `ctest`.
@@ -61,6 +61,7 @@ stack are planned next.
   - Event JSONL smoke tests.
   - Backend interface, frame generation, and fault injection smoke tests.
   - CLI run trace smoke test.
+  - Starter scenarios end-to-end smoke test.
   - Metrics writer smoke test (`metrics.csv` + `metrics.json`).
   - Jitter injection smoke test.
   - Drop injection smoke test.
@@ -92,42 +93,31 @@ cmake --build build
 ./build/labops version
 ```
 
-### 3) Create a scenario
+### 3) Validate a starter scenario
 
 ```bash
-cat > /tmp/labops-scenario.json <<'EOF'
-{
-  "name": "smoke",
-  "duration_ms": 1200,
-  "fps": 25,
-  "jitter_us": 350,
-  "seed": 777,
-  "frame_size_bytes": 4096,
-  "drop_every_n": 4,
-  "drop_percent": 15,
-  "burst_drop": 2,
-  "reorder": 3
-}
-EOF
+./build/labops validate scenarios/sim_baseline.json
 ```
 
-### 4) Validate scenario path/preflight
+### 4) Run baseline scenario
 
 ```bash
-./build/labops validate /tmp/labops-scenario.json
+./build/labops run scenarios/sim_baseline.json --out out/
 ```
 
-### 5) Run and emit artifacts
+### 5) Run fault-repro scenario (optional)
 
 ```bash
-./build/labops run /tmp/labops-scenario.json --out out/
+./build/labops run scenarios/dropped_frames.json --out out-drops/
 ```
 
-Expected files:
-- `out/run.json`
-- `out/events.jsonl`
-- `out/metrics.csv`
-- `out/metrics.json`
+Expected files per run in the chosen output directory:
+- `<out-dir>/run.json`
+- `<out-dir>/events.jsonl`
+- `<out-dir>/metrics.csv`
+- `<out-dir>/metrics.json`
+
+If you want to author new scenarios, follow `docs/scenario_schema.md`.
 
 ## Output Contracts
 
@@ -184,6 +174,13 @@ cases), see `docs/triage_bundle_spec.md`.
 ctest --test-dir build --output-on-failure
 ```
 
+### Run key integration smoke tests directly
+
+```bash
+ctest --test-dir build -R starter_scenarios_e2e_smoke --output-on-failure
+ctest --test-dir build -R sim_baseline_metrics_integration_smoke --output-on-failure
+```
+
 ### Run determinism test directly
 
 ```bash
@@ -219,7 +216,7 @@ Most `src/` and `tests/` subfolders also include focused `README.md` files.
 
 ## Near-Term Roadmap
 
-- Add strict scenario schema + validation errors.
+- Expand scenario schema checks and OAAT-specific validation depth.
 - Expand metrics beyond current FPS+drop+jitter coverage (disconnect windows).
 - Add baseline comparison/diff artifacts.
 - Start agent experiment loop (change one variable at a time).
