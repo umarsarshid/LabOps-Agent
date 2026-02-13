@@ -29,6 +29,7 @@ struct TimingStatsUs {
 // - `avg_fps` is computed over the caller-provided run window.
 // - `rolling_samples` are computed over a fixed rolling window and include one
 //   sample per received frame.
+// - drop stats capture total dropped frames and drop rate percent.
 // - `inter_frame_interval_us` summarizes deltas between consecutive received
 //   frame timestamps.
 // - `inter_frame_jitter_us` summarizes absolute deviation from average
@@ -36,7 +37,10 @@ struct TimingStatsUs {
 struct FpsReport {
   std::chrono::milliseconds avg_window{0};
   std::chrono::milliseconds rolling_window{0};
+  std::uint64_t frames_total = 0;
   std::uint64_t received_frames_total = 0;
+  std::uint64_t dropped_frames_total = 0;
+  double drop_rate_percent = 0.0;
   double avg_fps = 0.0;
   std::vector<RollingFpsSample> rolling_samples;
   TimingStatsUs inter_frame_interval_us;

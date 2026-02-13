@@ -494,6 +494,8 @@ int CommandRun(const std::vector<std::string_view>& args) {
   std::cout << "metrics: " << metrics_path.string() << '\n';
   std::cout << "fps: avg=" << fps_report.avg_fps
             << " rolling_samples=" << fps_report.rolling_samples.size() << '\n';
+  std::cout << "drops: total=" << fps_report.dropped_frames_total
+            << " rate_percent=" << fps_report.drop_rate_percent << '\n';
   std::cout << "timing_us: interval_avg=" << fps_report.inter_frame_interval_us.avg_us
             << " interval_p95=" << fps_report.inter_frame_interval_us.p95_us
             << " jitter_avg=" << fps_report.inter_frame_jitter_us.avg_us

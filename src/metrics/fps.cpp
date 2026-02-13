@@ -51,10 +51,13 @@ bool ComputeFpsReport(const std::vector<backends::FrameSample>& frames,
 
   std::vector<std::chrono::system_clock::time_point> received_timestamps;
   received_timestamps.reserve(frames.size());
+  std::uint64_t dropped_frames_total = 0;
   for (const auto& frame : frames) {
-    if (!IsDropped(frame)) {
-      received_timestamps.push_back(frame.timestamp);
+    if (IsDropped(frame)) {
+      ++dropped_frames_total;
+      continue;
     }
+    received_timestamps.push_back(frame.timestamp);
   }
 
   std::sort(received_timestamps.begin(), received_timestamps.end());
@@ -62,7 +65,14 @@ bool ComputeFpsReport(const std::vector<backends::FrameSample>& frames,
   report = FpsReport{};
   report.avg_window = avg_window;
   report.rolling_window = rolling_window;
+  report.frames_total = static_cast<std::uint64_t>(frames.size());
   report.received_frames_total = static_cast<std::uint64_t>(received_timestamps.size());
+  report.dropped_frames_total = dropped_frames_total;
+  if (report.frames_total > 0U) {
+    report.drop_rate_percent =
+        (static_cast<double>(report.dropped_frames_total) * 100.0) /
+        static_cast<double>(report.frames_total);
+  }
 
   const double avg_window_seconds = static_cast<double>(avg_window.count()) / 1000.0;
   report.avg_fps = static_cast<double>(report.received_frames_total) / avg_window_seconds;

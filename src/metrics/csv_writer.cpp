@@ -45,6 +45,13 @@ bool WriteFpsMetricsCsv(const FpsReport& report, const fs::path& output_dir,
            << report.received_frames_total << ","
            << report.avg_fps << "\n";
 
+  out_file << "drops_total,,,"
+           << report.frames_total << ","
+           << report.dropped_frames_total << "\n";
+  out_file << "drop_rate_percent,,,"
+           << report.frames_total << ","
+           << report.drop_rate_percent << "\n";
+
   for (const auto& sample : report.rolling_samples) {
     out_file << "rolling_fps,"
              << ToEpochMillis(sample.window_end) << ","

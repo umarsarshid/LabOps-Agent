@@ -156,6 +156,14 @@ target_link_libraries(jitter_injection_smoke PRIVATE labops_backends labops_metr
 target_compile_features(jitter_injection_smoke PRIVATE cxx_std_20)
 add_test(NAME jitter_injection_smoke COMMAND jitter_injection_smoke)
 
+# Smoke test validating drop metrics match deterministic drop injection knobs.
+add_executable(drop_injection_smoke
+  tests/metrics/drop_injection_smoke.cpp
+)
+target_link_libraries(drop_injection_smoke PRIVATE labops_backends labops_metrics)
+target_compile_features(drop_injection_smoke PRIVATE cxx_std_20)
+add_test(NAME drop_injection_smoke COMMAND drop_injection_smoke)
+
 if(LABOPS_ENABLE_CATCH2_TESTS)
   find_package(Catch2 3 QUIET)
 

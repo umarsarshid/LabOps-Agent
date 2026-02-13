@@ -16,10 +16,12 @@ Engineers need objective numbers, not only logs. This module turns event traces 
 
 - `fps.hpp/.cpp`: computes average FPS over the run window and rolling FPS over
   a fixed time window, using received frames only. Also computes:
+  - drop stats (`total dropped`, `drop rate percent`)
   - inter-frame interval stats (`min/avg/p95`) in microseconds
   - inter-frame jitter stats (`min/avg/p95`) in microseconds
 - `csv_writer.hpp/.cpp`: writes `<out>/metrics.csv` with:
   - one `avg_fps` row
+  - drop summary rows (`drops_total`, `drop_rate_percent`)
   - one `rolling_fps` row per rolling sample
   - timing/jitter summary rows for inter-frame interval and jitter stats
 

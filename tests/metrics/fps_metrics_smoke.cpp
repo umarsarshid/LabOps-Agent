@@ -68,6 +68,13 @@ int main() {
   if (report.received_frames_total != 4U) {
     Fail("unexpected received frame total");
   }
+  if (report.frames_total != 5U) {
+    Fail("unexpected total frame count");
+  }
+  if (report.dropped_frames_total != 1U) {
+    Fail("unexpected dropped frame total");
+  }
+  AssertNear(report.drop_rate_percent, 20.0, 1e-9, "unexpected drop rate percent");
   AssertNear(report.avg_fps, 2.0, 1e-9, "unexpected avg_fps");
 
   if (report.rolling_samples.size() != 4U) {
@@ -108,6 +115,8 @@ int main() {
   const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
   AssertContains(content, "metric,window_end_ms,window_ms,frames,fps");
   AssertContains(content, "avg_fps,,2000,4,2.000000");
+  AssertContains(content, "drops_total,,,5,1");
+  AssertContains(content, "drop_rate_percent,,,5,20.000000");
   AssertContains(content, "rolling_fps,");
   AssertContains(content, "inter_frame_interval_avg_us,,,3,600000.000000");
   AssertContains(content, "inter_frame_jitter_p95_us,,,3,200000.000000");
