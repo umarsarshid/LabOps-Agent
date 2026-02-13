@@ -13,6 +13,7 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Preserve stable exit-code semantics for automation.
 - Print deterministic command outputs.
 - Parse run artifact options (currently `--out <dir>`).
+- Parse baseline capture command contracts (`baseline capture <scenario.json>`).
 - Route scenario validation through schema loader with actionable errors.
 - Apply scenario settings to backend params and emit `CONFIG_APPLIED` audit
   events.
@@ -24,6 +25,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
   `bundle_manifest.json` (artifact list + hashes).
 - Optionally emit support bundle zip archives via `--zip` at
   `<out>/<run_id>.zip`.
+- Emit scenario baseline captures under `baselines/<scenario_id>/` with
+  `metrics.csv` + `metrics.json` for release-style comparison workflows.
 
 ## Design intent
 

@@ -26,6 +26,10 @@ surface (argument parsing + runtime orchestration + artifact/event output).
   `bundle_manifest.json`.
 - `bundle_zip_on_demand_smoke.cpp`: verifies `--zip` creates
   `<out>/<run_id>.zip` and default runs do not emit zip files.
+- `baseline_capture_smoke.cpp`: verifies `labops baseline capture
+  <scenario.json>` writes baseline artifacts directly under
+  `baselines/<scenario_id>/` and includes metrics outputs for regression
+  comparison.
 
 ## Connection to the project
 

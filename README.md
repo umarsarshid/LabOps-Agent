@@ -40,6 +40,7 @@ contracts are documented as an internal tooling spec in
   - `labops version`
   - `labops validate <scenario.json>`
   - `labops run <scenario.json> [--out <dir>] [--zip]`
+  - `labops baseline capture <scenario.json>`
 - Scenario loader + schema validation in `labops validate` with actionable
   field-level errors.
 - Starter scenario set in `scenarios/`:
@@ -55,6 +56,10 @@ contracts are documented as an internal tooling spec in
   - `<out>/<run_id>/metrics.json`
   - `<out>/<run_id>/bundle_manifest.json`
   - optional `<out>/<run_id>.zip` support bundle when `--zip` is requested
+- Baseline capture command:
+  - `labops baseline capture <scenario.json>`
+  - writes baseline artifacts directly under `baselines/<scenario_id>/`
+  - baseline directory includes `metrics.csv` and `metrics.json`
 - Stream lifecycle event emission in `labops run`:
   - `CONFIG_APPLIED`
   - `STREAM_STARTED`
@@ -140,6 +145,12 @@ cmake --build build
 ./build/labops run scenarios/sim_baseline.json --out out/ --zip
 ```
 
+### 7) Capture baseline metrics for a scenario (optional)
+
+```bash
+./build/labops baseline capture scenarios/sim_baseline.json
+```
+
 Expected bundle layout per run:
 - `<out-dir>/<run_id>/scenario.json`
 - `<out-dir>/<run_id>/run.json`
@@ -164,6 +175,14 @@ If you want to author new scenarios, follow `docs/scenario_schema.md`.
 - `labops run --zip` writes an additional support archive:
   - `<out>/<run_id>.zip`
 - Zip generation is opt-in so default runs avoid extra packaging overhead.
+
+### Baseline Capture
+
+- `labops baseline capture <scenario.json>` writes artifacts to:
+  - `baselines/<scenario_id>/`
+- This folder is the stable baseline target for future regression comparison.
+- Baseline capture currently emits the same core evidence set as run mode,
+  including `metrics.csv` and `metrics.json`.
 
 ### scenario.json
 

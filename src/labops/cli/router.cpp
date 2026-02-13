@@ -45,8 +45,15 @@ constexpr int kExitUsage = 2;
 void PrintUsage(std::ostream& out) {
   out << "usage:\n"
       << "  labops run <scenario.json> [--out <dir>] [--zip]\n"
+      << "  labops baseline capture <scenario.json>\n"
       << "  labops validate <scenario.json>\n"
       << "  labops version\n";
+}
+
+// Keep nested baseline command help local so usage errors stay actionable.
+void PrintBaselineUsage(std::ostream& out) {
+  out << "usage:\n"
+      << "  labops baseline capture <scenario.json>\n";
 }
 
 // Filesystem preflight checks run before schema validation. This keeps path and
@@ -181,6 +188,28 @@ bool ParseRunOptions(const std::vector<std::string_view>& args, RunOptions& opti
     return false;
   }
 
+  return true;
+}
+
+// Parse the milestone baseline contract:
+// - exactly one scenario path
+// - baseline target is deterministic: `baselines/<scenario_id>/`
+bool ParseBaselineCaptureOptions(const std::vector<std::string_view>& args, RunOptions& options,
+                                 std::string& error) {
+  if (args.size() != 1U) {
+    error = "baseline capture requires exactly 1 argument: <scenario.json>";
+    return false;
+  }
+
+  options.scenario_path = std::string(args.front());
+  const std::string scenario_id = fs::path(options.scenario_path).stem().string();
+  if (scenario_id.empty()) {
+    error = "unable to derive scenario_id from path: " + options.scenario_path;
+    return false;
+  }
+
+  options.output_dir = fs::path("baselines") / scenario_id;
+  options.zip_bundle = false;
   return true;
 }
 
@@ -341,6 +370,17 @@ fs::path BuildRunBundleDir(const RunOptions& options, const core::schema::RunInf
   return options.output_dir / run_info.run_id;
 }
 
+// Baseline capture reuses run execution but writes directly to a stable
+// scenario-scoped directory (`baselines/<scenario_id>/`) instead of nesting by
+// run ID.
+fs::path ResolveExecutionOutputDir(const RunOptions& options, const core::schema::RunInfo& run_info,
+                                   bool use_per_run_bundle_dir) {
+  if (use_per_run_bundle_dir) {
+    return BuildRunBundleDir(options, run_info);
+  }
+  return options.output_dir;
+}
+
 bool AppendTraceEvent(events::EventType type, std::chrono::system_clock::time_point ts,
                       std::map<std::string, std::string> payload,
                       const fs::path& output_dir,
@@ -371,11 +411,13 @@ BuildConfigAppliedPayload(const core::schema::RunInfo& run_info,
   return payload;
 }
 
-int CommandRun(const std::vector<std::string_view>& args) {
-  RunOptions options;
+// Centralized run execution keeps `run` and `baseline capture` behavior aligned
+// so artifact contracts and metrics math never diverge between modes.
+int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
+                       bool allow_zip_bundle, std::string_view success_prefix) {
   std::string error;
-  if (!ParseRunOptions(args, options, error)) {
-    std::cerr << "error: " << error << '\n';
+  if (options.zip_bundle && !allow_zip_bundle) {
+    std::cerr << "error: zip output is not supported for this command\n";
     return kExitUsage;
   }
 
@@ -392,7 +434,8 @@ int CommandRun(const std::vector<std::string_view>& args) {
 
   const auto created_at = std::chrono::system_clock::now();
   core::schema::RunInfo run_info = BuildRunInfo(options, run_plan, created_at);
-  const fs::path bundle_dir = BuildRunBundleDir(options, run_info);
+  const fs::path bundle_dir =
+      ResolveExecutionOutputDir(options, run_info, use_per_run_bundle_dir);
 
   fs::path scenario_artifact_path;
   if (!artifacts::WriteScenarioJson(options.scenario_path, bundle_dir, scenario_artifact_path, error)) {
@@ -583,7 +626,7 @@ int CommandRun(const std::vector<std::string_view>& args) {
     }
   }
 
-  std::cout << "run queued: " << options.scenario_path << '\n';
+  std::cout << success_prefix << options.scenario_path << '\n';
   std::cout << "bundle: " << bundle_dir.string() << '\n';
   std::cout << "scenario: " << scenario_artifact_path.string() << '\n';
   std::cout << "artifact: " << run_artifact_path.string() << '\n';
@@ -605,6 +648,52 @@ int CommandRun(const std::vector<std::string_view>& args) {
   std::cout << "frames: total=" << frames.size() << " received=" << received_count
             << " dropped=" << dropped_count << '\n';
   return kExitSuccess;
+}
+
+int CommandRun(const std::vector<std::string_view>& args) {
+  RunOptions options;
+  std::string error;
+  if (!ParseRunOptions(args, options, error)) {
+    std::cerr << "error: " << error << '\n';
+    return kExitUsage;
+  }
+
+  return ExecuteScenarioRun(options,
+                            /*use_per_run_bundle_dir=*/true,
+                            /*allow_zip_bundle=*/true,
+                            "run queued: ");
+}
+
+int CommandBaselineCapture(const std::vector<std::string_view>& args) {
+  RunOptions options;
+  std::string error;
+  if (!ParseBaselineCaptureOptions(args, options, error)) {
+    std::cerr << "error: " << error << '\n';
+    return kExitUsage;
+  }
+
+  return ExecuteScenarioRun(options,
+                            /*use_per_run_bundle_dir=*/false,
+                            /*allow_zip_bundle=*/false,
+                            "baseline captured: ");
+}
+
+int CommandBaseline(const std::vector<std::string_view>& args) {
+  if (args.empty()) {
+    std::cerr << "error: baseline requires a subcommand\n";
+    PrintBaselineUsage(std::cerr);
+    return kExitUsage;
+  }
+
+  const std::string_view subcommand = args.front();
+  const std::vector<std::string_view> sub_args(args.begin() + 1, args.end());
+  if (subcommand == "capture") {
+    return CommandBaselineCapture(sub_args);
+  }
+
+  std::cerr << "error: unknown baseline subcommand: " << subcommand << '\n';
+  PrintBaselineUsage(std::cerr);
+  return kExitUsage;
 }
 
 } // namespace
@@ -630,6 +719,10 @@ int Dispatch(int argc, char** argv) {
 
   if (command == "run") {
     return CommandRun(args);
+  }
+
+  if (command == "baseline") {
+    return CommandBaseline(args);
   }
 
   if (command == "help" || command == "--help" || command == "-h") {

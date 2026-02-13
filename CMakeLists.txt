@@ -217,6 +217,17 @@ target_link_libraries(bundle_zip_on_demand_smoke PRIVATE labops_artifacts labops
 target_compile_features(bundle_zip_on_demand_smoke PRIVATE cxx_std_20)
 add_test(NAME bundle_zip_on_demand_smoke COMMAND bundle_zip_on_demand_smoke)
 
+# Integration smoke test for `labops baseline capture` contract:
+# writes baseline artifacts directly to `baselines/<scenario_id>/` with metrics.
+add_executable(baseline_capture_smoke
+  tests/labops/baseline_capture_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(baseline_capture_smoke PRIVATE src)
+target_link_libraries(baseline_capture_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(baseline_capture_smoke PRIVATE cxx_std_20)
+add_test(NAME baseline_capture_smoke COMMAND baseline_capture_smoke)
+
 # Scenario schema validation smoke tests.
 add_executable(scenario_validation_smoke
   tests/scenarios/scenario_validation_smoke.cpp
