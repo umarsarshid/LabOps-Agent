@@ -20,6 +20,7 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
   [--redact] [--log-level <debug|info|warn|error>] [--apply-netem
   --netem-iface <iface> [--apply-netem-force]]`).
 - Parse compare command contracts (`compare --baseline ... --run ... [--out ...]`).
+- Parse KB drafting contracts (`kb draft --run <run_folder> [--out <kb_draft.md>]`).
 - Route scenario validation through schema loader with actionable errors.
 - Validate optional `netem_profile` references against
   `tools/netem_profiles/<profile>.json`.
@@ -60,6 +61,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
   `metrics.csv` + `metrics.json` for release-style comparison workflows.
 - Compare baseline and run metric artifacts to emit `diff.json` + `diff.md`
   with per-metric deltas.
+- Generate `kb_draft.md` from `engineer_packet.md` so resolved investigations
+  can be turned into review-ready knowledge-base drafts quickly.
 - Expose shared in-process run execution (`ExecuteScenarioRun`) so agent-mode
   can reuse the exact scenario pipeline without shelling out.
 

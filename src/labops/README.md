@@ -38,6 +38,10 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
 - `labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]`:
   computes metric deltas and emits `diff.json` + `diff.md` (default output
   directory is the `--run` target when `--out` is omitted).
+- `labops kb draft --run <run_folder> [--out <kb_draft.md>]`: reads
+  `engineer_packet.md` from a run folder and writes a KB-ready markdown draft
+  (`kb_draft.md`) pre-filled with context, repro steps, ruled-out checks, and
+  evidence links.
 
 ## What should not live here
 

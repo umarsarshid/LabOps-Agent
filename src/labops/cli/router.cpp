@@ -4,6 +4,7 @@
 #include "artifacts/bundle_zip_writer.hpp"
 #include "artifacts/hostprobe_writer.hpp"
 #include "artifacts/html_report_writer.hpp"
+#include "artifacts/kb_draft_writer.hpp"
 #include "artifacts/metrics_diff_writer.hpp"
 #include "artifacts/metrics_writer.hpp"
 #include "artifacts/run_summary_writer.hpp"
@@ -82,6 +83,7 @@ void PrintUsage(std::ostream& out) {
          "[--log-level <debug|info|warn|error>] "
          "[--apply-netem --netem-iface <iface> [--apply-netem-force]]\n"
       << "  labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]\n"
+      << "  labops kb draft --run <run_folder> [--out <kb_draft.md>]\n"
       << "  labops validate <scenario.json>\n"
       << "  labops version\n";
 }
@@ -92,6 +94,11 @@ void PrintBaselineUsage(std::ostream& out) {
       << "  labops baseline capture <scenario.json> [--redact] "
          "[--log-level <debug|info|warn|error>] "
          "[--apply-netem --netem-iface <iface> [--apply-netem-force]]\n";
+}
+
+void PrintKbUsage(std::ostream& out) {
+  out << "usage:\n"
+      << "  labops kb draft --run <run_folder> [--out <kb_draft.md>]\n";
 }
 
 // SIGINT is handled as a best-effort safe pause request for soak runs.
@@ -218,6 +225,12 @@ struct CompareOptions {
   fs::path run_path;
   fs::path output_dir;
   bool has_output_dir = false;
+};
+
+struct KbDraftOptions {
+  fs::path run_folder;
+  fs::path output_path;
+  bool has_output_path = false;
 };
 
 // Parse `run` args with an explicit contract:
@@ -495,6 +508,45 @@ bool ParseCompareOptions(const std::vector<std::string_view>& args, CompareOptio
   }
   if (!options.has_output_dir) {
     options.output_dir = options.run_path;
+  }
+
+  return true;
+}
+
+bool ParseKbDraftOptions(const std::vector<std::string_view>& args, KbDraftOptions& options,
+                         std::string& error) {
+  for (std::size_t i = 0; i < args.size(); ++i) {
+    const std::string_view token = args[i];
+    if (token == "--run") {
+      if (i + 1 >= args.size()) {
+        error = "missing value for --run";
+        return false;
+      }
+      options.run_folder = fs::path(args[i + 1]);
+      ++i;
+      continue;
+    }
+    if (token == "--out") {
+      if (i + 1 >= args.size()) {
+        error = "missing value for --out";
+        return false;
+      }
+      options.output_path = fs::path(args[i + 1]);
+      options.has_output_path = true;
+      ++i;
+      continue;
+    }
+
+    error = "unknown option: " + std::string(token);
+    return false;
+  }
+
+  if (options.run_folder.empty()) {
+    error = "kb draft requires --run <run_folder>";
+    return false;
+  }
+  if (!options.has_output_path) {
+    options.output_path = options.run_folder / "kb_draft.md";
   }
 
   return true;
@@ -2552,6 +2604,44 @@ int CommandBaseline(const std::vector<std::string_view>& args) {
   return kExitUsage;
 }
 
+int CommandKbDraft(const std::vector<std::string_view>& args) {
+  KbDraftOptions options;
+  std::string error;
+  if (!ParseKbDraftOptions(args, options, error)) {
+    std::cerr << "error: " << error << '\n';
+    return kExitUsage;
+  }
+
+  fs::path written_path;
+  if (!artifacts::WriteKbDraftFromRunFolder(options.run_folder, options.output_path, written_path,
+                                            error)) {
+    std::cerr << "error: failed to generate kb draft: " << error << '\n';
+    return kExitFailure;
+  }
+
+  std::cout << "kb_draft: " << written_path.string() << '\n';
+  std::cout << "source_run_folder: " << options.run_folder.string() << '\n';
+  return kExitSuccess;
+}
+
+int CommandKb(const std::vector<std::string_view>& args) {
+  if (args.empty()) {
+    std::cerr << "error: kb requires a subcommand\n";
+    PrintKbUsage(std::cerr);
+    return kExitUsage;
+  }
+
+  const std::string_view subcommand = args.front();
+  const std::vector<std::string_view> sub_args(args.begin() + 1, args.end());
+  if (subcommand == "draft") {
+    return CommandKbDraft(sub_args);
+  }
+
+  std::cerr << "error: unknown kb subcommand: " << subcommand << '\n';
+  PrintKbUsage(std::cerr);
+  return kExitUsage;
+}
+
 int CommandCompare(const std::vector<std::string_view>& args) {
   CompareOptions options;
   std::string error;
@@ -2644,6 +2734,10 @@ int Dispatch(int argc, char** argv) {
 
   if (command == "baseline") {
     return CommandBaseline(args);
+  }
+
+  if (command == "kb") {
+    return CommandKb(args);
   }
 
   if (command == "compare") {

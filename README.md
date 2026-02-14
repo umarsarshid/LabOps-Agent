@@ -14,6 +14,7 @@ C++-first autopilot lab assistant for repeatable camera testing and faster triag
 - Capture baselines and compare runs (`diff.json`, `diff.md`).
 - Enforce scenario thresholds with stable non-zero exit codes.
 - Generate agent artifacts (`agent_state.json`, `engineer_packet.md`) with hypothesis evidence citations.
+- Convert an `engineer_packet.md` into a KB draft (`kb_draft.md`) for internal case write-ups.
 - Run long soak tests with periodic checkpoints and safe pause/resume (`soak_checkpoint.json`, `soak_frames.jsonl`).
 
 ## Quick Start
@@ -34,6 +35,7 @@ Optional flows:
 ```bash
 ./tmp/build/labops baseline capture scenarios/sim_baseline.json
 ./tmp/build/labops compare --baseline baselines/sim_baseline --run tmp/runs/<run_id>
+./tmp/build/labops kb draft --run tmp/runs/<run_id>
 ./tmp/build/labops run scenarios/sim_baseline.json --out tmp/runs --zip --redact
 ./tmp/build/labops run scenarios/sim_baseline.json --out tmp/runs --soak --checkpoint-interval-ms 60000
 ```
@@ -46,6 +48,7 @@ Optional flows:
 4. Compare run metrics vs baseline.
 5. Review `summary.md`, `report.html`, and event/metric evidence.
 6. Use agent outputs (`agent_state.json`, `engineer_packet.md`) for handoff.
+7. Generate a KB-ready draft from the run folder for faster incident write-up.
 
 ## Example Flow (Need -> Do -> Get)
 
@@ -109,11 +112,19 @@ If paused and resumed:
 "$LABOPS" run "$SCENARIO" --soak --resume "$RUN_DIR/soak_checkpoint.json"
 ```
 
+Stage 7 (optional): generate KB draft from engineer packet
+```bash
+"$LABOPS" kb draft --run "$RUN_DIR"
+```
+Expected new file in `"$RUN_DIR"`:
+- `kb_draft.md`
+
 What you get:
 - A reproducible bundle in `"$RUN_DIR"` with `run.json`, `events.jsonl`, `metrics.csv`, `metrics.json`, `summary.md`, `report.html`, and `bundle_manifest.json`
 - Host/network context evidence (`hostprobe.json`, `nic_*.txt`)
 - Baseline-vs-run deltas (`diff.json`, `diff.md`)
 - For soak mode: resumable progress (`soak_checkpoint.json`, `checkpoints/checkpoint_*.json`, `soak_frames.jsonl`)
+- Optional KB draft (`kb_draft.md`) generated from `engineer_packet.md` for documentation handoff
 
 ## Real-Life Workflow (Scenario from a Camera Team)
 

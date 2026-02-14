@@ -18,6 +18,7 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 - `summary.md` one-page human triage summary per run.
 - `report.html` static browser-friendly triage summary with plots-ready tables.
 - `bundle_manifest.json` listing artifact files, sizes, and hashes.
+- `kb_draft.md` KB-ready markdown draft generated from engineer packet evidence.
 - `soak_checkpoint.json` latest soak progress checkpoint (when soak mode is enabled).
 - `checkpoints/checkpoint_*.json` periodic checkpoint history snapshots (soak mode).
 - `soak_frames.jsonl` resumable frame cache used by soak pause/resume flow.
@@ -51,6 +52,9 @@ The project promise is a clean, reproducible evidence packet. This module ensure
   pass/fail, key metrics, and top anomalies for fast engineer handoff, plus
   optional manual netem command suggestions when a scenario references
   `netem_profile`. (Execution, when requested, is orchestrated in CLI flow.)
+- `kb_draft_writer.hpp/.cpp`: converts `engineer_packet.md` from a run folder
+  into `kb_draft.md` template content suitable for internal knowledge-base
+  drafting and review.
 - `html_report_writer.hpp/.cpp`: writes static `report.html` for browser
   viewing without JS, including key metrics, expected-vs-actual deltas, and
   rolling FPS table rows that are easy to copy into plotting workflows.

@@ -94,6 +94,7 @@ target_compile_features(labops_metrics PUBLIC cxx_std_20)
 add_library(labops_artifacts
   src/artifacts/bundle_manifest_writer.cpp
   src/artifacts/bundle_zip_writer.cpp
+  src/artifacts/kb_draft_writer.cpp
   src/artifacts/html_report_writer.cpp
   src/artifacts/hostprobe_writer.cpp
   src/artifacts/metrics_diff_writer.cpp
@@ -407,6 +408,16 @@ target_include_directories(logging_contract_smoke PRIVATE src)
 target_link_libraries(logging_contract_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
 target_compile_features(logging_contract_smoke PRIVATE cxx_std_20)
 add_test(NAME logging_contract_smoke COMMAND logging_contract_smoke)
+
+# Integration smoke test for KB draft generation from a run folder.
+add_executable(kb_draft_from_run_folder_smoke
+  tests/labops/kb_draft_from_run_folder_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(kb_draft_from_run_folder_smoke PRIVATE src)
+target_link_libraries(kb_draft_from_run_folder_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(kb_draft_from_run_folder_smoke PRIVATE cxx_std_20)
+add_test(NAME kb_draft_from_run_folder_smoke COMMAND kb_draft_from_run_folder_smoke)
 
 # Integration smoke test for checkpointed soak mode:
 # - periodic checkpoint emission
