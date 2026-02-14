@@ -2,3 +2,24 @@
 # Keep the directory itself via `.gitkeep`, ignore everything else inside.
 tmp/*
 !tmp/.gitkeep
+
+# Real SDK integration guardrails:
+# NEVER commit vendor SDK headers, binaries, or prebuilt libraries.
+VendorSDK/**
+vendor_sdk/**
+**/VendorSDK/**
+**/vendor_sdk/**
+
+# Common proprietary SDK binary/library artifacts.
+*.dll
+*.so
+*.so.*
+*.dylib
+*.lib
+*.a
+*.obj
+*.o
+*.pdb
+*.exp
+*.framework
+*.xcframework

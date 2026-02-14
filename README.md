@@ -108,6 +108,7 @@ That means LabOps is already useful for repeatable testing and triage flow, even
 - `docs/triage_bundle_spec.md` for bundle format details
 - `docs/scenario_schema.md` for scenario fields
 - `docs/release_verification.md` for release checklist
+- `docs/real_backend_setup.md` for local real-SDK setup and safety guardrails
 
 ## Dev Commands
 
