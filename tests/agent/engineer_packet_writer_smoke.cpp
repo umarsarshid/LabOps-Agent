@@ -37,9 +37,12 @@ std::string ReadFile(const fs::path& path) {
 
 int main() {
   using labops::agent::EngineerPacketInput;
+  using labops::agent::EventCitation;
   using labops::agent::ExperimentState;
   using labops::agent::Hypothesis;
+  using labops::agent::HypothesisEvidenceCitation;
   using labops::agent::HypothesisStatus;
+  using labops::agent::MetricCitation;
   using labops::agent::PacketConfigAttempt;
   using labops::agent::PacketRunEvidence;
   using labops::agent::ResultRow;
@@ -147,6 +150,46 @@ int main() {
   stop.reason = StopReason::kSingleVariableFlip;
   stop.explanation = "stop: single-variable flip isolated roi_enabled";
 
+  HypothesisEvidenceCitation citation1;
+  citation1.hypothesis_id = "h1";
+  citation1.run_id = "run-100";
+  citation1.summary = "Failure reproduces when roi_enabled=true and drops spike.";
+
+  MetricCitation citation1_metric;
+  citation1_metric.metric_name = "drop_rate_percent";
+  citation1_metric.observed_value = "35.0";
+  citation1_metric.expected_value = "<= 1.0";
+  citation1_metric.rationale = "Drop rate exceeds baseline tolerance after enabling ROI.";
+  citation1_metric.source_path = evidence1.diff_json_path;
+  citation1.metrics.push_back(citation1_metric);
+
+  EventCitation citation1_event;
+  citation1_event.event_type = "FRAME_DROPPED";
+  citation1_event.event_excerpt = "reason=sim_fault_injection frame_id=2";
+  citation1_event.rationale = "Drops appear immediately in the trace when ROI mutation is active.";
+  citation1_event.source_path = evidence1.events_jsonl_path;
+  citation1.events.push_back(citation1_event);
+
+  HypothesisEvidenceCitation citation2;
+  citation2.hypothesis_id = "h2";
+  citation2.run_id = "run-102";
+  citation2.summary = "Lowering FPS did not reproduce the failure in this run.";
+
+  MetricCitation citation2_metric;
+  citation2_metric.metric_name = "avg_fps";
+  citation2_metric.observed_value = "24.9";
+  citation2_metric.expected_value = ">= 24.0";
+  citation2_metric.rationale = "Measured throughput remains inside expected range.";
+  citation2_metric.source_path = evidence2.metrics_json_path;
+  citation2.metrics.push_back(citation2_metric);
+
+  EventCitation citation2_event;
+  citation2_event.event_type = "STREAM_STOPPED";
+  citation2_event.event_excerpt = "frames_dropped=0";
+  citation2_event.rationale = "Stop event confirms no dropped frames in this mutation run.";
+  citation2_event.source_path = evidence2.events_jsonl_path;
+  citation2.events.push_back(citation2_event);
+
   EngineerPacketInput input;
   input.state = &state;
   input.symptom = "dropped_frames";
@@ -155,6 +198,7 @@ int main() {
   input.stop_decision = stop;
   input.configs_tried = {attempt1, attempt2};
   input.run_evidence = {evidence1, evidence2};
+  input.hypothesis_citations = {citation1, citation2};
 
   fs::path written_path;
   std::string error;
@@ -182,6 +226,11 @@ int main() {
   AssertContains(packet_text, evidence1.diff_markdown_path.string());
   AssertContains(packet_text, evidence1.diff_json_path.string());
   AssertContains(packet_text, evidence2.diff_markdown_path.string());
+  AssertContains(packet_text, "This hypothesis is supported by metric `drop_rate_percent=35.0");
+  AssertContains(packet_text, "and event `FRAME_DROPPED: reason=sim_fault_injection frame_id=2`.");
+  AssertContains(packet_text, "metric source:");
+  AssertContains(packet_text, "event source:");
+  AssertContains(packet_text, "This hypothesis is contradicted by metric `avg_fps=24.9");
 
   AssertContains(packet_text, input.baseline_scenario_path.string());
   AssertContains(packet_text, input.baseline_bundle_dir.string());

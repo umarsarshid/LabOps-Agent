@@ -45,6 +45,8 @@ triage.
     - what changed
     - what we ruled out
     - ranked hypotheses + evidence links
+    - citation sentences that tie each hypothesis run to a metric + event
+      (for example: "supported by metric X and event Y")
   - Embeds exact artifact and diff paths for each evidence run.
 - `experiment_state.hpp` / `experiment_state.cpp`
   - Canonical `ExperimentState` model.

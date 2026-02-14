@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <iomanip>
 #include <map>
 #include <set>
 #include <sstream>
@@ -13,6 +14,8 @@ namespace fs = std::filesystem;
 namespace labops::agent {
 
 namespace {
+
+using CitationKey = std::pair<std::string, std::string>;
 
 struct HypothesisRank {
   const Hypothesis* hypothesis = nullptr;
@@ -94,6 +97,137 @@ BuildEvidenceMap(const std::vector<PacketRunEvidence>& run_evidence) {
     evidence[item.run_id] = item;
   }
   return evidence;
+}
+
+std::map<CitationKey, HypothesisEvidenceCitation>
+BuildCitationMap(const std::vector<HypothesisEvidenceCitation>& citations) {
+  std::map<CitationKey, HypothesisEvidenceCitation> by_key;
+  for (const auto& citation : citations) {
+    if (citation.hypothesis_id.empty() || citation.run_id.empty()) {
+      continue;
+    }
+    by_key[{citation.hypothesis_id, citation.run_id}] = citation;
+  }
+  return by_key;
+}
+
+std::string FormatDouble(const double value, const int precision) {
+  std::ostringstream out;
+  out << std::fixed << std::setprecision(precision) << value;
+  return out.str();
+}
+
+const char* CitationStrength(ResultStatus result) {
+  switch (result) {
+  case ResultStatus::kFail:
+    return "supported";
+  case ResultStatus::kPass:
+    return "contradicted";
+  case ResultStatus::kInconclusive:
+    return "partially supported";
+  }
+  return "partially supported";
+}
+
+std::string BuildMetricLabel(const MetricCitation& metric) {
+  std::string label = metric.metric_name.empty() ? "metric" : metric.metric_name;
+  if (!metric.observed_value.empty()) {
+    label += "=" + metric.observed_value;
+  }
+  if (!metric.expected_value.empty()) {
+    label += " (expected " + metric.expected_value + ")";
+  }
+  return label;
+}
+
+std::string BuildMetricFallbackLabel(const ResultRow& row) {
+  if (row.drop_rate_percent > 0.0) {
+    return "drop_rate_percent=" + FormatDouble(row.drop_rate_percent, 3) + "%";
+  }
+  if (row.avg_fps > 0.0) {
+    return "avg_fps=" + FormatDouble(row.avg_fps, 3);
+  }
+  if (row.jitter_p95_us > 0.0) {
+    return "jitter_p95_us=" + FormatDouble(row.jitter_p95_us, 3) + "us";
+  }
+  switch (row.result) {
+  case ResultStatus::kFail:
+    return "threshold_outcome=fail";
+  case ResultStatus::kPass:
+    return "threshold_outcome=pass";
+  case ResultStatus::kInconclusive:
+    return "threshold_outcome=inconclusive";
+  }
+  return "threshold_outcome=inconclusive";
+}
+
+std::string BuildEventLabel(const EventCitation& event) {
+  std::string label = event.event_type.empty() ? "event" : event.event_type;
+  if (!event.event_excerpt.empty()) {
+    label += ": " + event.event_excerpt;
+  }
+  return label;
+}
+
+std::string BuildEventFallbackLabel(const PacketRunEvidence* run_evidence) {
+  if (run_evidence == nullptr || run_evidence->events_jsonl_path.empty()) {
+    return "events_jsonl=unavailable";
+  }
+  return "events_jsonl=" + run_evidence->events_jsonl_path.string();
+}
+
+void WriteCitationDetails(std::ofstream& out, const ResultRow& row,
+                          const PacketRunEvidence* run_evidence,
+                          const HypothesisEvidenceCitation* citation) {
+  const MetricCitation* primary_metric =
+      (citation != nullptr && !citation->metrics.empty()) ? &citation->metrics.front() : nullptr;
+  const EventCitation* primary_event =
+      (citation != nullptr && !citation->events.empty()) ? &citation->events.front() : nullptr;
+
+  const std::string metric_label = (primary_metric != nullptr) ? BuildMetricLabel(*primary_metric)
+                                                               : BuildMetricFallbackLabel(row);
+  const std::string event_label = (primary_event != nullptr)
+                                      ? BuildEventLabel(*primary_event)
+                                      : BuildEventFallbackLabel(run_evidence);
+
+  out << "     - citation: This hypothesis is " << CitationStrength(row.result) << " by metric `"
+      << metric_label << "` and event `" << event_label << "`.\n";
+
+  if (citation == nullptr) {
+    return;
+  }
+
+  if (!citation->summary.empty()) {
+    out << "     - citation_note: " << citation->summary << "\n";
+  }
+
+  for (const auto& metric : citation->metrics) {
+    out << "     - metric: `" << BuildMetricLabel(metric) << "`";
+    if (!metric.rationale.empty()) {
+      out << " reason: " << metric.rationale;
+    }
+    const fs::path source = metric.source_path.empty() && run_evidence != nullptr
+                                ? run_evidence->metrics_json_path
+                                : metric.source_path;
+    if (!source.empty()) {
+      out << " (metric source: `" << source.string() << "`)";
+    }
+    out << '\n';
+  }
+
+  for (const auto& event : citation->events) {
+    out << "     - event: `" << BuildEventLabel(event) << "`";
+    if (!event.rationale.empty()) {
+      out << " reason: " << event.rationale;
+    }
+    const fs::path source = event.source_path.empty() && run_evidence != nullptr
+                                ? run_evidence->events_jsonl_path
+                                : event.source_path;
+    if (!source.empty()) {
+      out << " (event source: `" << source.string() << "`)";
+    }
+    out << '\n';
+  }
 }
 
 void WriteEvidenceLinks(std::ofstream& out, const PacketRunEvidence& evidence) {
@@ -261,7 +395,8 @@ void WriteRuledOut(std::ofstream& out, const std::vector<PacketConfigAttempt>& a
 }
 
 void WriteRankedHypotheses(std::ofstream& out, const std::vector<HypothesisRank>& ranked,
-                           const std::map<std::string, PacketRunEvidence>& evidence) {
+                           const std::map<std::string, PacketRunEvidence>& evidence,
+                           const std::map<CitationKey, HypothesisEvidenceCitation>& citations) {
   out << "## Ranked Hypotheses + Evidence Links\n\n";
 
   if (ranked.empty()) {
@@ -290,7 +425,16 @@ void WriteRankedHypotheses(std::ofstream& out, const std::vector<HypothesisRank>
       out << "   - evidence run `" << row->evidence_run_id << "` result=`" << ToString(row->result)
           << "`\n";
 
+      const CitationKey citation_key{rank.hypothesis->id, row->evidence_run_id};
+      const auto citation_it = citations.find(citation_key);
+      const HypothesisEvidenceCitation* citation =
+          citation_it == citations.end() ? nullptr : &citation_it->second;
+
       const auto evidence_it = evidence.find(row->evidence_run_id);
+      const PacketRunEvidence* run_evidence =
+          evidence_it == evidence.end() ? nullptr : &evidence_it->second;
+      WriteCitationDetails(out, *row, run_evidence, citation);
+
       if (evidence_it == evidence.end()) {
         out << "     - artifact links unavailable for this run id\n";
         continue;
@@ -318,6 +462,8 @@ bool WriteEngineerPacketMarkdown(const EngineerPacketInput& input, const fs::pat
 
   const std::vector<PacketConfigAttempt> attempts = SortedAttempts(input.configs_tried);
   const std::map<std::string, PacketRunEvidence> evidence = BuildEvidenceMap(input.run_evidence);
+  const std::map<CitationKey, HypothesisEvidenceCitation> citations =
+      BuildCitationMap(input.hypothesis_citations);
   const std::vector<HypothesisRank> ranked = RankHypotheses(*input.state);
 
   written_path = output_dir / "engineer_packet.md";
@@ -341,7 +487,7 @@ bool WriteEngineerPacketMarkdown(const EngineerPacketInput& input, const fs::pat
   WriteConfigsTried(out, attempts, evidence);
   WriteWhatChanged(out, attempts);
   WriteRuledOut(out, attempts, evidence);
-  WriteRankedHypotheses(out, ranked, evidence);
+  WriteRankedHypotheses(out, ranked, evidence, citations);
 
   if (!out) {
     error = "failed while writing output file '" + written_path.string() + "'";

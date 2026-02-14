@@ -358,6 +358,8 @@ int main() {
   AssertContains(packet_text, "single_variable_flip");
   AssertContains(packet_text, "camera.fps");
   AssertContains(packet_text, baseline_run.bundle_dir.string());
+  AssertContains(packet_text, "This hypothesis is");
+  AssertContains(packet_text, "and event `events_jsonl=");
 
   fs::remove_all(temp_root, ec);
   std::cout << "agent_triage_integration_smoke: ok\n";

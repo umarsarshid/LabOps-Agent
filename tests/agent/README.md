@@ -42,6 +42,8 @@ artifact consumers.
   - Generates `engineer_packet.md` from state, attempts, and evidence links.
   - Verifies required packet sections are present.
   - Verifies exact artifact and diff paths are embedded in the packet.
+  - Verifies citation wording links hypothesis conclusions to metric + event
+    evidence in plain language.
 - `agent_triage_integration_smoke.cpp`
   - Runs a seeded end-to-end triage flow on sim:
     - generate OAAT variants

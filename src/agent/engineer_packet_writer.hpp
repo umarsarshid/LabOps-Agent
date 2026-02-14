@@ -23,6 +23,35 @@ struct PacketRunEvidence {
   std::filesystem::path diff_markdown_path;
 };
 
+// Metric-level citation that lets the packet reference a concrete measured
+// value, its expectation, and where that evidence was sourced from.
+struct MetricCitation {
+  std::string metric_name;
+  std::string observed_value;
+  std::string expected_value;
+  std::string rationale;
+  std::filesystem::path source_path;
+};
+
+// Event-level citation that points to a specific trace signal in events data.
+struct EventCitation {
+  std::string event_type;
+  std::string event_excerpt;
+  std::string rationale;
+  std::filesystem::path source_path;
+};
+
+// Optional per-hypothesis, per-run citation bundle. The writer will still
+// generate a fallback citation sentence when this object is absent so packets
+// always read like a triage note.
+struct HypothesisEvidenceCitation {
+  std::string hypothesis_id;
+  std::string run_id;
+  std::string summary;
+  std::vector<MetricCitation> metrics;
+  std::vector<EventCitation> events;
+};
+
 // One configuration mutation attempt in OAAT order.
 struct PacketConfigAttempt {
   std::size_t sequence = 0;
@@ -45,6 +74,7 @@ struct EngineerPacketInput {
   StopDecision stop_decision;
   std::vector<PacketConfigAttempt> configs_tried;
   std::vector<PacketRunEvidence> run_evidence;
+  std::vector<HypothesisEvidenceCitation> hypothesis_citations;
 };
 
 // Writes `engineer_packet.md` with reproducible handoff details:
