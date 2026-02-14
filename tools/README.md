@@ -16,6 +16,10 @@ presets or helper data that scenarios can reference.
     `.clang-format`.
   - `bash tools/clang_format.sh --fix`: applies formatting to tracked C/C++
     files in place.
+  - `CLANG_FORMAT_BIN=<binary>` can select a specific formatter executable
+    (for example `clang-format-21`).
+  - `CLANG_FORMAT_REQUIRED_MAJOR=<major>` can enforce formatter major parity
+    between local and CI checks.
 
 ## Connection to the project
 

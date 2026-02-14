@@ -11,14 +11,22 @@ jobs:
   format:
     name: Format (clang-format)
     runs-on: ubuntu-latest
+    env:
+      # Pin formatter major in CI so local/CI checks don't disagree on wrapping.
+      CLANG_FORMAT_BIN: clang-format-21
+      CLANG_FORMAT_REQUIRED_MAJOR: "21"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install clang-format
+      - name: Install clang-format 21
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-format
+          sudo apt-get install -y wget gnupg lsb-release ca-certificates
+          wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh 21
+          sudo apt-get install -y clang-format-21
 
       - name: Verify formatting
         run: bash tools/clang_format.sh --check

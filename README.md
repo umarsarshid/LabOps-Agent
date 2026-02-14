@@ -202,10 +202,13 @@ scenario mutations to `out/agent_runs/`.
 
 This repo uses `.clang-format` for C/C++ style consistency.
 
+- CI pins `clang-format` major `21` to avoid version-dependent wrapping drift.
 - Check formatting:
   - `bash tools/clang_format.sh --check`
 - Apply formatting:
   - `bash tools/clang_format.sh --fix`
+- If your system has multiple formatter binaries, you can select one explicitly:
+  - `CLANG_FORMAT_BIN=clang-format-21 CLANG_FORMAT_REQUIRED_MAJOR=21 bash tools/clang_format.sh --check`
 
 If `clang-format` is not installed locally, install it first and rerun the
 command.
