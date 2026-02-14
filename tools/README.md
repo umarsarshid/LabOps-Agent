@@ -20,6 +20,11 @@ presets or helper data that scenarios can reference.
     (for example `clang-format-21`).
   - `CLANG_FORMAT_REQUIRED_MAJOR=<major>` can enforce formatter major parity
     between local and CI checks.
+- `check_sdk_leaks.sh`: anti-leak guard that scans changed paths and fails when
+  forbidden vendor SDK patterns are detected (for example `VendorSDK/**`,
+  `*.dll`, `*.so`, `*.dylib`, `*.lib`, `*.a`).
+  - `bash tools/check_sdk_leaks.sh`: checks git diff paths.
+  - `bash tools/check_sdk_leaks.sh <path> ...`: checks explicit paths.
 
 ## Connection to the project
 

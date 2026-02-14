@@ -8,6 +8,18 @@ on:
       - main
 
 jobs:
+  anti_leak:
+    name: Anti-Leak (SDK)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify no SDK artifacts in diff
+        run: bash tools/check_sdk_leaks.sh
+
   format:
     name: Format (clang-format)
     runs-on: ubuntu-latest
@@ -33,7 +45,9 @@ jobs:
 
   build:
     name: Build (${{ matrix.os }})
-    needs: format
+    needs:
+      - anti_leak
+      - format
     runs-on: ${{ matrix.os }}
     # Point temp directories at workspace `out/` so failing smoke tests leave
     # their triage bundles in a stable location that can be uploaded.
