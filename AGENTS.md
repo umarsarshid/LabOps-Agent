@@ -20,6 +20,7 @@ This file helps the next coding agent continue work without re-discovery.
   `summary.md` when `netem_profile` is configured
 - optional Linux netem execution path (`--apply-netem --netem-iface <iface>`)
   with guaranteed teardown attempt on exit after successful apply
+- agent experiment-state model plus `agent_state.json` serializer/writer
 - bundle manifest generation (`bundle_manifest.json`)
 - optional support bundle zip (`--zip`)
 
@@ -29,7 +30,7 @@ Long-term goal:
 
 ## Current Snapshot (as of February 14, 2026)
 
-- Latest commit before current work: `74f8e05` (`feat(hostprobe): parse MTU and link-speed hints`)
+- Latest commit before current work: `ff03771` (`feat(netem): add optional guarded execution with safe teardown`)
 - Milestones completed:
   - Milestone 0: repo/build/style/CI foundation
   - Milestone 1: CLI skeleton + output contracts
@@ -38,9 +39,11 @@ Long-term goal:
   - Milestone 4: scenario schema, loader/validator, scenario->backend apply
   - Milestone 5: bundle layout, manifest, optional zip, bundle docs
   - Milestone 6: baseline capture + compare diff outputs + threshold pass/fail
-  - Milestone 7: in progress (`0038` next: redaction option for host evidence)
+  - Milestone 7: done (hostprobe + NIC hints + redaction)
+  - Milestone 8: done (netem profiles, suggestions, guarded execution)
+  - Milestone 9: in progress (agent-mode foundations)
 - Latest known test status:
-  - baseline/compare/threshold/run smoke suite passing after `0037`
+  - full smoke suite passing after `0041`
 
 ## Confirmed Working Commands
 
@@ -115,6 +118,7 @@ provided, likely follow-on work is:
 - scenario-aware redaction expansion (if future security/privacy requirements add more fields)
 - netem execution harness (apply/teardown orchestration instead of manual-only suggestions)
 - richer netem status evidence in artifacts/events (applied/teardown outcomes)
-- agent experiment planner/runner (OAAT isolation loop)
+- agent experiment planner/runner (OAAT isolation loop) on top of
+  `ExperimentState` + `agent_state.json`
 - engineer packet generation
 - hardware SDK backend implementation behind `ICameraBackend`

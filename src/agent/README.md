@@ -1,23 +1,36 @@
 # src/agent
 
-`src/agent/` implements automated triage experiments.
+`src/agent/` contains the experiment-planning state and (next) orchestration logic.
 
 ## Why this folder exists
 
-This module is the "autopilot engineer" layer. It runs disciplined experiments by changing one variable at a time, rerunning scenarios, comparing against baseline, and deciding when cause isolation is strong enough.
+This module is the "autopilot engineer" layer. It tracks what the system
+thinks might be wrong, what variables were already changed, and what each test
+result showed. That state is the backbone for explainable one-change-at-a-time
+triage.
 
-## Expected responsibilities
+## What is implemented now
 
-- Experiment planning strategy.
-- Controlled parameter mutation (ROI, trigger mode, pixel format, network knobs, etc.).
-- Result comparison against known-good baselines.
-- Stopping logic (`isolated`, `inconclusive`, `needs_human`).
-- Human-readable report/packet generation support.
+- `experiment_state.hpp` / `experiment_state.cpp`
+  - Canonical `ExperimentState` model.
+  - Structured lists for:
+    - hypotheses
+    - tested variables
+    - results table
+  - Stable JSON serialization for checkpointing and downstream tooling.
+- `state_writer.hpp` / `state_writer.cpp`
+  - Writes `agent_state.json` into an output directory.
 
-## Design principle
+## Why this implementation is useful right now
 
-Prioritize explainability over black-box decisions. Every agent conclusion should include the evidence trail that produced it.
+Even before full planner/runner logic lands, we can persist the agent's working
+memory in a consistent file contract (`agent_state.json`). This prevents
+"stateless" debugging and gives future automation and humans the same source of
+truth.
 
-## Connection to the project
+## How it connects to the project
 
-This folder turns raw testing into rapid root-cause narrowing, which is the main product value of LabOps.
+- Upstream: consumes run/scenario/baseline context.
+- Downstream: feeds report generation and experiment continuation.
+- Bundle impact: `agent_state.json` is the seed artifact for future engineer
+  packets and replayable triage sessions.

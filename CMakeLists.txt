@@ -55,6 +55,14 @@ add_library(labops_hostprobe
 target_include_directories(labops_hostprobe PUBLIC src)
 target_compile_features(labops_hostprobe PUBLIC cxx_std_20)
 
+# Agent-state contracts for experiment planning checkpoints (`agent_state.json`).
+add_library(labops_agent
+  src/agent/experiment_state.cpp
+  src/agent/state_writer.cpp
+)
+target_include_directories(labops_agent PUBLIC src)
+target_compile_features(labops_agent PUBLIC cxx_std_20)
+
 # Metrics formulas and writers for run performance outputs.
 add_library(labops_metrics
   src/metrics/fps.cpp
@@ -106,6 +114,14 @@ add_executable(run_writer_smoke
 target_link_libraries(run_writer_smoke PRIVATE labops_artifacts labops_schema)
 target_compile_features(run_writer_smoke PRIVATE cxx_std_20)
 add_test(NAME run_writer_smoke COMMAND run_writer_smoke)
+
+# Smoke test for agent experiment-state serialization and artifact writing.
+add_executable(agent_state_writer_smoke
+  tests/agent/agent_state_writer_smoke.cpp
+)
+target_link_libraries(agent_state_writer_smoke PRIVATE labops_agent)
+target_compile_features(agent_state_writer_smoke PRIVATE cxx_std_20)
+add_test(NAME agent_state_writer_smoke COMMAND agent_state_writer_smoke)
 
 # Smoke test for scenario snapshot writer contract.
 add_executable(scenario_writer_smoke

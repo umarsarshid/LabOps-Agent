@@ -29,6 +29,8 @@ LabOps must be predictable. Tests verify command contracts, scenario validation,
   schema errors plus baseline-scenario metric-range integration checks.
 - Host probe smoke tests under `tests/hostprobe/` for identifier redaction
   guarantees in bundle evidence.
+- Agent-state smoke tests under `tests/agent/` for
+  `agent_state.json` serialization/writer contract stability.
 
 ## Design principle
 

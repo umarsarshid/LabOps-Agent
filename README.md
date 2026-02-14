@@ -23,7 +23,9 @@ artifact/event/metrics output pipeline, and CI-validated integration tests.
 Bundle packaging is implemented (manifest + optional zip), and triage bundle
 contracts are documented as an internal tooling spec in
 `docs/triage_bundle_spec.md`. Runs now also emit a one-page `summary.md`
-artifact for quick human triage. Agent diagnosis/planning is still upcoming.
+artifact for quick human triage. Agent-mode execution is still upcoming, but
+the experiment-state model and `agent_state.json` serialization contract now
+exist as the first milestone-9 foundation.
 
 ## Milestone Progress
 
@@ -34,7 +36,9 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
 - Milestone 4: done (scenario schema, validation, scenario application in run)
 - Milestone 5: done (bundle layout, manifest, optional support zip, bundle docs)
 - Milestone 6: done (baseline capture + compare diff outputs + threshold pass/fail)
-- Milestone 7: in progress (run summary + host probe evidence)
+- Milestone 7: done (host probe + redaction evidence capture)
+- Milestone 8: done (netem profiles, command suggestions, guarded Linux apply path)
+- Milestone 9: in progress (agent mode foundations)
 
 ## Implemented So Far
 
@@ -101,6 +105,10 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
   - executes only when `--apply-netem` is provided with `--netem-iface`
   - requires root unless `--apply-netem-force` is explicitly used
   - always attempts teardown on exit via scope-guard safety
+- Agent experiment-state contract:
+  - canonical model for hypotheses, tested variables, and results table
+  - deterministic JSON serialization into `agent_state.json`
+  - dedicated smoke test to keep this artifact contract stable
 - Host probe pipeline:
   - writes `<out>/<run_id>/hostprobe.json`
   - includes OS/CPU/RAM/uptime/load snapshot and parsed NIC highlights
@@ -147,7 +155,8 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
   constraints; deeper domain-specific rules can be added).
 - Full metrics suite completion (disconnect-specific metrics beyond current FPS+drop+jitter timing).
 - SDK-backed camera implementation (only interface boundary/stub exists).
-- Agent experiment planner/runner and final engineer packet generation.
+- Agent experiment planner/runner and final engineer packet generation
+  (state model exists; planner orchestration is next).
 
 ## Quick Start
 
