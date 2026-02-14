@@ -26,3 +26,7 @@ artifact consumers.
   - Verifies symptom input resolves to the right playbook.
   - Verifies ordered knob list for dropped-frame triage.
   - Verifies unknown symptoms fail with actionable error text.
+- `oaat_variant_generator_smoke.cpp`
+  - Generates one-knob scenario variants from a base scenario.
+  - Verifies default output location is `out/agent_runs`.
+  - Verifies all dropped-frame playbook knobs produce persisted variant files.

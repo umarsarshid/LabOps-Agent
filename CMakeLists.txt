@@ -61,6 +61,7 @@ add_library(labops_agent
   src/agent/experiment_state.cpp
   src/agent/playbook.cpp
   src/agent/state_writer.cpp
+  src/agent/variant_generator.cpp
 )
 target_include_directories(labops_agent PUBLIC src)
 target_compile_features(labops_agent PUBLIC cxx_std_20)
@@ -153,6 +154,14 @@ add_executable(playbook_selection_smoke
 target_link_libraries(playbook_selection_smoke PRIVATE labops_agent)
 target_compile_features(playbook_selection_smoke PRIVATE cxx_std_20)
 add_test(NAME playbook_selection_smoke COMMAND playbook_selection_smoke)
+
+# Smoke test for one-variable-at-a-time variant generation.
+add_executable(oaat_variant_generator_smoke
+  tests/agent/oaat_variant_generator_smoke.cpp
+)
+target_link_libraries(oaat_variant_generator_smoke PRIVATE labops_agent)
+target_compile_features(oaat_variant_generator_smoke PRIVATE cxx_std_20)
+add_test(NAME oaat_variant_generator_smoke COMMAND oaat_variant_generator_smoke)
 
 # Smoke test for scenario snapshot writer contract.
 add_executable(scenario_writer_smoke

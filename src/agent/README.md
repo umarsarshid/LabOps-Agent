@@ -24,6 +24,11 @@ triage.
   - Current built-in playbook:
     - `dropped_frames` -> `packet_delay_ms`, `fps`, `roi_enabled`,
       `reorder_percent`, `loss_percent`
+- `variant_generator.hpp` / `variant_generator.cpp`
+  - One-variable-at-a-time scenario variant generator.
+  - Takes a base scenario + symptom playbook and emits one scenario file per
+    knob mutation.
+  - Default output contract: `out/agent_runs/` with `variants_manifest.json`.
 - `experiment_state.hpp` / `experiment_state.cpp`
   - Canonical `ExperimentState` model.
   - Structured lists for:
@@ -47,6 +52,9 @@ single in-process flow, without shelling out to CLI subprocesses.
 The new playbook layer gives the runner a deterministic "what to try next"
 framework per symptom, which is required for explainable one-knob-at-a-time
 triage.
+
+The variant generator turns that ordered plan into concrete scenario files that
+can be executed immediately, while preserving the one-knob-change discipline.
 
 ## How it connects to the project
 

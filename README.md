@@ -27,7 +27,8 @@ artifact for quick human triage. Agent-mode execution is still upcoming, but
 the experiment-state model and `agent_state.json` serialization contract now
 exist, and a first in-process `ExperimentRunner` can execute baseline + one
 variant automatically. A symptom-driven playbook selector is now in place for
-deterministic knob ordering.
+deterministic knob ordering, plus an OAAT variant generator that writes
+scenario mutations to `out/agent_runs/`.
 
 ## Milestone Progress
 
@@ -121,6 +122,11 @@ deterministic knob ordering.
   - current symptom coverage:
     - `dropped_frames` -> `packet_delay_ms`, `fps`, `roi_enabled`,
       `reorder_percent`, `loss_percent`
+- Agent OAAT variant generation:
+  - takes base scenario + symptom playbook and emits one-knob-diff scenario
+    files
+  - default output location: `out/agent_runs/`
+  - emits `variants_manifest.json` with knob/path/value deltas
 - Host probe pipeline:
   - writes `<out>/<run_id>/hostprobe.json`
   - includes OS/CPU/RAM/uptime/load snapshot and parsed NIC highlights
