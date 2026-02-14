@@ -50,25 +50,70 @@ Optional flows:
 ## Example Flow (Need -> Do -> Get)
 
 What you need:
-- A scenario file (for example `scenarios/dropped_frames.json`)
-- A build of `labops` (`./tmp/build/labops`)
-- An output folder (for example `tmp/runs`)
+- A scenario file representing the issue (example: `scenarios/dropped_frames.json`)
+- A baseline scenario (example: `scenarios/sim_baseline.json`)
+- A built binary (`./tmp/build/labops`)
+- An output folder (example: `tmp/runs_camera_team`)
 
-What you do:
+What you do (stage by stage):
+
+Stage 0: set working variables
 ```bash
-./tmp/build/labops validate scenarios/dropped_frames.json
-./tmp/build/labops baseline capture scenarios/sim_baseline.json
-./tmp/build/labops run scenarios/dropped_frames.json --out tmp/runs --soak --checkpoint-interval-ms 60000
-./tmp/build/labops compare --baseline baselines/sim_baseline --run tmp/runs/<run_id>
+LABOPS=./tmp/build/labops
+SCENARIO=scenarios/dropped_frames.json
+BASELINE_SCENARIO=scenarios/sim_baseline.json
+OUT_ROOT=tmp/runs_camera_team
+mkdir -p "$OUT_ROOT"
+```
+
+Stage 1: validate the issue scenario
+```bash
+"$LABOPS" validate "$SCENARIO"
+```
+Expected: `valid: scenarios/dropped_frames.json`
+
+Stage 2: capture known-good baseline
+```bash
+"$LABOPS" baseline capture "$BASELINE_SCENARIO"
+```
+Expected baseline location: `baselines/sim_baseline/`
+
+Stage 3: run the issue scenario and collect a bundle
+```bash
+"$LABOPS" run "$SCENARIO" --out "$OUT_ROOT"
+```
+Expected stdout includes:
+- `run_id: run-...`
+- `bundle: tmp/runs_camera_team/run-...`
+
+Stage 4: locate the latest run folder and inspect core files
+```bash
+RUN_DIR="$(find "$OUT_ROOT" -maxdepth 1 -type d -name 'run-*' | sort | tail -n 1)"
+ls -la "$RUN_DIR"
+```
+
+Stage 5: compare run against baseline
+```bash
+"$LABOPS" compare --baseline baselines/sim_baseline --run "$RUN_DIR"
+```
+Expected new files in `"$RUN_DIR"`:
+- `diff.json`
+- `diff.md`
+
+Stage 6 (optional): long soak run with checkpoints
+```bash
+"$LABOPS" run "$SCENARIO" --out "$OUT_ROOT" --soak --checkpoint-interval-ms 60000
+```
+If paused and resumed:
+```bash
+"$LABOPS" run "$SCENARIO" --soak --resume "$RUN_DIR/soak_checkpoint.json"
 ```
 
 What you get:
-- A reproducible run bundle in `tmp/runs/<run_id>/`
-- Timeline evidence in `events.jsonl`
-- Performance outputs in `metrics.csv` and `metrics.json`
-- Human-readable triage outputs in `summary.md` and `report.html`
-- Regression deltas in `diff.json` and `diff.md`
-- If soak mode is used: resumable progress files (`soak_checkpoint.json`, `soak_frames.jsonl`)
+- A reproducible bundle in `"$RUN_DIR"` with `run.json`, `events.jsonl`, `metrics.csv`, `metrics.json`, `summary.md`, `report.html`, and `bundle_manifest.json`
+- Host/network context evidence (`hostprobe.json`, `nic_*.txt`)
+- Baseline-vs-run deltas (`diff.json`, `diff.md`)
+- For soak mode: resumable progress (`soak_checkpoint.json`, `checkpoints/checkpoint_*.json`, `soak_frames.jsonl`)
 
 ## Real-Life Workflow (Scenario from a Camera Team)
 
