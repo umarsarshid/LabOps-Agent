@@ -70,6 +70,19 @@ What you get:
 - Regression deltas in `diff.json` and `diff.md`
 - If soak mode is used: resumable progress files (`soak_checkpoint.json`, `soak_frames.jsonl`)
 
+## Real-Life Workflow (Scenario from a Camera Team)
+
+If the camera is not directly connected to this system yet, this is still useful:
+
+1. Engineer A observes real camera behavior and writes a clean scenario file.
+2. Engineer A captures a baseline from that scenario once.
+3. On later changes (settings, firmware, network), the team reruns and compares.
+4. LabOps shows exactly what changed in metrics and events.
+5. The team shares one evidence bundle instead of back-and-forth debugging.
+
+In plain terms: this gives engineers a repeatable test harness and consistent
+proof package, even before live camera SDK integration is wired in.
+
 ## Bundle Output (Per Run)
 
 `<out>/<run_id>/`
