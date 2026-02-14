@@ -57,7 +57,7 @@ jobs:
         run: cmake -E make_directory out/tmp
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLABOPS_FETCH_CATCH2=ON
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLABOPS_FETCH_CATCH2=ON -DLABOPS_ENABLE_REAL_BACKEND=OFF
 
       - name: Build
         run: cmake --build build --config Release
