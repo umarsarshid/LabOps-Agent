@@ -29,6 +29,12 @@ We need a clear boundary where vendor-specific camera integration will live, wit
   - `ON`: enables compile-time integration path marker, but behavior is still
     stubbed until a proprietary adapter is added outside this repo
 
+## Integration guide
+
+- Use `docs/integration/real_sdk_backend.md` as the step-by-step playbook for
+  replacing this stub with a real vendor SDK adapter while keeping artifact and
+  event contracts stable.
+
 ## Guardrails
 
 - Do not commit vendor binaries, headers, or confidential code.
