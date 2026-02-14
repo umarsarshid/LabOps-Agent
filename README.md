@@ -53,6 +53,9 @@ scenario mutations to `out/agent_runs/`.
   - `labops run <scenario.json> [--out <dir>] [--zip] [--redact] [--log-level <debug|info|warn|error>] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`
   - `labops baseline capture <scenario.json> [--redact] [--log-level <debug|info|warn|error>] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`
   - `labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]`
+  - stable process exit-code contract for automation:
+    - `0` success, `1` generic failure, `2` usage error
+    - `10` schema invalid, `20` backend connect failed, `30` thresholds failed
 - Scenario loader + schema validation in `labops validate` with actionable
   field-level errors.
 - Netem profile definitions under `tools/netem_profiles/` (jitter/loss/reorder

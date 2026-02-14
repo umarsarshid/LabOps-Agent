@@ -18,7 +18,8 @@ surface (argument parsing + runtime orchestration + artifact/event output).
   command outputs (`nic_*.txt`) are present, and
   `bundle_manifest.json` includes the core artifact entries and hash metadata.
 - `validate_actionable_smoke.cpp`: drives `labops validate` and verifies
-  invalid schema output includes actionable field-level error paths.
+  invalid schema output includes actionable field-level error paths and the
+  schema-invalid exit code contract.
 - `sim_determinism_golden_smoke.cpp`: runs the same seeded scenario twice and
   verifies the first `K` normalized events are identical.
 - `starter_scenarios_e2e_smoke.cpp`: runs the starter scenario set
@@ -38,8 +39,11 @@ surface (argument parsing + runtime orchestration + artifact/event output).
   generates `diff.json` + `diff.md` and reports non-zero deltas for a
   fault-injected run against baseline.
 - `run_threshold_failure_smoke.cpp`: verifies a threshold-violating scenario
-  returns non-zero from `labops run` while still producing core artifacts and
-  a `summary.md` status of `FAIL`.
+  returns the thresholds-failed exit code from `labops run` while still
+  producing core artifacts and a `summary.md` status of `FAIL`.
+- `run_backend_connect_failure_smoke.cpp`: verifies `backend: real_stub`
+  triggers a deterministic backend connection failure and returns the
+  backend-connect-failed exit code.
 - `netem_option_contract_smoke.cpp`: verifies netem execution flags are used
   safely (`--apply-netem` requires `--netem-iface <iface>` and vice versa).
 - `logging_contract_smoke.cpp`: verifies structured run logs honor

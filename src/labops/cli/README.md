@@ -53,6 +53,14 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Expose shared in-process run execution (`ExecuteScenarioRun`) so agent-mode
   can reuse the exact scenario pipeline without shelling out.
 
+Current exit-code contract used by CI:
+- `0`: success
+- `1`: generic command/runtime failure
+- `2`: usage/argument failure
+- `10`: scenario/schema invalid
+- `20`: backend connection failure
+- `30`: threshold evaluation failure
+
 ## Design intent
 
 The router is intentionally explicit rather than clever. Early explicit branching is easier to audit, easier to test, and safer for a hardware-focused team where reproducibility matters more than abstraction density.

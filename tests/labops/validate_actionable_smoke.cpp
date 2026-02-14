@@ -1,4 +1,5 @@
 #include "labops/cli/router.hpp"
+#include "core/errors/exit_codes.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -71,8 +72,9 @@ int main() {
   const int exit_code = labops::cli::Dispatch(static_cast<int>(argv.size()), argv.data());
   std::cerr.rdbuf(original_cerr);
 
-  if (exit_code == 0) {
-    Fail("validate should fail for invalid scenario");
+  if (exit_code != labops::core::errors::ToInt(
+                       labops::core::errors::ExitCode::kSchemaInvalid)) {
+    Fail("validate should return schema-invalid exit code for invalid scenario");
   }
 
   const std::string output = captured_cerr.str();

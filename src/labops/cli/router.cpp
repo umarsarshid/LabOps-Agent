@@ -9,8 +9,10 @@
 #include "artifacts/scenario_writer.hpp"
 #include "artifacts/bundle_zip_writer.hpp"
 #include "backends/camera_backend.hpp"
+#include "backends/sdk_stub/real_camera_backend_stub.hpp"
 #include "backends/sim/scenario_config.hpp"
 #include "backends/sim/sim_camera_backend.hpp"
+#include "core/errors/exit_codes.hpp"
 #include "core/schema/run_contract.hpp"
 #include "events/event_model.hpp"
 #include "events/jsonl_writer.hpp"
@@ -51,11 +53,18 @@ namespace labops::cli {
 
 namespace {
 
-// Exit code contract is centralized here so every subcommand remains
-// consistent and automation can rely on deterministic behavior.
-constexpr int kExitSuccess = 0;
-constexpr int kExitFailure = 1;
-constexpr int kExitUsage = 2;
+constexpr std::string_view kBackendSim = "sim";
+constexpr std::string_view kBackendRealStub = "real_stub";
+
+// Keep local names for readability while using one shared core contract.
+constexpr int kExitSuccess = core::errors::ToInt(core::errors::ExitCode::kSuccess);
+constexpr int kExitFailure = core::errors::ToInt(core::errors::ExitCode::kFailure);
+constexpr int kExitUsage = core::errors::ToInt(core::errors::ExitCode::kUsage);
+constexpr int kExitSchemaInvalid = core::errors::ToInt(core::errors::ExitCode::kSchemaInvalid);
+constexpr int kExitBackendConnectFailed =
+    core::errors::ToInt(core::errors::ExitCode::kBackendConnectFailed);
+constexpr int kExitThresholdsFailed =
+    core::errors::ToInt(core::errors::ExitCode::kThresholdsFailed);
 
 // One usage text source avoids divergence between help and error paths.
 void PrintUsage(std::ostream& out) {
@@ -153,7 +162,7 @@ int CommandValidate(const std::vector<std::string_view>& args) {
     for (const auto& issue : report.issues) {
       std::cerr << "  - " << issue.path << ": " << issue.message << '\n';
     }
-    return kExitFailure;
+    return kExitSchemaInvalid;
   }
 
   std::cout << "valid: " << scenario_path << '\n';
@@ -163,6 +172,7 @@ int CommandValidate(const std::vector<std::string_view>& args) {
 struct RunPlan {
   backends::sim::SimScenarioConfig sim_config;
   std::chrono::milliseconds duration{1'000};
+  std::string backend = std::string(kBackendSim);
   std::optional<std::string> netem_profile;
   struct Thresholds {
     std::optional<double> min_avg_fps;
@@ -1009,6 +1019,15 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
         std::chrono::seconds(static_cast<std::int64_t>(duration_s.value())));
   }
 
+  if (const auto backend = FindStringJsonField(scenario_text, "backend");
+      backend.has_value()) {
+    if (*backend != kBackendSim && *backend != kBackendRealStub) {
+      error = "scenario backend must be one of: sim, real_stub";
+      return false;
+    }
+    plan.backend = *backend;
+  }
+
   if (!assign_u32("fps", plan.sim_config.fps)) {
     return false;
   }
@@ -1084,13 +1103,31 @@ core::schema::RunInfo BuildRunInfo(const RunOptions& options, const RunPlan& run
   core::schema::RunInfo run_info;
   run_info.run_id = MakeRunId(created_at);
   run_info.config.scenario_id = fs::path(options.scenario_path).stem().string();
-  run_info.config.backend = "sim";
+  run_info.config.backend = run_plan.backend;
   run_info.config.seed = run_plan.sim_config.seed;
   run_info.config.duration = run_plan.duration;
   run_info.timestamps.created_at = created_at;
   run_info.timestamps.started_at = created_at;
   run_info.timestamps.finished_at = created_at;
   return run_info;
+}
+
+bool BuildBackendFromRunPlan(const RunPlan& run_plan,
+                             std::unique_ptr<backends::ICameraBackend>& backend,
+                             std::string& error) {
+  backend.reset();
+  error.clear();
+  if (run_plan.backend == kBackendSim) {
+    backend = std::make_unique<backends::sim::SimCameraBackend>();
+    return true;
+  }
+  if (run_plan.backend == kBackendRealStub) {
+    backend = std::make_unique<backends::sdk_stub::RealCameraBackendStub>();
+    return true;
+  }
+
+  error = "unsupported backend in run plan: " + run_plan.backend;
+  return false;
 }
 
 // Bundle layout contract:
@@ -1287,7 +1324,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     logger.Error("failed to load run plan from scenario",
                  {{"scenario_path", options.scenario_path}, {"error", error}});
     std::cerr << "error: " << error << '\n';
-    return kExitFailure;
+    return kExitSchemaInvalid;
   }
 
   std::optional<artifacts::NetemCommandSuggestions> netem_suggestions;
@@ -1369,14 +1406,18 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     return kExitFailure;
   }
 
-  std::unique_ptr<backends::ICameraBackend> backend =
-      std::make_unique<backends::sim::SimCameraBackend>();
+  std::unique_ptr<backends::ICameraBackend> backend;
+  if (!BuildBackendFromRunPlan(run_plan, backend, error)) {
+    logger.Error("backend selection failed", {{"error", error}});
+    std::cerr << "error: backend selection failed: " << error << '\n';
+    return kExitFailure;
+  }
 
   if (!backend->Connect(error)) {
     logger.Error("backend connect failed",
                  {{"backend", run_info.config.backend}, {"error", error}});
     std::cerr << "error: backend connect failed: " << error << '\n';
-    return kExitFailure;
+    return kExitBackendConnectFailed;
   }
   logger.Info("backend connected", {{"backend", run_info.config.backend}});
 
@@ -1679,7 +1720,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     logger.Warn("threshold failure", {{"detail", failure}});
     std::cerr << "threshold failed: " << failure << '\n';
   }
-  return kExitFailure;
+  return kExitThresholdsFailed;
 }
 
 int CommandRun(const std::vector<std::string_view>& args) {

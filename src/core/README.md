@@ -18,6 +18,7 @@ As the system grows, many modules need common utilities (errors, clocks, structu
 
 - `schema/`: run-contract structures and JSON serialization helpers.
 - `logging/`: shared structured logger with level parsing and run-id context.
+- `errors/`: stable process exit-code contract used by CLI and CI smoke tests.
 
 ## Guardrails
 

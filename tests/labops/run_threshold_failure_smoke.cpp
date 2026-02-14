@@ -1,4 +1,5 @@
 #include "labops/cli/router.hpp"
+#include "core/errors/exit_codes.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -122,8 +123,9 @@ int main() {
   }
 
   const int exit_code = labops::cli::Dispatch(static_cast<int>(argv.size()), argv.data());
-  if (exit_code != 1) {
-    Fail("expected labops run to return non-zero on threshold failure");
+  if (exit_code != labops::core::errors::ToInt(
+                       labops::core::errors::ExitCode::kThresholdsFailed)) {
+    Fail("expected thresholds-failed exit code on threshold violation");
   }
 
   const fs::path bundle_dir = ResolveSingleBundleDir(out_dir);

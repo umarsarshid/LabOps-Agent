@@ -24,6 +24,7 @@ A scenario JSON document is an object with these top-level sections:
 - `description`
 - `tags`
 - `duration`
+- `backend`
 - `netem_profile`
 - `camera`
 - `sim_faults`
@@ -62,6 +63,15 @@ A scenario JSON document is an object with these top-level sections:
 - Required fields:
   - `duration_ms` (integer, `> 0`)
 - Purpose: run length definition.
+
+### `backend` (optional)
+
+- Type: string
+- Purpose: selects execution backend implementation.
+- Allowed values:
+  - `"sim"` (default when field is omitted)
+  - `"real_stub"` (deterministic non-SDK stub path useful for integration
+    contract testing)
 
 ### `netem_profile` (optional)
 

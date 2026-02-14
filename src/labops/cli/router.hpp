@@ -44,6 +44,9 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir, b
 //   0 => success
 //   1 => command failed after valid invocation
 //   2 => usage error (unknown command / invalid args)
+//  10 => schema invalid
+//  20 => backend connection failed
+//  30 => thresholds failed
 int Dispatch(int argc, char** argv);
 
 } // namespace labops::cli

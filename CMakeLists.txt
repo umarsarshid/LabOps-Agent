@@ -357,6 +357,18 @@ target_link_libraries(run_threshold_failure_smoke PRIVATE labops_artifacts labop
 target_compile_features(run_threshold_failure_smoke PRIVATE cxx_std_20)
 add_test(NAME run_threshold_failure_smoke COMMAND run_threshold_failure_smoke)
 
+# Integration smoke test for backend connection failure exit-code contract:
+# selecting `backend: real_stub` should deterministically fail connect and map
+# to the dedicated backend-connect exit code.
+add_executable(run_backend_connect_failure_smoke
+  tests/labops/run_backend_connect_failure_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(run_backend_connect_failure_smoke PRIVATE src)
+target_link_libraries(run_backend_connect_failure_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(run_backend_connect_failure_smoke PRIVATE cxx_std_20)
+add_test(NAME run_backend_connect_failure_smoke COMMAND run_backend_connect_failure_smoke)
+
 # Integration smoke test for netem CLI option contracts.
 # Ensures netem execution flags require explicit pairing:
 # - `--apply-netem` requires `--netem-iface <iface>`

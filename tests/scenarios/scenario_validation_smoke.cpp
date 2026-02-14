@@ -147,6 +147,7 @@ int main() {
 {
   "schema_version": "1.0",
   "scenario_id": "Bad Id",
+  "backend": "bad_backend",
   "duration": { "duration_ms": 0 },
   "camera": {
     "fps": 0,
@@ -190,6 +191,9 @@ int main() {
     }
     if (!ContainsIssue(report, "sim_faults.drop_percent", "range [0,100]")) {
       Fail("missing actionable issue for sim_faults.drop_percent");
+    }
+    if (!ContainsIssue(report, "backend", "must be one of")) {
+      Fail("missing actionable issue for backend enum");
     }
     if (!ContainsIssue(report, "thresholds", "at least one threshold")) {
       Fail("missing actionable issue for thresholds object");

@@ -827,6 +827,25 @@ void ValidateNetemProfile(const JsonValue& root, const fs::path& scenario_path,
   }
 }
 
+void ValidateBackend(const JsonValue& root, ValidationReport& report) {
+  const JsonValue* backend = GetField(root, "backend");
+  if (backend == nullptr) {
+    return;
+  }
+
+  if (!IsString(backend)) {
+    AddIssue(report, "backend", "must be a string when provided");
+    return;
+  }
+  if (backend->string_value.empty()) {
+    AddIssue(report, "backend", "must not be empty when provided");
+    return;
+  }
+  if (backend->string_value != "sim" && backend->string_value != "real_stub") {
+    AddIssue(report, "backend", "must be one of: sim, real_stub");
+  }
+}
+
 void ValidateScenarioObject(const JsonValue& root, const fs::path& scenario_path,
                             ValidationReport& report) {
   if (root.type != JsonValue::Type::kObject) {
@@ -862,6 +881,7 @@ void ValidateScenarioObject(const JsonValue& root, const fs::path& scenario_path
   ValidateThresholds(root, report);
   ValidateOaat(root, report);
   ValidateNetemProfile(root, scenario_path, report);
+  ValidateBackend(root, report);
 }
 
 } // namespace
