@@ -134,6 +134,7 @@ int main() {
   const fs::path metrics_csv = baseline_dir / "metrics.csv";
   const fs::path metrics_json = baseline_dir / "metrics.json";
   const fs::path summary_markdown = baseline_dir / "summary.md";
+  const fs::path report_html = baseline_dir / "report.html";
   const fs::path bundle_manifest_json = baseline_dir / "bundle_manifest.json";
 
   if (!fs::exists(scenario_json)) {
@@ -163,6 +164,10 @@ int main() {
   if (!fs::exists(summary_markdown)) {
     fs::current_path(original_cwd, ec);
     Fail("baseline missing summary.md");
+  }
+  if (!fs::exists(report_html)) {
+    fs::current_path(original_cwd, ec);
+    Fail("baseline missing report.html");
   }
   if (!fs::exists(bundle_manifest_json)) {
     fs::current_path(original_cwd, ec);

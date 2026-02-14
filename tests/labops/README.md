@@ -12,8 +12,8 @@ surface (argument parsing + runtime orchestration + artifact/event output).
 - `run_stream_trace_smoke.cpp`: drives `labops run` via CLI dispatch and
   verifies `events.jsonl` contains config-audit plus realistic stream lifecycle events and
   `metrics.csv`/`metrics.json` are emitted with expected metric fields,
-  `summary.md` is readable, `hostprobe.json` includes key host + NIC highlight
-  fields (including MTU/link hint keys), optional manual netem command
+  `summary.md` and `report.html` are readable, `hostprobe.json` includes key
+  host + NIC highlight fields (including MTU/link hint keys), optional manual netem command
   suggestions appear in `summary.md` when `netem_profile` is set, raw NIC
   command outputs (`nic_*.txt`) are present, and
   `bundle_manifest.json` includes the core artifact entries and hash metadata.
@@ -40,7 +40,8 @@ surface (argument parsing + runtime orchestration + artifact/event output).
   fault-injected run against baseline.
 - `run_threshold_failure_smoke.cpp`: verifies a threshold-violating scenario
   returns the thresholds-failed exit code from `labops run` while still
-  producing core artifacts and a `summary.md` status of `FAIL`.
+  producing core artifacts plus `summary.md`/`report.html` status views of
+  `FAIL`.
 - `run_backend_connect_failure_smoke.cpp`: verifies `backend: real_stub`
   triggers a deterministic backend connection failure and returns the
   backend-connect-failed exit code.

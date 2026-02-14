@@ -3,6 +3,7 @@
 #include "artifacts/bundle_manifest_writer.hpp"
 #include "artifacts/bundle_zip_writer.hpp"
 #include "artifacts/hostprobe_writer.hpp"
+#include "artifacts/html_report_writer.hpp"
 #include "artifacts/metrics_diff_writer.hpp"
 #include "artifacts/metrics_writer.hpp"
 #include "artifacts/run_summary_writer.hpp"
@@ -1596,10 +1597,19 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     return kExitFailure;
   }
 
+  fs::path report_html_path;
+  if (!artifacts::WriteRunSummaryHtml(run_info, fps_report, run_plan.sim_config.fps,
+                                      thresholds_passed, threshold_failures, top_anomalies,
+                                      bundle_dir, report_html_path, error)) {
+    logger.Error("failed to write report.html", {{"error", error}});
+    std::cerr << "error: failed to write report.html: " << error << '\n';
+    return kExitFailure;
+  }
+
   fs::path bundle_manifest_path;
   std::vector<fs::path> bundle_artifact_paths = {
       scenario_artifact_path, hostprobe_artifact_path, run_artifact_path,     events_path,
-      metrics_csv_path,       metrics_json_path,       summary_markdown_path,
+      metrics_csv_path,       metrics_json_path,       summary_markdown_path, report_html_path,
   };
   bundle_artifact_paths.insert(bundle_artifact_paths.end(), hostprobe_raw_artifact_paths.begin(),
                                hostprobe_raw_artifact_paths.end());
@@ -1622,7 +1632,8 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   logger.Info("run artifacts written", {{"bundle_dir", bundle_dir.string()},
                                         {"events", events_path.string()},
                                         {"metrics_json", metrics_json_path.string()},
-                                        {"summary", summary_markdown_path.string()}});
+                                        {"summary", summary_markdown_path.string()},
+                                        {"report_html", report_html_path.string()}});
 
   std::cout << success_prefix << options.scenario_path << '\n';
   std::cout << "run_id: " << run_info.run_id << '\n';
@@ -1644,6 +1655,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   std::cout << "metrics_csv: " << metrics_csv_path.string() << '\n';
   std::cout << "metrics_json: " << metrics_json_path.string() << '\n';
   std::cout << "summary: " << summary_markdown_path.string() << '\n';
+  std::cout << "report_html: " << report_html_path.string() << '\n';
   std::cout << "manifest: " << bundle_manifest_path.string() << '\n';
   if (options.zip_bundle) {
     std::cout << "bundle_zip: " << bundle_zip_path.string() << '\n';

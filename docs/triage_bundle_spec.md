@@ -51,8 +51,9 @@ Current high-level write sequence:
 8. `run.json` is written after stream completion.
 9. `metrics.csv` and `metrics.json` are written.
 10. `summary.md` is written as a one-page human triage report.
-11. `bundle_manifest.json` is generated from required artifacts.
-12. optional `.zip` archive is created as a sibling of bundle directory.
+11. `report.html` is written as a static browser triage report (no JS).
+12. `bundle_manifest.json` is generated from required artifacts.
+13. optional `.zip` archive is created as a sibling of bundle directory.
 
 ## Directory Layout Contract
 
@@ -69,6 +70,7 @@ Required bundle structure:
     metrics.csv
     metrics.json
     summary.md
+    report.html
     bundle_manifest.json
 ```
 
@@ -93,6 +95,7 @@ Optional output:
 | `metrics.csv` | yes | metrics writer | Human-readable metrics for spreadsheets and quick plotting. |
 | `metrics.json` | yes | metrics writer | Machine-readable metrics for automation and agent parsing. |
 | `summary.md` | yes | summary writer | One-page human summary with pass/fail, key metrics, and top anomalies. |
+| `report.html` | yes | html report writer | Static browser report with key metric and delta tables (plots-ready). |
 | `bundle_manifest.json` | yes | manifest writer | Integrity and inventory contract for triage handoff. |
 | `<run_id>.zip` | optional | zip writer | Portable support bundle for sharing outside raw workspace. |
 
@@ -285,6 +288,23 @@ Execution note:
 - when `--apply-netem` is used on Linux, commands are applied before stream and
   teardown is always attempted on exit after successful apply.
 
+### `report.html`
+
+Purpose:
+
+- provide a browser-friendly triage view that does not require markdown tooling
+- expose table-first metric and delta data ready for copy/paste into charting tools
+
+Current sections:
+
+- run status badge (`PASS` / `FAIL`)
+- run identity table
+- key metrics table
+- `Diffs (Actual vs Expected)` table
+- rolling FPS samples table (`window_end_epoch_ms`, `frames_in_window`, `fps`)
+- threshold checks
+- top anomalies
+
 ### `bundle_manifest.json`
 
 Purpose:
@@ -318,6 +338,7 @@ Current manifest file inclusion list:
 - `metrics.csv`
 - `metrics.json`
 - `summary.md`
+- `report.html`
 
 Inclusion behavior:
 

@@ -12,8 +12,9 @@ Simple flow:
 - You run a scenario.
 - LabOps executes the backend with deterministic controls.
 - It records a per-run bundle with `scenario.json`, `run.json`,
-  `events.jsonl`, `metrics.csv`, `metrics.json`, `summary.md`, and
-  `hostprobe.json` plus raw NIC command outputs (`nic_*.txt`).
+  `events.jsonl`, `metrics.csv`, `metrics.json`, `summary.md`,
+  `report.html`, and `hostprobe.json` plus raw NIC command outputs
+  (`nic_*.txt`).
 - Tests verify contracts and determinism so behavior stays reproducible.
 
 ## Current Status
@@ -22,13 +23,14 @@ The repo currently has a working CLI, deterministic sim backend, scenario pack,
 artifact/event/metrics output pipeline, and CI-validated integration tests.
 Bundle packaging is implemented (manifest + optional zip), and triage bundle
 contracts are documented as an internal tooling spec in
-`docs/triage_bundle_spec.md`. Runs now also emit a one-page `summary.md`
-artifact for quick human triage. Agent-mode execution is still upcoming, but
-the experiment-state model and `agent_state.json` serialization contract now
-exist, and a first in-process `ExperimentRunner` can execute baseline + one
-variant automatically. A symptom-driven playbook selector is now in place for
-deterministic knob ordering, plus an OAAT variant generator that writes
-scenario mutations to `out/agent_runs/`.
+`docs/triage_bundle_spec.md`. Runs now also emit both a one-page `summary.md`
+and a static `report.html` artifact for quick human/browser triage.
+Agent-mode execution is still upcoming, but the experiment-state model and
+`agent_state.json` serialization contract now exist, and a first in-process
+`ExperimentRunner` can execute baseline + one variant automatically. A
+symptom-driven playbook selector is now in place for deterministic knob
+ordering, plus an OAAT variant generator that writes scenario mutations to
+`out/agent_runs/`.
 
 ## Milestone Progress
 
@@ -74,13 +76,14 @@ scenario mutations to `out/agent_runs/`.
   - `<out>/<run_id>/metrics.csv`
   - `<out>/<run_id>/metrics.json`
   - `<out>/<run_id>/summary.md`
+  - `<out>/<run_id>/report.html`
   - `<out>/<run_id>/bundle_manifest.json`
   - optional `<out>/<run_id>.zip` support bundle when `--zip` is requested
 - Baseline capture command:
   - `labops baseline capture <scenario.json> [--redact]`
   - writes baseline artifacts directly under `baselines/<scenario_id>/`
   - baseline directory includes `metrics.csv`, `metrics.json`, `summary.md`,
-    `hostprobe.json`, and raw NIC command outputs (`nic_*.txt`)
+    `report.html`, `hostprobe.json`, and raw NIC command outputs (`nic_*.txt`)
 - Compare command:
   - `labops compare --baseline ... --run ...`
   - compares summary metrics and writes `diff.json` + `diff.md`
@@ -111,6 +114,10 @@ scenario mutations to `out/agent_runs/`.
     top anomalies
   - adds optional manual Linux netem apply/show/teardown suggestions when
     `netem_profile` is set and a profile definition is available
+- Static HTML run report pipeline:
+  - writes `<out>/<run_id>/report.html`
+  - includes browser-friendly key metrics, expected-vs-actual deltas, and
+    rolling FPS table rows (plots-ready, no JS)
 - Optional netem execution pipeline (Linux only):
   - executes only when `--apply-netem` is provided with `--netem-iface`
   - requires root unless `--apply-netem-force` is explicitly used
@@ -181,7 +188,8 @@ scenario mutations to `out/agent_runs/`.
   from hostprobe JSON + NIC raw text outputs.
 - Netem option contract smoke test validating safe flag pairing for
   `--apply-netem` and `--netem-iface`.
-- Run summary smoke coverage validating `summary.md` presence/readability.
+- Run summary/report smoke coverage validating `summary.md` and `report.html`
+  presence/readability.
 - Catch2 core unit tests for schema/event JSON serialization (when available).
 - Internal triage bundle spec in `docs/triage_bundle_spec.md` covering:
   - bundle lifecycle and directory contract
@@ -294,6 +302,7 @@ run_id: run-<timestamp_ms>
 bundle: baselines/sim_baseline
 metrics_csv: baselines/sim_baseline/metrics.csv
 summary: baselines/sim_baseline/summary.md
+report_html: baselines/sim_baseline/report.html
 thresholds: pass
 ```
 
@@ -312,6 +321,7 @@ bundle: /tmp/labops-demo/run-<timestamp_ms>
 events: /tmp/labops-demo/run-<timestamp_ms>/events.jsonl
 metrics_json: /tmp/labops-demo/run-<timestamp_ms>/metrics.json
 summary: /tmp/labops-demo/run-<timestamp_ms>/summary.md
+report_html: /tmp/labops-demo/run-<timestamp_ms>/report.html
 thresholds: pass
 ```
 
@@ -341,6 +351,7 @@ Expected bundle layout per run:
 - `<out-dir>/<run_id>/metrics.csv`
 - `<out-dir>/<run_id>/metrics.json`
 - `<out-dir>/<run_id>/summary.md`
+- `<out-dir>/<run_id>/report.html`
 - `<out-dir>/<run_id>/bundle_manifest.json`
 - optional `<out-dir>/<run_id>.zip` when `--zip` is used
 
@@ -383,8 +394,8 @@ If you want to author new scenarios, follow `docs/scenario_schema.md`.
   - `baselines/<scenario_id>/`
 - This folder is the stable baseline target for future regression comparison.
 - Baseline capture currently emits the same core evidence set as run mode,
-  including `metrics.csv`, `metrics.json`, `summary.md`, `hostprobe.json`,
-  and `nic_*.txt`.
+  including `metrics.csv`, `metrics.json`, `summary.md`, `report.html`,
+  `hostprobe.json`, and `nic_*.txt`.
 
 ### Compare Diff Output
 
@@ -445,6 +456,18 @@ If you want to author new scenarios, follow `docs/scenario_schema.md`.
   - optional `Netem Commands (Manual)` section when scenario uses
     `netem_profile`
 - Stored at `<out>/<run_id>/summary.md`.
+
+### report.html
+
+- Static browser-friendly run report written by `labops run`.
+- Includes:
+  - run identity block
+  - key metrics table
+  - expected-vs-actual delta table for quick drift review
+  - rolling FPS sample table for chart handoff
+  - threshold and anomaly sections
+- Designed to be fully static (no JavaScript/runtime dependencies).
+- Stored at `<out>/<run_id>/report.html`.
 
 ### run.json
 

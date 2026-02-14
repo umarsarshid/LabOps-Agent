@@ -13,6 +13,8 @@ this folder guard against accidental output-shape or file-path regressions.
   the requested output directory and emits required metadata fields.
 - `metrics_writers_smoke.cpp`: verifies `WriteMetricsCsv(...)` and
   `WriteMetricsJson(...)` create both metrics artifacts with expected fields.
+- `html_report_writer_smoke.cpp`: verifies `WriteRunSummaryHtml(...)` creates
+  static `report.html` with key metric and delta sections for browser triage.
 - `scenario_writer_smoke.cpp`: verifies `WriteScenarioJson(...)` copies a
   source scenario file into `<bundle>/scenario.json`.
 - `bundle_manifest_writer_smoke.cpp`: verifies

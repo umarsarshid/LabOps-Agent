@@ -133,6 +133,7 @@ void RunScenarioE2E(const std::string& scenario_name, std::uint64_t run_suffix) 
   const fs::path metrics_csv = bundle_dir / "metrics.csv";
   const fs::path metrics_json = bundle_dir / "metrics.json";
   const fs::path summary_markdown = bundle_dir / "summary.md";
+  const fs::path report_html = bundle_dir / "report.html";
   if (!fs::exists(run_json)) {
     Fail("run.json missing for scenario: " + scenario_name);
   }
@@ -156,6 +157,9 @@ void RunScenarioE2E(const std::string& scenario_name, std::uint64_t run_suffix) 
   }
   if (!fs::exists(summary_markdown)) {
     Fail("summary.md missing for scenario: " + scenario_name);
+  }
+  if (!fs::exists(report_html)) {
+    Fail("report.html missing for scenario: " + scenario_name);
   }
   if (CountNicRawFiles(bundle_dir) == 0U) {
     Fail("raw NIC command outputs missing for scenario: " + scenario_name);

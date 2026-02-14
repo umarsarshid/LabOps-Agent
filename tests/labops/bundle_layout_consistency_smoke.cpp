@@ -95,6 +95,7 @@ void AssertBundleHasRequiredFiles(const fs::path& bundle_dir) {
   const fs::path metrics_csv = bundle_dir / "metrics.csv";
   const fs::path metrics_json = bundle_dir / "metrics.json";
   const fs::path summary_markdown = bundle_dir / "summary.md";
+  const fs::path report_html = bundle_dir / "report.html";
 
   if (!fs::exists(run_json)) {
     Fail("bundle missing run.json");
@@ -119,6 +120,9 @@ void AssertBundleHasRequiredFiles(const fs::path& bundle_dir) {
   }
   if (!fs::exists(summary_markdown)) {
     Fail("bundle missing summary.md");
+  }
+  if (!fs::exists(report_html)) {
+    Fail("bundle missing report.html");
   }
   if (CountNicRawFiles(bundle_dir) == 0U) {
     Fail("bundle missing raw NIC command output files (nic_*.txt)");

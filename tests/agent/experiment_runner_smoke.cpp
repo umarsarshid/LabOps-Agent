@@ -46,9 +46,10 @@ fs::path ResolveScenarioPath(const std::string& scenario_name) {
 
 void AssertRequiredRunArtifacts(const fs::path& bundle_dir) {
   const std::vector<fs::path> required = {
-      bundle_dir / "scenario.json",        bundle_dir / "run.json",    bundle_dir / "events.jsonl",
-      bundle_dir / "metrics.json",         bundle_dir / "metrics.csv", bundle_dir / "summary.md",
-      bundle_dir / "bundle_manifest.json",
+      bundle_dir / "scenario.json", bundle_dir / "run.json",
+      bundle_dir / "events.jsonl",  bundle_dir / "metrics.json",
+      bundle_dir / "metrics.csv",   bundle_dir / "summary.md",
+      bundle_dir / "report.html",   bundle_dir / "bundle_manifest.json",
   };
 
   for (const auto& artifact : required) {

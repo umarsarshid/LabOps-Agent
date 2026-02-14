@@ -93,6 +93,7 @@ target_compile_features(labops_metrics PUBLIC cxx_std_20)
 add_library(labops_artifacts
   src/artifacts/bundle_manifest_writer.cpp
   src/artifacts/bundle_zip_writer.cpp
+  src/artifacts/html_report_writer.cpp
   src/artifacts/hostprobe_writer.cpp
   src/artifacts/metrics_diff_writer.cpp
   src/artifacts/metrics_writer.cpp
@@ -440,6 +441,14 @@ add_executable(metrics_writers_smoke
 target_link_libraries(metrics_writers_smoke PRIVATE labops_artifacts labops_metrics)
 target_compile_features(metrics_writers_smoke PRIVATE cxx_std_20)
 add_test(NAME metrics_writers_smoke COMMAND metrics_writers_smoke)
+
+# Artifact smoke test for static HTML report writer contract.
+add_executable(html_report_writer_smoke
+  tests/artifacts/html_report_writer_smoke.cpp
+)
+target_link_libraries(html_report_writer_smoke PRIVATE labops_artifacts labops_metrics labops_schema)
+target_compile_features(html_report_writer_smoke PRIVATE cxx_std_20)
+add_test(NAME html_report_writer_smoke COMMAND html_report_writer_smoke)
 
 # Smoke test validating that timing/jitter metrics reflect injected jitter.
 add_executable(jitter_injection_smoke

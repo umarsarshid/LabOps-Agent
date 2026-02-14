@@ -19,7 +19,8 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
   actionable field-level errors when invalid.
 - `labops run <scenario.json> --out <dir> [--zip] [--redact] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: emits a per-run bundle under
   `<dir>/<run_id>/` containing `scenario.json`, `run.json`, `events.jsonl`,
-  `metrics.csv`, `metrics.json`, `summary.md`, `hostprobe.json`, and
+  `metrics.csv`, `metrics.json`, `summary.md`, `report.html`,
+  `hostprobe.json`, and
   platform NIC raw command outputs (`nic_*.txt`),
   `bundle_manifest.json`; optionally emits `<dir>/<run_id>.zip` when `--zip`
   is set; optionally redacts obvious host/user identifiers in hostprobe outputs

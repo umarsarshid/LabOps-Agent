@@ -144,8 +144,12 @@ int main() {
     Fail("metrics.json missing for threshold-fail run");
   }
   const fs::path summary_markdown = bundle_dir / "summary.md";
+  const fs::path report_html = bundle_dir / "report.html";
   if (!fs::exists(summary_markdown)) {
     Fail("summary.md missing for threshold-fail run");
+  }
+  if (!fs::exists(report_html)) {
+    Fail("report.html missing for threshold-fail run");
   }
 
   std::ifstream summary_input(summary_markdown, std::ios::binary);
@@ -158,6 +162,15 @@ int main() {
   AssertContains(summary_content, "**FAIL**");
   AssertContains(summary_content, "## Threshold Checks");
   AssertContains(summary_content, "Threshold violation:");
+
+  std::ifstream report_input(report_html, std::ios::binary);
+  if (!report_input) {
+    Fail("failed to open report.html for threshold-fail run");
+  }
+  const std::string report_content((std::istreambuf_iterator<char>(report_input)),
+                                   std::istreambuf_iterator<char>());
+  AssertContains(report_content, "LabOps Run Report");
+  AssertContains(report_content, "<span class=\"status fail\">FAIL</span>");
 
   fs::remove_all(temp_root, ec);
   std::cout << "run_threshold_failure_smoke: ok\n";

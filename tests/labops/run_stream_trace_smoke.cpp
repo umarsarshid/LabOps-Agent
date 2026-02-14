@@ -168,6 +168,7 @@ int main() {
   const fs::path metrics_csv = bundle_dir / "metrics.csv";
   const fs::path metrics_json = bundle_dir / "metrics.json";
   const fs::path summary_markdown = bundle_dir / "summary.md";
+  const fs::path report_html = bundle_dir / "report.html";
   if (!fs::exists(run_json)) {
     Fail("run.json was not produced");
   }
@@ -191,6 +192,9 @@ int main() {
   }
   if (!fs::exists(summary_markdown)) {
     Fail("summary.md was not produced");
+  }
+  if (!fs::exists(report_html)) {
+    Fail("report.html was not produced");
   }
   const std::vector<fs::path> nic_raw_files = CollectNicRawFiles(bundle_dir);
   if (nic_raw_files.empty()) {
@@ -288,6 +292,16 @@ int main() {
   AssertContains(summary_content, "sudo tc qdisc del dev <iface> root");
   AssertContains(summary_content, "**PASS**");
 
+  std::ifstream report_input(report_html, std::ios::binary);
+  if (!report_input) {
+    Fail("failed to open report.html");
+  }
+  const std::string report_content((std::istreambuf_iterator<char>(report_input)),
+                                   std::istreambuf_iterator<char>());
+  AssertContains(report_content, "<title>LabOps Run Report</title>");
+  AssertContains(report_content, "Diffs (Actual vs Expected)");
+  AssertContains(report_content, "Rolling FPS Samples");
+
   std::ifstream manifest_input(bundle_manifest_json, std::ios::binary);
   if (!manifest_input) {
     Fail("failed to open bundle_manifest.json");
@@ -302,6 +316,7 @@ int main() {
   AssertContains(manifest_content, "\"path\":\"metrics.csv\"");
   AssertContains(manifest_content, "\"path\":\"metrics.json\"");
   AssertContains(manifest_content, "\"path\":\"summary.md\"");
+  AssertContains(manifest_content, "\"path\":\"report.html\"");
   AssertContains(manifest_content, "\"path\":\"nic_");
 
   fs::remove_all(temp_root, ec);

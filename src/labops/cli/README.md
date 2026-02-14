@@ -30,6 +30,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Generate one-page `summary.md` per run with pass/fail, key metrics, and top
   anomalies for quick human triage, including optional manual netem
   apply/show/teardown suggestions when `netem_profile` is configured.
+- Generate static `report.html` per run for browser-based review with no JS,
+  including plots-ready metric and delta tables.
 - Optionally apply Linux netem profile impairments when explicitly requested
   (`--apply-netem`) and always teardown via scope guard on exit.
 - Emit structured runtime logs with selectable severity and run-id context for
@@ -38,7 +40,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
   return non-zero when thresholds fail.
 - Emit standardized per-run bundles under `<out>/<run_id>/` including
   `scenario.json`, `run.json`, `events.jsonl`, metrics artifacts,
-  `summary.md`, `hostprobe.json` (with parsed NIC MTU/link hints when available),
+  `summary.md`, `report.html`, `hostprobe.json`
+  (with parsed NIC MTU/link hints when available),
   platform NIC raw command outputs (`nic_*.txt`),
   and `bundle_manifest.json`
   (artifact list + hashes).
