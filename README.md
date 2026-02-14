@@ -26,7 +26,8 @@ contracts are documented as an internal tooling spec in
 artifact for quick human triage. Agent-mode execution is still upcoming, but
 the experiment-state model and `agent_state.json` serialization contract now
 exist, and a first in-process `ExperimentRunner` can execute baseline + one
-variant automatically.
+variant automatically. A symptom-driven playbook selector is now in place for
+deterministic knob ordering.
 
 ## Milestone Progress
 
@@ -115,6 +116,11 @@ variant automatically.
     automatically in-process
   - reuses the same scenario runner pipeline as CLI (`ExecuteScenarioRun`)
     rather than shelling out to subprocess commands
+- Agent playbook framework:
+  - maps symptom input to an ordered list of knobs to try
+  - current symptom coverage:
+    - `dropped_frames` -> `packet_delay_ms`, `fps`, `roi_enabled`,
+      `reorder_percent`, `loss_percent`
 - Host probe pipeline:
   - writes `<out>/<run_id>/hostprobe.json`
   - includes OS/CPU/RAM/uptime/load snapshot and parsed NIC highlights

@@ -32,7 +32,7 @@ LabOps must be predictable. Tests verify command contracts, scenario validation,
 - Agent-mode smoke tests under `tests/agent/` for
   `agent_state.json` contract stability and in-process experiment runner flow
   (baseline + one variant), including clean failure behavior for invalid
-  scenario paths.
+  scenario paths and symptom-based playbook selection.
 
 ## Design principle
 

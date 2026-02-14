@@ -59,6 +59,7 @@ target_compile_features(labops_hostprobe PUBLIC cxx_std_20)
 add_library(labops_agent
   src/agent/experiment_runner.cpp
   src/agent/experiment_state.cpp
+  src/agent/playbook.cpp
   src/agent/state_writer.cpp
 )
 target_include_directories(labops_agent PUBLIC src)
@@ -144,6 +145,14 @@ target_include_directories(experiment_runner_failure_smoke PRIVATE src)
 target_link_libraries(experiment_runner_failure_smoke PRIVATE labops_agent labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
 target_compile_features(experiment_runner_failure_smoke PRIVATE cxx_std_20)
 add_test(NAME experiment_runner_failure_smoke COMMAND experiment_runner_failure_smoke)
+
+# Smoke test for symptom-driven playbook selection and ordered knob output.
+add_executable(playbook_selection_smoke
+  tests/agent/playbook_selection_smoke.cpp
+)
+target_link_libraries(playbook_selection_smoke PRIVATE labops_agent)
+target_compile_features(playbook_selection_smoke PRIVATE cxx_std_20)
+add_test(NAME playbook_selection_smoke COMMAND playbook_selection_smoke)
 
 # Smoke test for scenario snapshot writer contract.
 add_executable(scenario_writer_smoke

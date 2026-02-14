@@ -22,3 +22,7 @@ artifact consumers.
   - Uses a missing variant scenario path.
   - Verifies `ExperimentRunner` fails fast with a clear error message.
   - Confirms no baseline/variant run starts when preflight validation fails.
+- `playbook_selection_smoke.cpp`
+  - Verifies symptom input resolves to the right playbook.
+  - Verifies ordered knob list for dropped-frame triage.
+  - Verifies unknown symptoms fail with actionable error text.

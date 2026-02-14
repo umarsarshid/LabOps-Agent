@@ -22,6 +22,7 @@ This file helps the next coding agent continue work without re-discovery.
   with guaranteed teardown attempt on exit after successful apply
 - agent experiment-state model plus `agent_state.json` serializer/writer
 - in-process `ExperimentRunner` foundation for baseline + one-variant flow
+- symptom-driven playbook framework for ordered knob selection
 - bundle manifest generation (`bundle_manifest.json`)
 - optional support bundle zip (`--zip`)
 
@@ -31,7 +32,7 @@ Long-term goal:
 
 ## Current Snapshot (as of February 14, 2026)
 
-- Latest commit before current work: `fcd21a0` (`feat(agent): add experiment state model and json artifact writer`)
+- Latest commit before current work: `26c75d7` (`test(agent): add missing-variant failure smoke`)
 - Milestones completed:
   - Milestone 0: repo/build/style/CI foundation
   - Milestone 1: CLI skeleton + output contracts
@@ -44,7 +45,7 @@ Long-term goal:
   - Milestone 8: done (netem profiles, suggestions, guarded execution)
   - Milestone 9: in progress (agent-mode foundations)
 - Latest known test status:
-  - full smoke suite passing after `0042`
+  - full smoke suite passing after `0043` plus failure-path smoke
 
 ## Confirmed Working Commands
 
@@ -120,6 +121,6 @@ provided, likely follow-on work is:
 - netem execution harness (apply/teardown orchestration instead of manual-only suggestions)
 - richer netem status evidence in artifacts/events (applied/teardown outcomes)
 - agent experiment planner/runner (OAAT isolation loop) on top of
-  `ExperimentState` + `agent_state.json` + `ExperimentRunner`
+  `ExperimentState` + `agent_state.json` + `ExperimentRunner` + symptom playbooks
 - engineer packet generation
 - hardware SDK backend implementation behind `ICameraBackend`
