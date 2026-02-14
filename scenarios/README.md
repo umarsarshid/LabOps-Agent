@@ -22,6 +22,8 @@ This directory is the source of truth for runnable test definitions. Scenarios s
 - Prefer explicit values over hidden defaults.
 - Name scenarios by intent so run history remains searchable.
 - Follow `docs/scenario_schema.md` for required fields and constraints.
+- Set realistic `thresholds` values because `labops run` now enforces them and
+  returns non-zero when thresholds fail.
 
 ## Connection to the project
 

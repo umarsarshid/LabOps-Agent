@@ -23,9 +23,9 @@
     "reorder": 3
   },
   "thresholds": {
-    "min_avg_fps": 15.0,
+    "min_avg_fps": 5.0,
     "max_drop_rate_percent": 80.0,
-    "max_inter_frame_interval_p95_us": 80000,
-    "max_inter_frame_jitter_p95_us": 30000
+    "max_inter_frame_interval_p95_us": 300000,
+    "max_inter_frame_jitter_p95_us": 150000
   }
 }

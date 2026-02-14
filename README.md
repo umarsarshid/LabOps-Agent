@@ -31,7 +31,7 @@ contracts are documented as an internal tooling spec in
 - Milestone 3: done (FPS/drop/jitter metrics + metric artifacts)
 - Milestone 4: done (scenario schema, validation, scenario application in run)
 - Milestone 5: done (bundle layout, manifest, optional support zip, bundle docs)
-- Milestone 6: done (baseline capture + compare diff outputs)
+- Milestone 6: done (baseline capture + compare diff outputs + threshold pass/fail)
 
 ## Implemented So Far
 
@@ -66,6 +66,9 @@ contracts are documented as an internal tooling spec in
   - `labops compare --baseline ... --run ...`
   - compares summary metrics and writes `diff.json` + `diff.md`
   - writes compare outputs to run target by default (or `--out <dir>`)
+- Threshold enforcement in run flow:
+  - evaluates scenario thresholds after metrics computation
+  - returns non-zero on threshold violations
 - Stream lifecycle event emission in `labops run`:
   - `CONFIG_APPLIED`
   - `STREAM_STARTED`
@@ -98,6 +101,7 @@ contracts are documented as an internal tooling spec in
 - Baseline scenario integration smoke test validating expected metric ranges.
 - Baseline capture smoke test validating `baselines/<scenario_id>/` output contract.
 - Compare diff smoke test validating `diff.json` + `diff.md` delta generation.
+- Threshold failure smoke test validating non-zero `labops run` exit on violations.
 - Catch2 core unit tests for schema/event JSON serialization (when available).
 - Internal triage bundle spec in `docs/triage_bundle_spec.md` covering:
   - bundle lifecycle and directory contract
@@ -205,6 +209,18 @@ If you want to author new scenarios, follow `docs/scenario_schema.md`.
   - `diff.json` (machine-readable deltas)
   - `diff.md` (human-readable delta table)
 - Compare outputs default to the run target unless `--out <dir>` is provided.
+
+### Threshold Pass/Fail
+
+- `labops run` checks scenario threshold fields against computed metrics.
+- Violations currently include:
+  - `avg_fps < min_avg_fps`
+  - `drop_rate_percent > max_drop_rate_percent`
+  - `inter_frame_interval_p95_us > max_inter_frame_interval_p95_us`
+  - `inter_frame_jitter_p95_us > max_inter_frame_jitter_p95_us`
+- On violation:
+  - process exits non-zero
+  - bundle artifacts are still written for investigation
 
 ### scenario.json
 

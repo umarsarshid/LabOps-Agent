@@ -109,6 +109,8 @@ Notes:
 
 - Type: object
 - Purpose: pass/fail expectations for automated triage.
+- Runtime behavior: `labops run` evaluates configured thresholds against
+  computed metrics and returns non-zero when any threshold is violated.
 - Fields:
   - `min_avg_fps` (number, optional)
   - `max_drop_rate_percent` (number, optional)

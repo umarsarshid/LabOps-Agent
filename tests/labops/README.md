@@ -33,6 +33,8 @@ surface (argument parsing + runtime orchestration + artifact/event output).
 - `compare_diff_smoke.cpp`: verifies `labops compare --baseline ... --run ...`
   generates `diff.json` + `diff.md` and reports non-zero deltas for a
   fault-injected run against baseline.
+- `run_threshold_failure_smoke.cpp`: verifies a threshold-violating scenario
+  returns non-zero from `labops run` while still producing core artifacts.
 
 ## Connection to the project
 

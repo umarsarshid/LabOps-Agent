@@ -240,6 +240,17 @@ target_link_libraries(compare_diff_smoke PRIVATE labops_artifacts labops_backend
 target_compile_features(compare_diff_smoke PRIVATE cxx_std_20)
 add_test(NAME compare_diff_smoke COMMAND compare_diff_smoke)
 
+# Integration smoke test for scenario threshold enforcement:
+# `labops run` must return non-zero when configured thresholds fail.
+add_executable(run_threshold_failure_smoke
+  tests/labops/run_threshold_failure_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(run_threshold_failure_smoke PRIVATE src)
+target_link_libraries(run_threshold_failure_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(run_threshold_failure_smoke PRIVATE cxx_std_20)
+add_test(NAME run_threshold_failure_smoke COMMAND run_threshold_failure_smoke)
+
 # Scenario schema validation smoke tests.
 add_executable(scenario_validation_smoke
   tests/scenarios/scenario_validation_smoke.cpp

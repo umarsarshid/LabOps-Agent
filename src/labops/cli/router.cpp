@@ -18,6 +18,8 @@
 #include <cctype>
 #include <charconv>
 #include <chrono>
+#include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -148,6 +150,13 @@ struct RunOptions {
 struct RunPlan {
   backends::sim::SimScenarioConfig sim_config;
   std::chrono::milliseconds duration{1'000};
+  struct Thresholds {
+    std::optional<double> min_avg_fps;
+    std::optional<double> max_drop_rate_percent;
+    std::optional<double> max_inter_frame_interval_p95_us;
+    std::optional<double> max_inter_frame_jitter_p95_us;
+    std::optional<std::uint64_t> max_disconnect_count;
+  } thresholds;
 };
 
 struct CompareOptions {
@@ -368,6 +377,84 @@ std::optional<std::uint64_t> FindUnsignedJsonField(const std::string& text, std:
   return parsed;
 }
 
+// Lightweight floating-point field extraction for threshold wiring.
+// Supports JSON number forms:
+// - 123
+// - 123.45
+// - 1.23e+3
+std::optional<double> FindNumberJsonField(const std::string& text, std::string_view key) {
+  const std::string needle = "\"" + std::string(key) + "\"";
+  const std::size_t key_pos = text.find(needle);
+  if (key_pos == std::string::npos) {
+    return std::nullopt;
+  }
+
+  const std::size_t colon_pos = text.find(':', key_pos + needle.size());
+  if (colon_pos == std::string::npos) {
+    return std::nullopt;
+  }
+
+  std::size_t value_pos = colon_pos + 1;
+  while (value_pos < text.size() &&
+         std::isspace(static_cast<unsigned char>(text[value_pos])) != 0) {
+    ++value_pos;
+  }
+
+  const std::size_t start = value_pos;
+  if (value_pos < text.size() && (text[value_pos] == '+' || text[value_pos] == '-')) {
+    ++value_pos;
+  }
+
+  bool has_digits = false;
+  while (value_pos < text.size() &&
+         std::isdigit(static_cast<unsigned char>(text[value_pos])) != 0) {
+    ++value_pos;
+    has_digits = true;
+  }
+
+  if (value_pos < text.size() && text[value_pos] == '.') {
+    ++value_pos;
+    while (value_pos < text.size() &&
+           std::isdigit(static_cast<unsigned char>(text[value_pos])) != 0) {
+      ++value_pos;
+      has_digits = true;
+    }
+  }
+
+  if (!has_digits) {
+    return std::nullopt;
+  }
+
+  if (value_pos < text.size() && (text[value_pos] == 'e' || text[value_pos] == 'E')) {
+    ++value_pos;
+    if (value_pos < text.size() && (text[value_pos] == '+' || text[value_pos] == '-')) {
+      ++value_pos;
+    }
+
+    std::size_t exponent_digits = 0;
+    while (value_pos < text.size() &&
+           std::isdigit(static_cast<unsigned char>(text[value_pos])) != 0) {
+      ++value_pos;
+      ++exponent_digits;
+    }
+    if (exponent_digits == 0U) {
+      return std::nullopt;
+    }
+  }
+
+  const std::string value_text = text.substr(start, value_pos - start);
+  char* parse_end = nullptr;
+  const double parsed = std::strtod(value_text.c_str(), &parse_end);
+  if (parse_end == nullptr || *parse_end != '\0') {
+    return std::nullopt;
+  }
+  if (!std::isfinite(parsed)) {
+    return std::nullopt;
+  }
+
+  return parsed;
+}
+
 bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, std::string& error) {
   std::string scenario_text;
   if (!ReadTextFile(scenario_path, scenario_text, error)) {
@@ -394,6 +481,47 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
       return true;
     }
     target = value.value();
+    return true;
+  };
+
+  auto assign_non_negative_double = [&](std::string_view key, std::optional<double>& target,
+                                        bool percent_0_to_100 = false) {
+    const auto value = FindNumberJsonField(scenario_text, key);
+    if (!value.has_value()) {
+      return true;
+    }
+
+    const double parsed = value.value();
+    if (!std::isfinite(parsed) || parsed < 0.0) {
+      error = "scenario threshold must be a non-negative number for key: " + std::string(key);
+      return false;
+    }
+    if (percent_0_to_100 && parsed > 100.0) {
+      error = "scenario threshold must be in range [0,100] for key: " + std::string(key);
+      return false;
+    }
+    target = parsed;
+    return true;
+  };
+
+  auto assign_non_negative_integer_threshold = [&](std::string_view key, std::optional<std::uint64_t>& target) {
+    const auto value = FindNumberJsonField(scenario_text, key);
+    if (!value.has_value()) {
+      return true;
+    }
+
+    const double parsed = value.value();
+    if (!std::isfinite(parsed) || parsed < 0.0) {
+      error = "scenario threshold must be a non-negative integer for key: " + std::string(key);
+      return false;
+    }
+    const double floored = std::floor(parsed);
+    if (floored != parsed ||
+        floored > static_cast<double>(std::numeric_limits<std::uint64_t>::max())) {
+      error = "scenario threshold must be a non-negative integer for key: " + std::string(key);
+      return false;
+    }
+    target = static_cast<std::uint64_t>(floored);
     return true;
   };
 
@@ -436,6 +564,27 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
     return false;
   }
   if (!assign_u32("reorder", plan.sim_config.faults.reorder)) {
+    return false;
+  }
+
+  if (!assign_non_negative_double("min_avg_fps", plan.thresholds.min_avg_fps)) {
+    return false;
+  }
+  if (!assign_non_negative_double("max_drop_rate_percent",
+                                  plan.thresholds.max_drop_rate_percent,
+                                  /*percent_0_to_100=*/true)) {
+    return false;
+  }
+  if (!assign_non_negative_double("max_inter_frame_interval_p95_us",
+                                  plan.thresholds.max_inter_frame_interval_p95_us)) {
+    return false;
+  }
+  if (!assign_non_negative_double("max_inter_frame_jitter_p95_us",
+                                  plan.thresholds.max_inter_frame_jitter_p95_us)) {
+    return false;
+  }
+  if (!assign_non_negative_integer_threshold("max_disconnect_count",
+                                             plan.thresholds.max_disconnect_count)) {
     return false;
   }
 
@@ -512,6 +661,55 @@ BuildConfigAppliedPayload(const core::schema::RunInfo& run_info,
   }
 
   return payload;
+}
+
+// Evaluates scenario pass/fail thresholds against computed metrics.
+// Returns true when all configured thresholds pass and appends actionable
+// failure reasons otherwise.
+bool EvaluateRunThresholds(const RunPlan::Thresholds& thresholds,
+                           const metrics::FpsReport& report,
+                           std::vector<std::string>& failures) {
+  failures.clear();
+
+  auto check_min = [&](std::string_view label, double actual, const std::optional<double>& minimum) {
+    if (!minimum.has_value()) {
+      return;
+    }
+    if (actual + 1e-9 < minimum.value()) {
+      failures.push_back(std::string(label) + " actual=" + std::to_string(actual) +
+                         " is below minimum=" + std::to_string(minimum.value()));
+    }
+  };
+
+  auto check_max = [&](std::string_view label, double actual, const std::optional<double>& maximum) {
+    if (!maximum.has_value()) {
+      return;
+    }
+    if (actual - 1e-9 > maximum.value()) {
+      failures.push_back(std::string(label) + " actual=" + std::to_string(actual) +
+                         " exceeds maximum=" + std::to_string(maximum.value()));
+    }
+  };
+
+  check_min("avg_fps", report.avg_fps, thresholds.min_avg_fps);
+  check_max("drop_rate_percent", report.drop_rate_percent, thresholds.max_drop_rate_percent);
+  check_max("inter_frame_interval_p95_us",
+            report.inter_frame_interval_us.p95_us,
+            thresholds.max_inter_frame_interval_p95_us);
+  check_max("inter_frame_jitter_p95_us",
+            report.inter_frame_jitter_us.p95_us,
+            thresholds.max_inter_frame_jitter_p95_us);
+
+  if (thresholds.max_disconnect_count.has_value()) {
+    constexpr std::uint64_t kObservedDisconnectCount = 0;
+    if (kObservedDisconnectCount > thresholds.max_disconnect_count.value()) {
+      failures.push_back("disconnect_count actual=" + std::to_string(kObservedDisconnectCount) +
+                         " exceeds maximum=" +
+                         std::to_string(thresholds.max_disconnect_count.value()));
+    }
+  }
+
+  return failures.empty();
 }
 
 // Centralized run execution keeps `run` and `baseline capture` behavior aligned
@@ -750,7 +948,19 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
             << " jitter_p95=" << fps_report.inter_frame_jitter_us.p95_us << '\n';
   std::cout << "frames: total=" << frames.size() << " received=" << received_count
             << " dropped=" << dropped_count << '\n';
-  return kExitSuccess;
+
+  std::vector<std::string> threshold_failures;
+  const bool thresholds_passed = EvaluateRunThresholds(run_plan.thresholds, fps_report, threshold_failures);
+  if (thresholds_passed) {
+    std::cout << "thresholds: pass\n";
+    return kExitSuccess;
+  }
+
+  std::cout << "thresholds: fail count=" << threshold_failures.size() << '\n';
+  for (const auto& failure : threshold_failures) {
+    std::cerr << "threshold failed: " << failure << '\n';
+  }
+  return kExitFailure;
 }
 
 int CommandRun(const std::vector<std::string_view>& args) {
