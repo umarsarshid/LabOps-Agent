@@ -148,7 +148,8 @@ int main() {
     pause_argv.push_back(arg.data());
   }
 
-  const int pause_exit = labops::cli::Dispatch(static_cast<int>(pause_argv.size()), pause_argv.data());
+  const int pause_exit =
+      labops::cli::Dispatch(static_cast<int>(pause_argv.size()), pause_argv.data());
   if (pause_exit != 0) {
     Fail("soak pause run returned non-zero exit code");
   }
@@ -188,12 +189,7 @@ int main() {
   fs::remove(stop_file, ec);
 
   std::vector<std::string> resume_argv_storage = {
-      "labops",
-      "run",
-      scenario_path.string(),
-      "--soak",
-      "--resume",
-      checkpoint_path.string(),
+      "labops", "run", scenario_path.string(), "--soak", "--resume", checkpoint_path.string(),
   };
   std::vector<char*> resume_argv;
   resume_argv.reserve(resume_argv_storage.size());
