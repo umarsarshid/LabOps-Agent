@@ -135,6 +135,16 @@ target_link_libraries(experiment_runner_smoke PRIVATE labops_agent labops_artifa
 target_compile_features(experiment_runner_smoke PRIVATE cxx_std_20)
 add_test(NAME experiment_runner_smoke COMMAND experiment_runner_smoke)
 
+# Smoke test for clean failure behavior when experiment input paths are invalid.
+add_executable(experiment_runner_failure_smoke
+  tests/agent/experiment_runner_failure_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(experiment_runner_failure_smoke PRIVATE src)
+target_link_libraries(experiment_runner_failure_smoke PRIVATE labops_agent labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(experiment_runner_failure_smoke PRIVATE cxx_std_20)
+add_test(NAME experiment_runner_failure_smoke COMMAND experiment_runner_failure_smoke)
+
 # Smoke test for scenario snapshot writer contract.
 add_executable(scenario_writer_smoke
   tests/artifacts/scenario_writer_smoke.cpp

@@ -1,6 +1,8 @@
 #include "agent/experiment_runner.hpp"
 
 #include <filesystem>
+#include <fstream>
+#include <string_view>
 
 namespace fs = std::filesystem;
 
@@ -8,17 +10,47 @@ namespace labops::agent {
 
 namespace {
 
+bool ValidateScenarioPath(const std::string& scenario_path, std::string_view label, std::string& error) {
+  if (scenario_path.empty()) {
+    error = std::string(label) + " scenario path cannot be empty";
+    return false;
+  }
+
+  const fs::path path(scenario_path);
+  std::error_code ec;
+  if (!fs::exists(path, ec) || ec) {
+    error = std::string(label) + " scenario file not found: " + scenario_path;
+    return false;
+  }
+
+  if (!fs::is_regular_file(path, ec) || ec) {
+    error = std::string(label) + " scenario path must point to a regular file: " + scenario_path;
+    return false;
+  }
+
+  if (path.extension() != ".json") {
+    error = std::string(label) + " scenario file must use .json extension: " + scenario_path;
+    return false;
+  }
+
+  std::ifstream scenario_file(path);
+  if (!scenario_file) {
+    error = std::string(label) + " scenario file cannot be opened: " + scenario_path;
+    return false;
+  }
+
+  return true;
+}
+
 bool ValidateRequest(const ExperimentRunRequest& request, std::string& error) {
-  if (request.baseline_scenario_path.empty()) {
-    error = "baseline scenario path cannot be empty";
-    return false;
-  }
-  if (request.variant_scenario_path.empty()) {
-    error = "variant scenario path cannot be empty";
-    return false;
-  }
   if (request.output_root.empty()) {
     error = "output root cannot be empty";
+    return false;
+  }
+  if (!ValidateScenarioPath(request.baseline_scenario_path, "baseline", error)) {
+    return false;
+  }
+  if (!ValidateScenarioPath(request.variant_scenario_path, "variant", error)) {
     return false;
   }
   return true;

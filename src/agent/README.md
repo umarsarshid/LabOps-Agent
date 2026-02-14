@@ -16,6 +16,8 @@ triage.
   - Runs baseline capture + one variant automatically.
   - Reuses the same internal scenario runner used by CLI (`ExecuteScenarioRun`)
     so behavior stays aligned with standard run contracts.
+  - Performs preflight scenario-path validation so failures are explicit and
+    actionable before any run artifacts are produced.
 - `experiment_state.hpp` / `experiment_state.cpp`
   - Canonical `ExperimentState` model.
   - Structured lists for:

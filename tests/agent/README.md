@@ -18,3 +18,7 @@ artifact consumers.
   - Runs baseline + one variant automatically via `ExperimentRunner`.
   - Confirms both runs produce expected bundle artifacts.
   - Verifies execution happens in-process through shared runner contracts.
+- `experiment_runner_failure_smoke.cpp`
+  - Uses a missing variant scenario path.
+  - Verifies `ExperimentRunner` fails fast with a clear error message.
+  - Confirms no baseline/variant run starts when preflight validation fails.
