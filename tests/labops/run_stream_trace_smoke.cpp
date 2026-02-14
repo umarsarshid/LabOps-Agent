@@ -253,6 +253,8 @@ int main() {
   AssertContains(hostprobe_content, "\"load_avg\":{");
   AssertContains(hostprobe_content, "\"nic_highlights\":{");
   AssertContains(hostprobe_content, "\"interfaces\":[");
+  AssertContains(hostprobe_content, "\"mtu_hint\":");
+  AssertContains(hostprobe_content, "\"link_speed_hint\":");
 
   std::ifstream summary_input(summary_markdown, std::ios::binary);
   if (!summary_input) {

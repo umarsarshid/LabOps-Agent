@@ -3,10 +3,12 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <charconv>
 #include <cstdio>
 #include <ctime>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 #include <string_view>
 #include <thread>
@@ -206,6 +208,116 @@ std::string NormalizeInterfaceName(std::string value) {
   return value;
 }
 
+std::optional<std::uint32_t> ParseFirstUnsigned(std::string_view text) {
+  std::size_t start = 0;
+  while (start < text.size() &&
+         std::isdigit(static_cast<unsigned char>(text[start])) == 0) {
+    ++start;
+  }
+  if (start == text.size()) {
+    return std::nullopt;
+  }
+
+  std::size_t end = start;
+  while (end < text.size() &&
+         std::isdigit(static_cast<unsigned char>(text[end])) != 0) {
+    ++end;
+  }
+
+  std::uint64_t parsed = 0;
+  const auto* begin = text.data() + static_cast<std::ptrdiff_t>(start);
+  const auto* finish = text.data() + static_cast<std::ptrdiff_t>(end);
+  const auto [ptr, ec] = std::from_chars(begin, finish, parsed);
+  if (ec != std::errc() || ptr != finish ||
+      parsed > static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max())) {
+    return std::nullopt;
+  }
+
+  return static_cast<std::uint32_t>(parsed);
+}
+
+std::optional<std::uint32_t> ExtractUnsignedAfterToken(std::string_view text,
+                                                       std::string_view token) {
+  const std::size_t pos = text.find(token);
+  if (pos == std::string::npos) {
+    return std::nullopt;
+  }
+  return ParseFirstUnsigned(text.substr(pos + token.size()));
+}
+
+std::optional<std::string> NormalizeLinkSpeedHint(std::string value) {
+  value = Trim(value);
+  if (value.empty()) {
+    return std::nullopt;
+  }
+
+  const std::string lower = ToLower(value);
+  if (lower == "unknown" || lower == "unknown!" || lower == "n/a") {
+    return std::nullopt;
+  }
+
+  bool has_digit = false;
+  for (const char ch : lower) {
+    if (std::isdigit(static_cast<unsigned char>(ch)) != 0) {
+      has_digit = true;
+      break;
+    }
+  }
+
+  const bool has_speed_unit =
+      lower.find("mb/s") != std::string::npos ||
+      lower.find("mbps") != std::string::npos ||
+      lower.find("gb/s") != std::string::npos ||
+      lower.find("gbps") != std::string::npos ||
+      lower.find("tb/s") != std::string::npos ||
+      lower.find("tbps") != std::string::npos ||
+      lower.find("base") != std::string::npos;
+  if (!has_digit || !has_speed_unit) {
+    return std::nullopt;
+  }
+
+  return value;
+}
+
+std::optional<std::string> ParseMacMediaSpeedHint(std::string_view line) {
+  const std::string trimmed = Trim(line);
+  if (!StartsWith(trimmed, "media:")) {
+    return std::nullopt;
+  }
+
+  const std::size_t open = trimmed.find('(');
+  const std::size_t close = trimmed.find(')', open == std::string::npos ? 0U : open + 1U);
+  if (open != std::string::npos && close != std::string::npos && close > open + 1U) {
+    const std::string token = FirstToken(trimmed.substr(open + 1U, close - open - 1U));
+    const std::string token_lower = ToLower(token);
+    if (token_lower.find("base") != std::string::npos ||
+        token_lower.find("mbps") != std::string::npos ||
+        token_lower.find("gbps") != std::string::npos) {
+      return NormalizeLinkSpeedHint(token);
+    }
+  }
+
+  return NormalizeLinkSpeedHint(Trim(trimmed.substr(std::string_view("media:").size())));
+}
+
+std::optional<std::string> ParseLinuxEthtoolSpeedHint(const std::string& output) {
+  std::istringstream in(output);
+  std::string line;
+  while (std::getline(in, line)) {
+    const std::string trimmed = Trim(line);
+    if (!StartsWith(trimmed, "Speed:")) {
+      continue;
+    }
+
+    const std::string value = Trim(trimmed.substr(std::string_view("Speed:").size()));
+    const auto normalized = NormalizeLinkSpeedHint(value);
+    if (normalized.has_value()) {
+      return normalized;
+    }
+  }
+  return std::nullopt;
+}
+
 NicInterfaceHighlight& GetOrCreateInterface(NicHighlights& highlights,
                                             const std::string& interface_name) {
   for (auto& iface : highlights.interfaces) {
@@ -334,7 +446,10 @@ void ParseLinuxIpAddressOutput(const std::string& output, NicHighlights& highlig
         if (second_colon != std::string::npos) {
           current_iface = NormalizeInterfaceName(trimmed.substr(name_start, second_colon - name_start));
           if (!current_iface.empty()) {
-            (void)GetOrCreateInterface(highlights, current_iface);
+            NicInterfaceHighlight& iface = GetOrCreateInterface(highlights, current_iface);
+            if (const auto mtu = ExtractUnsignedAfterToken(trimmed, "mtu "); mtu.has_value()) {
+              iface.mtu_hint = mtu.value();
+            }
           }
           continue;
         }
@@ -397,7 +512,10 @@ void ParseMacIfconfigOutput(const std::string& output, NicHighlights& highlights
       if (colon != std::string::npos) {
         current_iface = NormalizeInterfaceName(line.substr(0, colon));
         if (!current_iface.empty()) {
-          (void)GetOrCreateInterface(highlights, current_iface);
+          NicInterfaceHighlight& iface = GetOrCreateInterface(highlights, current_iface);
+          if (const auto mtu = ExtractUnsignedAfterToken(line, "mtu "); mtu.has_value()) {
+            iface.mtu_hint = mtu.value();
+          }
         }
       }
       continue;
@@ -425,6 +543,13 @@ void ParseMacIfconfigOutput(const std::string& output, NicHighlights& highlights
       std::string ip = FirstToken(trimmed.substr(std::string_view("inet6 ").size()));
       ip = StripIpv6Zone(ip);
       AddUnique(iface.ipv6_addresses, ip);
+      continue;
+    }
+
+    if (StartsWith(trimmed, "media:")) {
+      if (const auto speed = ParseMacMediaSpeedHint(trimmed); speed.has_value()) {
+        iface.link_speed_hint = speed.value();
+      }
       continue;
     }
   }
@@ -532,6 +657,29 @@ void ParseWindowsIpconfigOutput(const std::string& output, NicHighlights& highli
       }
       continue;
     }
+
+    if (lower.find("mtu") != std::string::npos) {
+      std::string value = StripPrefixUntil(trimmed, ':');
+      if (value.empty()) {
+        value = trimmed;
+      }
+      if (const auto mtu = ParseFirstUnsigned(value); mtu.has_value()) {
+        iface.mtu_hint = mtu.value();
+      }
+      continue;
+    }
+
+    if (lower.find("link speed") != std::string::npos) {
+      std::string value = StripPrefixUntil(trimmed, ':');
+      if (value.empty()) {
+        value = trimmed;
+      }
+      if (const auto speed = NormalizeLinkSpeedHint(value);
+          speed.has_value()) {
+        iface.link_speed_hint = speed.value();
+      }
+      continue;
+    }
   }
 }
 
@@ -582,6 +730,10 @@ void CollectLinuxNicProbe(NicProbeSnapshot& snapshot) {
   for (const auto& iface_name : interface_names) {
     const std::string command = "ethtool " + iface_name;
     NicCommandCapture per_iface = CaptureCommand("", command);
+    NicInterfaceHighlight& iface = GetOrCreateInterface(snapshot.highlights, iface_name);
+    if (const auto speed = ParseLinuxEthtoolSpeedHint(per_iface.output); speed.has_value()) {
+      iface.link_speed_hint = speed.value();
+    }
     if (per_iface.exit_code != 0) {
       aggregate_exit_code = per_iface.exit_code;
     }
@@ -796,6 +948,18 @@ void WriteNicHighlightsJson(std::ostringstream& out, const NicHighlights& highli
     WriteJsonStringArray(out, iface.ipv4_addresses);
     out << ",\"ipv6_addresses\":";
     WriteJsonStringArray(out, iface.ipv6_addresses);
+    out << ",\"mtu_hint\":";
+    if (iface.mtu_hint.has_value()) {
+      out << iface.mtu_hint.value();
+    } else {
+      out << "null";
+    }
+    out << ",\"link_speed_hint\":";
+    if (iface.link_speed_hint.has_value()) {
+      out << "\"" << EscapeJson(iface.link_speed_hint.value()) << "\"";
+    } else {
+      out << "null";
+    }
     out << ",\"has_default_route\":" << (iface.has_default_route ? "true" : "false");
     out << "}";
   }

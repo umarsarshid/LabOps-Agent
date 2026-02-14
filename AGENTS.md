@@ -12,6 +12,7 @@ This file helps the next coding agent continue work without re-discovery.
 - one-page run summary generation (`summary.md`)
 - host system snapshot generation (`hostprobe.json`)
 - NIC raw command evidence (`nic_*.txt`) + parsed highlights in host probe
+  (including MTU/link hints when available)
 - bundle manifest generation (`bundle_manifest.json`)
 - optional support bundle zip (`--zip`)
 
@@ -32,7 +33,7 @@ Long-term goal:
   - Milestone 6: baseline capture + compare diff outputs + threshold pass/fail
   - Milestone 7: `0033` complete (per-run `summary.md`)
 - Milestone 7 status:
-  - `0036` in progress: cross-platform NIC command evidence + parsed highlights
+  - `0037` in progress: MTU + link speed hints in parsed NIC highlights
 - Latest known test status: baseline/compare/threshold/run smoke suite passing
   after `0034`.
 
@@ -104,7 +105,7 @@ Commands still run; it is a shell startup warning, not a LabOps failure.
 
 Use the user's explicit next commit request first. If no explicit task is
 provided, likely follow-on work is:
-- finish and commit `0036` (NIC probe raw outputs + highlights)
+- finish and commit `0037` (MTU/link hints in host probe highlights)
 - agent experiment planner/runner (OAAT isolation loop)
 - engineer packet generation
 - hardware SDK backend implementation behind `ICameraBackend`

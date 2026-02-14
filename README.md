@@ -95,8 +95,9 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
     top anomalies
 - Host probe pipeline:
   - writes `<out>/<run_id>/hostprobe.json`
-  - includes OS/CPU/RAM/uptime/load snapshot and parsed NIC highlights for
-    hardware/software triage
+  - includes OS/CPU/RAM/uptime/load snapshot and parsed NIC highlights
+    (including MTU + link speed hints when available) for hardware/software
+    triage
   - writes platform NIC raw command outputs as `nic_*.txt`
 - Backend contract (`ICameraBackend`) plus deterministic sim backend.
 - Sim features:
@@ -252,7 +253,7 @@ If you want to author new scenarios, follow `docs/scenario_schema.md`.
 
 - Host context snapshot written by `labops run`.
 - Includes OS, CPU, RAM total bytes, uptime, load snapshot, and parsed NIC
-  highlights.
+  highlights (including MTU and link speed hints when available).
 - Stored at `<out>/<run_id>/hostprobe.json`.
 
 ### nic_*.txt

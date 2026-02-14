@@ -14,6 +14,8 @@ struct NicInterfaceHighlight {
   std::optional<std::string> mac_address;
   std::vector<std::string> ipv4_addresses;
   std::vector<std::string> ipv6_addresses;
+  std::optional<std::uint32_t> mtu_hint;
+  std::optional<std::string> link_speed_hint;
   bool has_default_route = false;
 };
 

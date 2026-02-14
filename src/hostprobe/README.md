@@ -11,7 +11,7 @@ Camera performance issues are often host-dependent (OS version, driver, NIC sett
 - Collect machine metadata (OS, CPU, memory, uptime, load snapshot).
 - Collect NIC command output evidence (best-effort, platform-specific).
 - Parse stable NIC highlights for quick triage (`default route`, interfaces,
-  address presence) from raw command output.
+  address presence, MTU, link speed hints) from raw command output.
 - Normalize host facts into run metadata.
 - Flag missing/unknown probe fields safely.
 

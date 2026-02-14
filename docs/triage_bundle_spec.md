@@ -83,7 +83,7 @@ Optional output:
 | File | Required | Producer | Why it exists |
 | --- | --- | --- | --- |
 | `scenario.json` | yes | scenario writer | Preserves exact scenario input used for run reproducibility. |
-| `hostprobe.json` | yes | host probe writer | Captures host OS/CPU/RAM/uptime/load context for triage. |
+| `hostprobe.json` | yes | host probe writer | Captures host OS/CPU/RAM/uptime/load context and parsed NIC highlights (including MTU/link hints when available). |
 | `nic_*.txt` | yes | host probe writer | Raw NIC command outputs (platform-specific command set). |
 | `run.json` | yes | run writer | Captures run identity, immutable config, and run timestamps. |
 | `events.jsonl` | yes | event writer | Timeline-level evidence for stream behavior and failures. |
@@ -153,6 +153,8 @@ Current fields:
     - `mac_address` (string or null)
     - `ipv4_addresses` (array)
     - `ipv6_addresses` (array)
+    - `mtu_hint` (integer or null)
+    - `link_speed_hint` (string or null)
     - `has_default_route` (bool)
 
 ### `nic_*.txt`

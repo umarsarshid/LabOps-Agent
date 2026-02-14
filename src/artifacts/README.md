@@ -32,8 +32,9 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 - `scenario_writer.hpp/.cpp`: copies source scenario into bundle as
   `scenario.json` for reproducibility.
 - `hostprobe_writer.hpp/.cpp`: writes host context snapshot to
-  `hostprobe.json` (OS/CPU/RAM/uptime/load + parsed NIC highlights) and raw
-  NIC command output files (`nic_*.txt`).
+  `hostprobe.json` (OS/CPU/RAM/uptime/load + parsed NIC highlights with
+  MTU/link hints where available) and raw NIC command output files
+  (`nic_*.txt`).
 - `bundle_manifest_writer.hpp/.cpp`: writes `bundle_manifest.json` with
   per-file `size_bytes` and `fnv1a_64` hash values.
 - `bundle_zip_writer.hpp/.cpp`: writes optional support zip archives
