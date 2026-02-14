@@ -26,6 +26,8 @@ LabOps must be predictable. Tests verify command contracts, scenario validation,
   CSV/JSON output contracts.
 - Scenario validation smoke tests under `tests/scenarios/` for actionable
   schema errors plus baseline-scenario metric-range integration checks.
+- Host probe smoke tests under `tests/hostprobe/` for identifier redaction
+  guarantees in bundle evidence.
 
 ## Design principle
 

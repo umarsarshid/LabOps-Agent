@@ -4,6 +4,7 @@
 #include <array>
 #include <cctype>
 #include <charconv>
+#include <cstdlib>
 #include <cstdio>
 #include <ctime>
 #include <fstream>
@@ -277,6 +278,203 @@ std::optional<std::string> NormalizeLinkSpeedHint(std::string value) {
   }
 
   return value;
+}
+
+bool IsIdentifierChar(char ch) {
+  return std::isalnum(static_cast<unsigned char>(ch)) != 0 || ch == '_';
+}
+
+bool HasLeftBoundary(std::string_view text, std::size_t pos) {
+  if (pos == 0U) {
+    return true;
+  }
+  return !IsIdentifierChar(text[pos - 1U]);
+}
+
+bool HasRightBoundary(std::string_view text, std::size_t pos, std::size_t length) {
+  const std::size_t end = pos + length;
+  if (end >= text.size()) {
+    return true;
+  }
+  return !IsIdentifierChar(text[end]);
+}
+
+bool IsLikelyGenericIdentifierToken(std::string_view token) {
+  const std::string lower = ToLower(token);
+  static const std::array<std::string_view, 8> kGenericTokens = {
+      "unknown",
+      "localhost",
+      "localdomain",
+      "default",
+      "none",
+      "n/a",
+      "na",
+      "user",
+  };
+  return std::find(kGenericTokens.begin(), kGenericTokens.end(), lower) != kGenericTokens.end();
+}
+
+std::string NormalizeIdentifierToken(std::string value) {
+  value = Trim(value);
+  while (!value.empty() &&
+         (value.front() == '"' || value.front() == '\'' ||
+          value.front() == '(' || value.front() == '[' || value.front() == '{')) {
+    value.erase(value.begin());
+    value = Trim(value);
+  }
+  while (!value.empty() &&
+         (value.back() == '"' || value.back() == '\'' ||
+          value.back() == ')' || value.back() == ']' || value.back() == '}' ||
+          value.back() == ',' || value.back() == ';' || value.back() == ':')) {
+    value.pop_back();
+    value = Trim(value);
+  }
+  return value;
+}
+
+std::string TailPathSegment(std::string_view path_text) {
+  const std::size_t slash = path_text.find_last_of("/\\");
+  if (slash == std::string::npos || slash + 1U >= path_text.size()) {
+    return NormalizeIdentifierToken(std::string(path_text));
+  }
+  return NormalizeIdentifierToken(std::string(path_text.substr(slash + 1U)));
+}
+
+void AddNormalizedIdentifierToken(std::vector<std::string>& out, std::string token) {
+  token = NormalizeIdentifierToken(std::move(token));
+  if (token.size() < 3U || IsLikelyGenericIdentifierToken(token)) {
+    return;
+  }
+
+  bool has_alpha = false;
+  for (const char ch : token) {
+    if (std::isalpha(static_cast<unsigned char>(ch)) != 0) {
+      has_alpha = true;
+      break;
+    }
+  }
+  if (!has_alpha) {
+    return;
+  }
+
+  const std::string normalized_lower = ToLower(token);
+  for (const auto& existing : out) {
+    if (ToLower(existing) == normalized_lower) {
+      return;
+    }
+  }
+  out.push_back(token);
+}
+
+void AddIdentifierTokenAndVariants(std::vector<std::string>& out, const std::string& token) {
+  AddNormalizedIdentifierToken(out, token);
+
+  // Hostnames may appear either as full FQDN or short host token in artifacts.
+  const std::size_t dot = token.find('.');
+  if (dot != std::string::npos) {
+    AddNormalizedIdentifierToken(out, token.substr(0, dot));
+  }
+}
+
+void ReplaceIdentifierToken(std::string& text, const std::string& token,
+                            const std::string& replacement) {
+  if (token.empty() || text.empty()) {
+    return;
+  }
+
+  const std::string token_lower = ToLower(token);
+  std::string text_lower = ToLower(text);
+
+  std::size_t pos = 0;
+  while (pos < text_lower.size()) {
+    const std::size_t found = text_lower.find(token_lower, pos);
+    if (found == std::string::npos) {
+      break;
+    }
+
+    if (!HasLeftBoundary(text, found) || !HasRightBoundary(text, found, token.size())) {
+      pos = found + token.size();
+      continue;
+    }
+
+    text.replace(found, token.size(), replacement);
+    text_lower.replace(found, token.size(), replacement);
+    pos = found + replacement.size();
+  }
+}
+
+void RedactStringValue(std::string& value, const IdentifierRedactionContext& context) {
+  for (const auto& token : context.hostname_tokens) {
+    ReplaceIdentifierToken(value, token, "<redacted_host>");
+  }
+  for (const auto& token : context.username_tokens) {
+    ReplaceIdentifierToken(value, token, "<redacted_user>");
+  }
+}
+
+void RedactStringOptional(std::optional<std::string>& value,
+                          const IdentifierRedactionContext& context) {
+  if (!value.has_value()) {
+    return;
+  }
+  RedactStringValue(value.value(), context);
+}
+
+void RedactStringVector(std::vector<std::string>& values,
+                        const IdentifierRedactionContext& context) {
+  for (auto& entry : values) {
+    RedactStringValue(entry, context);
+  }
+}
+
+void RedactNicHighlights(NicHighlights& highlights,
+                         const IdentifierRedactionContext& context) {
+  RedactStringOptional(highlights.default_route_interface, context);
+  for (auto& iface : highlights.interfaces) {
+    RedactStringValue(iface.name, context);
+    RedactStringOptional(iface.mac_address, context);
+    RedactStringVector(iface.ipv4_addresses, context);
+    RedactStringVector(iface.ipv6_addresses, context);
+    RedactStringOptional(iface.link_speed_hint, context);
+  }
+}
+
+void AddEnvironmentToken(std::vector<std::string>& out, const char* env_name) {
+  if (env_name == nullptr) {
+    return;
+  }
+  const char* raw = std::getenv(env_name);
+  if (raw == nullptr) {
+    return;
+  }
+  AddIdentifierTokenAndVariants(out, raw);
+}
+
+void AddEnvironmentPathTailToken(std::vector<std::string>& out, const char* env_name) {
+  if (env_name == nullptr) {
+    return;
+  }
+  const char* raw = std::getenv(env_name);
+  if (raw == nullptr) {
+    return;
+  }
+  AddIdentifierTokenAndVariants(out, TailPathSegment(raw));
+}
+
+void AddSystemHostnameTokens(std::vector<std::string>& out) {
+#if defined(_WIN32)
+  char name[256] = {};
+  DWORD size = static_cast<DWORD>(sizeof(name) / sizeof(name[0]));
+  if (GetComputerNameA(name, &size) != 0 && size > 0U) {
+    AddIdentifierTokenAndVariants(out, std::string(name, size));
+  }
+#elif defined(__linux__) || defined(__APPLE__)
+  char name[256] = {};
+  if (gethostname(name, sizeof(name)) == 0) {
+    name[sizeof(name) - 1U] = '\0';
+    AddIdentifierTokenAndVariants(out, std::string(name));
+  }
+#endif
 }
 
 std::optional<std::string> ParseMacMediaSpeedHint(std::string_view line) {
@@ -1007,6 +1205,42 @@ bool CollectNicProbeSnapshot(NicProbeSnapshot& snapshot, std::string& error) {
   }
 
   return true;
+}
+
+void BuildIdentifierRedactionContext(IdentifierRedactionContext& context) {
+  context = IdentifierRedactionContext{};
+
+  // Environment variables make redaction deterministic in CI and on local
+  // hosts where the same identifiers show up in multiple command outputs.
+  AddEnvironmentToken(context.hostname_tokens, "HOSTNAME");
+  AddEnvironmentToken(context.hostname_tokens, "COMPUTERNAME");
+  AddSystemHostnameTokens(context.hostname_tokens);
+
+  AddEnvironmentToken(context.username_tokens, "USER");
+  AddEnvironmentToken(context.username_tokens, "USERNAME");
+  AddEnvironmentToken(context.username_tokens, "LOGNAME");
+  AddEnvironmentToken(context.username_tokens, "SUDO_USER");
+
+  AddEnvironmentPathTailToken(context.username_tokens, "HOME");
+  AddEnvironmentPathTailToken(context.username_tokens, "USERPROFILE");
+}
+
+void RedactHostProbeSnapshot(HostProbeSnapshot& snapshot,
+                             const IdentifierRedactionContext& context) {
+  RedactStringValue(snapshot.os_name, context);
+  RedactStringValue(snapshot.os_version, context);
+  RedactStringValue(snapshot.cpu_model, context);
+  RedactNicHighlights(snapshot.nic_highlights, context);
+}
+
+void RedactNicProbeSnapshot(NicProbeSnapshot& snapshot,
+                            const IdentifierRedactionContext& context) {
+  RedactNicHighlights(snapshot.highlights, context);
+  for (auto& capture : snapshot.raw_captures) {
+    RedactStringValue(capture.file_name, context);
+    RedactStringValue(capture.command, context);
+    RedactStringValue(capture.output, context);
+  }
 }
 
 std::string ToJson(const HostProbeSnapshot& snapshot) {

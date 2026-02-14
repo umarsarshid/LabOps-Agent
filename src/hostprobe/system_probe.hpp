@@ -40,6 +40,12 @@ struct NicProbeSnapshot {
   std::vector<NicCommandCapture> raw_captures;
 };
 
+// Redaction token set built from host/user identifiers.
+struct IdentifierRedactionContext {
+  std::vector<std::string> hostname_tokens;
+  std::vector<std::string> username_tokens;
+};
+
 // Snapshot of host state captured near run start. This intentionally keeps only
 // lightweight fields that are broadly available across developer and CI hosts.
 struct HostProbeSnapshot {
@@ -68,6 +74,18 @@ bool CollectHostProbeSnapshot(HostProbeSnapshot& snapshot, std::string& error);
 // - unsupported or missing commands are recorded with `command_available=false`
 // - this function still returns true unless a hard internal failure occurs.
 bool CollectNicProbeSnapshot(NicProbeSnapshot& snapshot, std::string& error);
+
+// Builds a best-effort token context used by `--redact` to strip obvious host
+// and user identifiers from generated evidence.
+void BuildIdentifierRedactionContext(IdentifierRedactionContext& context);
+
+// Applies identifier redaction to parsed host probe highlights.
+void RedactHostProbeSnapshot(HostProbeSnapshot& snapshot,
+                             const IdentifierRedactionContext& context);
+
+// Applies identifier redaction to raw NIC command captures.
+void RedactNicProbeSnapshot(NicProbeSnapshot& snapshot,
+                            const IdentifierRedactionContext& context);
 
 // Serializes the snapshot to stable JSON suitable for artifact emission.
 std::string ToJson(const HostProbeSnapshot& snapshot);

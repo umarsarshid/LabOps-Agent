@@ -13,6 +13,7 @@ This file helps the next coding agent continue work without re-discovery.
 - host system snapshot generation (`hostprobe.json`)
 - NIC raw command evidence (`nic_*.txt`) + parsed highlights in host probe
   (including MTU/link hints when available)
+- optional identifier redaction in host evidence via `--redact`
 - bundle manifest generation (`bundle_manifest.json`)
 - optional support bundle zip (`--zip`)
 
@@ -22,7 +23,7 @@ Long-term goal:
 
 ## Current Snapshot (as of February 14, 2026)
 
-- Latest commit: `6be90c9` (`docs(release): add verification checklist`)
+- Latest commit before current work: `74f8e05` (`feat(hostprobe): parse MTU and link-speed hints`)
 - Milestones completed:
   - Milestone 0: repo/build/style/CI foundation
   - Milestone 1: CLI skeleton + output contracts
@@ -31,11 +32,9 @@ Long-term goal:
   - Milestone 4: scenario schema, loader/validator, scenario->backend apply
   - Milestone 5: bundle layout, manifest, optional zip, bundle docs
   - Milestone 6: baseline capture + compare diff outputs + threshold pass/fail
-  - Milestone 7: `0033` complete (per-run `summary.md`)
-- Milestone 7 status:
-  - `0037` in progress: MTU + link speed hints in parsed NIC highlights
-- Latest known test status: baseline/compare/threshold/run smoke suite passing
-  after `0034`.
+  - Milestone 7: in progress (`0038` next: redaction option for host evidence)
+- Latest known test status:
+  - baseline/compare/threshold/run smoke suite passing after `0037`
 
 ## Confirmed Working Commands
 
@@ -49,6 +48,7 @@ CLI:
 - `./build/labops validate scenarios/sim_baseline.json`
 - `./build/labops run scenarios/sim_baseline.json --out out/`
 - `./build/labops run scenarios/sim_baseline.json --out out/ --zip`
+- `./build/labops run scenarios/sim_baseline.json --out out-redacted/ --redact`
 
 Expected run outputs:
 - `<out>/<run_id>/scenario.json`
@@ -105,7 +105,7 @@ Commands still run; it is a shell startup warning, not a LabOps failure.
 
 Use the user's explicit next commit request first. If no explicit task is
 provided, likely follow-on work is:
-- finish and commit `0037` (MTU/link hints in host probe highlights)
+- scenario-aware redaction expansion (if future security/privacy requirements add more fields)
 - agent experiment planner/runner (OAAT isolation loop)
 - engineer packet generation
 - hardware SDK backend implementation behind `ICameraBackend`

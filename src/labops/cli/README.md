@@ -12,8 +12,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Enforce usage errors consistently.
 - Preserve stable exit-code semantics for automation.
 - Print deterministic command outputs.
-- Parse run artifact options (currently `--out <dir>`).
-- Parse baseline capture command contracts (`baseline capture <scenario.json>`).
+- Parse run artifact options (`--out <dir>`, `--zip`, `--redact`).
+- Parse baseline capture command contracts (`baseline capture <scenario.json> [--redact]`).
 - Parse compare command contracts (`compare --baseline ... --run ... [--out ...]`).
 - Route scenario validation through schema loader with actionable errors.
 - Apply scenario settings to backend params and emit `CONFIG_APPLIED` audit
@@ -33,6 +33,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
   (artifact list + hashes).
 - Optionally emit support bundle zip archives via `--zip` at
   `<out>/<run_id>.zip`.
+- Optionally redact obvious host/user identifiers in `hostprobe.json` and
+  raw NIC outputs (`nic_*.txt`) via `--redact`.
 - Emit scenario baseline captures under `baselines/<scenario_id>/` with
   `metrics.csv` + `metrics.json` for release-style comparison workflows.
 - Compare baseline and run metric artifacts to emit `diff.json` + `diff.md`

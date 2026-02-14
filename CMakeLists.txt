@@ -311,6 +311,15 @@ target_link_libraries(drop_injection_smoke PRIVATE labops_artifacts labops_backe
 target_compile_features(drop_injection_smoke PRIVATE cxx_std_20)
 add_test(NAME drop_injection_smoke COMMAND drop_injection_smoke)
 
+# Smoke test validating that host/user identifiers are redacted from host probe
+# JSON and raw NIC command outputs when redaction is applied.
+add_executable(hostprobe_redaction_smoke
+  tests/hostprobe/redaction_smoke.cpp
+)
+target_link_libraries(hostprobe_redaction_smoke PRIVATE labops_hostprobe)
+target_compile_features(hostprobe_redaction_smoke PRIVATE cxx_std_20)
+add_test(NAME hostprobe_redaction_smoke COMMAND hostprobe_redaction_smoke)
+
 if(LABOPS_ENABLE_CATCH2_TESTS)
   find_package(Catch2 3 QUIET)
 

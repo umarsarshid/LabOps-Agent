@@ -50,8 +50,8 @@ constexpr int kExitUsage = 2;
 // One usage text source avoids divergence between help and error paths.
 void PrintUsage(std::ostream& out) {
   out << "usage:\n"
-      << "  labops run <scenario.json> [--out <dir>] [--zip]\n"
-      << "  labops baseline capture <scenario.json>\n"
+      << "  labops run <scenario.json> [--out <dir>] [--zip] [--redact]\n"
+      << "  labops baseline capture <scenario.json> [--redact]\n"
       << "  labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]\n"
       << "  labops validate <scenario.json>\n"
       << "  labops version\n";
@@ -60,7 +60,7 @@ void PrintUsage(std::ostream& out) {
 // Keep nested baseline command help local so usage errors stay actionable.
 void PrintBaselineUsage(std::ostream& out) {
   out << "usage:\n"
-      << "  labops baseline capture <scenario.json>\n";
+      << "  labops baseline capture <scenario.json> [--redact]\n";
 }
 
 // Filesystem preflight checks run before schema validation. This keeps path and
@@ -148,6 +148,7 @@ struct RunOptions {
   std::string scenario_path;
   fs::path output_dir = "out";
   bool zip_bundle = false;
+  bool redact_identifiers = false;
 };
 
 struct RunPlan {
@@ -179,6 +180,10 @@ bool ParseRunOptions(const std::vector<std::string_view>& args, RunOptions& opti
     const std::string_view token = args[i];
     if (token == "--zip") {
       options.zip_bundle = true;
+      continue;
+    }
+    if (token == "--redact") {
+      options.redact_identifiers = true;
       continue;
     }
     if (token == "--out") {
@@ -217,12 +222,29 @@ bool ParseRunOptions(const std::vector<std::string_view>& args, RunOptions& opti
 // - baseline target is deterministic: `baselines/<scenario_id>/`
 bool ParseBaselineCaptureOptions(const std::vector<std::string_view>& args, RunOptions& options,
                                  std::string& error) {
-  if (args.size() != 1U) {
+  for (const std::string_view token : args) {
+    if (token == "--redact") {
+      options.redact_identifiers = true;
+      continue;
+    }
+
+    if (!token.empty() && token.front() == '-') {
+      error = "unknown option: " + std::string(token);
+      return false;
+    }
+
+    if (!options.scenario_path.empty()) {
+      error = "baseline capture requires exactly 1 argument: <scenario.json>";
+      return false;
+    }
+    options.scenario_path = std::string(token);
+  }
+
+  if (options.scenario_path.empty()) {
     error = "baseline capture requires exactly 1 argument: <scenario.json>";
     return false;
   }
 
-  options.scenario_path = std::string(args.front());
   const std::string scenario_id = fs::path(options.scenario_path).stem().string();
   if (scenario_id.empty()) {
     error = "unable to derive scenario_id from path: " + options.scenario_path;
@@ -819,6 +841,16 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
   }
   host_snapshot.nic_highlights = nic_probe.highlights;
 
+  if (options.redact_identifiers) {
+    // `--redact` applies before disk writes so both structured host JSON and
+    // raw NIC command captures avoid leaking obvious user/host identifiers.
+    hostprobe::IdentifierRedactionContext redaction_context;
+    hostprobe::BuildIdentifierRedactionContext(redaction_context);
+    hostprobe::RedactHostProbeSnapshot(host_snapshot, redaction_context);
+    hostprobe::RedactNicProbeSnapshot(nic_probe, redaction_context);
+    host_snapshot.nic_highlights = nic_probe.highlights;
+  }
+
   fs::path hostprobe_artifact_path;
   if (!artifacts::WriteHostProbeJson(host_snapshot, bundle_dir, hostprobe_artifact_path, error)) {
     std::cerr << "error: failed to write hostprobe.json: " << error << '\n';
@@ -1046,6 +1078,7 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
   std::cout << "scenario: " << scenario_artifact_path.string() << '\n';
   std::cout << "hostprobe: " << hostprobe_artifact_path.string() << '\n';
   std::cout << "hostprobe_raw_count: " << hostprobe_raw_artifact_paths.size() << '\n';
+  std::cout << "redaction: " << (options.redact_identifiers ? "enabled" : "disabled") << '\n';
   std::cout << "artifact: " << run_artifact_path.string() << '\n';
   std::cout << "events: " << events_path.string() << '\n';
   std::cout << "metrics_csv: " << metrics_csv_path.string() << '\n';

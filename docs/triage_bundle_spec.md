@@ -43,13 +43,14 @@ Current high-level write sequence:
 
 1. `scenario.json` snapshot is copied into bundle.
 2. `events.jsonl` starts receiving lifecycle and frame events.
-3. `hostprobe.json` is written with host system snapshot.
-4. raw NIC command outputs (`nic_*.txt`) are written (best-effort per platform).
-5. `run.json` is written after stream completion.
-6. `metrics.csv` and `metrics.json` are written.
-7. `summary.md` is written as a one-page human triage report.
-8. `bundle_manifest.json` is generated from required artifacts.
-9. optional `.zip` archive is created as a sibling of bundle directory.
+3. optional identifier redaction is applied when `--redact` is requested.
+4. `hostprobe.json` is written with host system snapshot.
+5. raw NIC command outputs (`nic_*.txt`) are written (best-effort per platform).
+6. `run.json` is written after stream completion.
+7. `metrics.csv` and `metrics.json` are written.
+8. `summary.md` is written as a one-page human triage report.
+9. `bundle_manifest.json` is generated from required artifacts.
+10. optional `.zip` archive is created as a sibling of bundle directory.
 
 ## Directory Layout Contract
 
@@ -157,6 +158,11 @@ Current fields:
     - `link_speed_hint` (string or null)
     - `has_default_route` (bool)
 
+When `--redact` is enabled:
+
+- obvious hostname tokens are replaced with `<redacted_host>`
+- obvious username tokens are replaced with `<redacted_user>`
+
 ### `nic_*.txt`
 
 Purpose:
@@ -177,6 +183,11 @@ Platform command coverage:
   - `nic_ifconfig_a.txt` (`ifconfig -a`)
   - `nic_netstat_rn.txt` (`netstat -rn`)
   - `nic_route_get_default.txt` (`route -n get default`)
+
+When `--redact` is enabled:
+
+- obvious hostname and username tokens are replaced in raw command text before
+  files are written.
 
 ### `events.jsonl`
 

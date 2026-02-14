@@ -14,6 +14,7 @@ Camera performance issues are often host-dependent (OS version, driver, NIC sett
   address presence, MTU, link speed hints) from raw command output.
 - Normalize host facts into run metadata.
 - Flag missing/unknown probe fields safely.
+- Provide optional identifier redaction helpers for shareable bundles.
 
 ## Current contents
 
@@ -29,6 +30,9 @@ Camera performance issues are often host-dependent (OS version, driver, NIC sett
     - Linux: `ip a`, `ip r`, `ethtool` (if available)
     - macOS: `ifconfig -a`, `netstat -rn`, `route -n get default`
   - serializes snapshot into stable JSON contract for bundle artifacts.
+  - builds redaction token context from host/user identifiers and applies
+    replacements (`<redacted_host>`, `<redacted_user>`) to hostprobe snapshots
+    and raw NIC command captures when `--redact` is enabled.
 
 ## Design principle
 

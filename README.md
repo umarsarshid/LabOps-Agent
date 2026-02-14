@@ -43,8 +43,8 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
 - CLI commands:
   - `labops version`
   - `labops validate <scenario.json>`
-  - `labops run <scenario.json> [--out <dir>] [--zip]`
-  - `labops baseline capture <scenario.json>`
+  - `labops run <scenario.json> [--out <dir>] [--zip] [--redact]`
+  - `labops baseline capture <scenario.json> [--redact]`
   - `labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]`
 - Scenario loader + schema validation in `labops validate` with actionable
   field-level errors.
@@ -65,7 +65,7 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
   - `<out>/<run_id>/bundle_manifest.json`
   - optional `<out>/<run_id>.zip` support bundle when `--zip` is requested
 - Baseline capture command:
-  - `labops baseline capture <scenario.json>`
+  - `labops baseline capture <scenario.json> [--redact]`
   - writes baseline artifacts directly under `baselines/<scenario_id>/`
   - baseline directory includes `metrics.csv`, `metrics.json`, `summary.md`,
     `hostprobe.json`, and raw NIC command outputs (`nic_*.txt`)
@@ -99,6 +99,8 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
     (including MTU + link speed hints when available) for hardware/software
     triage
   - writes platform NIC raw command outputs as `nic_*.txt`
+  - supports optional identifier redaction (`--redact`) so obvious host/user
+    values are replaced before bundle files are written
 - Backend contract (`ICameraBackend`) plus deterministic sim backend.
 - Sim features:
   - Configurable FPS, jitter, seed, frame size.
@@ -119,6 +121,8 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
 - Baseline capture smoke test validating `baselines/<scenario_id>/` output contract.
 - Compare diff smoke test validating `diff.json` + `diff.md` delta generation.
 - Threshold failure smoke test validating non-zero `labops run` exit on violations.
+- Hostprobe redaction smoke test validating host/user identifiers are stripped
+  from hostprobe JSON + NIC raw text outputs.
 - Run summary smoke coverage validating `summary.md` presence/readability.
 - Catch2 core unit tests for schema/event JSON serialization (when available).
 - Internal triage bundle spec in `docs/triage_bundle_spec.md` covering:
@@ -174,13 +178,19 @@ cmake --build build
 ./build/labops run scenarios/sim_baseline.json --out out/ --zip
 ```
 
-### 7) Capture baseline metrics for a scenario (optional)
+### 7) Run with redaction enabled (optional)
+
+```bash
+./build/labops run scenarios/sim_baseline.json --out out-redacted/ --redact
+```
+
+### 8) Capture baseline metrics for a scenario (optional)
 
 ```bash
 ./build/labops baseline capture scenarios/sim_baseline.json
 ```
 
-### 8) Compare baseline vs run (optional)
+### 9) Compare baseline vs run (optional)
 
 ```bash
 ./build/labops compare --baseline baselines/sim_baseline --run out/<run_id>
@@ -214,9 +224,17 @@ If you want to author new scenarios, follow `docs/scenario_schema.md`.
   - `<out>/<run_id>.zip`
 - Zip generation is opt-in so default runs avoid extra packaging overhead.
 
+### Identifier Redaction
+
+- `labops run ... --redact` applies best-effort identifier redaction before
+  writing `hostprobe.json` and `nic_*.txt`.
+- `labops baseline capture ... --redact` uses the same redaction behavior.
+- Current replacements target obvious hostname/username tokens and replace them
+  with `<redacted_host>` / `<redacted_user>`.
+
 ### Baseline Capture
 
-- `labops baseline capture <scenario.json>` writes artifacts to:
+- `labops baseline capture <scenario.json> [--redact]` writes artifacts to:
   - `baselines/<scenario_id>/`
 - This folder is the stable baseline target for future regression comparison.
 - Baseline capture currently emits the same core evidence set as run mode,
