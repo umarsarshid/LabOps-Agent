@@ -4,8 +4,39 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace labops::hostprobe {
+
+// Parsed per-interface details extracted from raw NIC command output.
+struct NicInterfaceHighlight {
+  std::string name;
+  std::optional<std::string> mac_address;
+  std::vector<std::string> ipv4_addresses;
+  std::vector<std::string> ipv6_addresses;
+  bool has_default_route = false;
+};
+
+// Parsed NIC overview included in `hostprobe.json`.
+struct NicHighlights {
+  std::optional<std::string> default_route_interface;
+  std::vector<NicInterfaceHighlight> interfaces;
+};
+
+// One raw network command capture that will be written as a text artifact.
+struct NicCommandCapture {
+  std::string file_name;
+  std::string command;
+  int exit_code = -1;
+  bool command_available = true;
+  std::string output;
+};
+
+// Network probe result that includes both raw command output and parsed highlights.
+struct NicProbeSnapshot {
+  NicHighlights highlights;
+  std::vector<NicCommandCapture> raw_captures;
+};
 
 // Snapshot of host state captured near run start. This intentionally keeps only
 // lightweight fields that are broadly available across developer and CI hosts.
@@ -20,6 +51,7 @@ struct HostProbeSnapshot {
   std::optional<double> load_avg_1m;
   std::optional<double> load_avg_5m;
   std::optional<double> load_avg_15m;
+  NicHighlights nic_highlights;
 };
 
 // Collects a best-effort host snapshot. Missing platform fields are left with
@@ -27,6 +59,13 @@ struct HostProbeSnapshot {
 //
 // Returns false only for hard failures; unsupported fields are not failures.
 bool CollectHostProbeSnapshot(HostProbeSnapshot& snapshot, std::string& error);
+
+// Collects raw NIC command outputs and parses highlights from those outputs.
+//
+// Command collection is best-effort:
+// - unsupported or missing commands are recorded with `command_available=false`
+// - this function still returns true unless a hard internal failure occurs.
+bool CollectNicProbeSnapshot(NicProbeSnapshot& snapshot, std::string& error);
 
 // Serializes the snapshot to stable JSON suitable for artifact emission.
 std::string ToJson(const HostProbeSnapshot& snapshot);

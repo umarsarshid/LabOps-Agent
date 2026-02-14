@@ -20,6 +20,7 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
 - `labops run <scenario.json> --out <dir> [--zip]`: emits a per-run bundle under
   `<dir>/<run_id>/` containing `scenario.json`, `run.json`, `events.jsonl`,
   `metrics.csv`, `metrics.json`, `summary.md`, `hostprobe.json`, and
+  platform NIC raw command outputs (`nic_*.txt`),
   `bundle_manifest.json`; optionally emits `<dir>/<run_id>.zip` when `--zip`
   is set; runs sim backend lifecycle;
   evaluates configured scenario thresholds against computed metrics; returns

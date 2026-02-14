@@ -12,7 +12,8 @@ surface (argument parsing + runtime orchestration + artifact/event output).
 - `run_stream_trace_smoke.cpp`: drives `labops run` via CLI dispatch and
   verifies `events.jsonl` contains config-audit plus realistic stream lifecycle events and
   `metrics.csv`/`metrics.json` are emitted with expected metric fields,
-  `summary.md` is readable, `hostprobe.json` includes key host fields, and
+  `summary.md` is readable, `hostprobe.json` includes key host + NIC highlight
+  fields, raw NIC command outputs (`nic_*.txt`) are present, and
   `bundle_manifest.json` includes the core artifact entries and hash metadata.
 - `validate_actionable_smoke.cpp`: drives `labops validate` and verifies
   invalid schema output includes actionable field-level error paths.

@@ -53,6 +53,20 @@ std::vector<std::string> ReadNonEmptyLines(const fs::path& file_path) {
   return lines;
 }
 
+std::vector<fs::path> CollectNicRawFiles(const fs::path& bundle_dir) {
+  std::vector<fs::path> files;
+  for (const auto& entry : fs::directory_iterator(bundle_dir)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    const std::string name = entry.path().filename().string();
+    if (name.rfind("nic_", 0) == 0U && entry.path().extension() == ".txt") {
+      files.push_back(entry.path());
+    }
+  }
+  return files;
+}
+
 fs::path ResolveSingleBundleDir(const fs::path& out_root) {
   if (!fs::exists(out_root)) {
     Fail("output root does not exist");
@@ -161,6 +175,10 @@ int main() {
   if (!fs::exists(summary_markdown)) {
     Fail("summary.md was not produced");
   }
+  const std::vector<fs::path> nic_raw_files = CollectNicRawFiles(bundle_dir);
+  if (nic_raw_files.empty()) {
+    Fail("expected at least one raw NIC command output file (nic_*.txt)");
+  }
 
   const auto lines = ReadNonEmptyLines(events_jsonl);
   if (lines.size() < 5U) {
@@ -233,6 +251,8 @@ int main() {
   AssertContains(hostprobe_content, "\"ram_total_bytes\":");
   AssertContains(hostprobe_content, "\"uptime_seconds\":");
   AssertContains(hostprobe_content, "\"load_avg\":{");
+  AssertContains(hostprobe_content, "\"nic_highlights\":{");
+  AssertContains(hostprobe_content, "\"interfaces\":[");
 
   std::ifstream summary_input(summary_markdown, std::ios::binary);
   if (!summary_input) {
@@ -259,6 +279,7 @@ int main() {
   AssertContains(manifest_content, "\"path\":\"metrics.csv\"");
   AssertContains(manifest_content, "\"path\":\"metrics.json\"");
   AssertContains(manifest_content, "\"path\":\"summary.md\"");
+  AssertContains(manifest_content, "\"path\":\"nic_");
 
   fs::remove_all(temp_root, ec);
   std::cout << "run_stream_trace_smoke: ok\n";

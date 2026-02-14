@@ -9,6 +9,9 @@ Camera performance issues are often host-dependent (OS version, driver, NIC sett
 ## Expected responsibilities
 
 - Collect machine metadata (OS, CPU, memory, uptime, load snapshot).
+- Collect NIC command output evidence (best-effort, platform-specific).
+- Parse stable NIC highlights for quick triage (`default route`, interfaces,
+  address presence) from raw command output.
 - Normalize host facts into run metadata.
 - Flag missing/unknown probe fields safely.
 
@@ -21,6 +24,10 @@ Camera performance issues are often host-dependent (OS version, driver, NIC sett
     - total RAM bytes
     - uptime seconds
     - load snapshot (`1m/5m/15m` when platform supports it)
+  - collects raw NIC command outputs:
+    - Windows: `ipconfig /all`
+    - Linux: `ip a`, `ip r`, `ethtool` (if available)
+    - macOS: `ifconfig -a`, `netstat -rn`, `route -n get default`
   - serializes snapshot into stable JSON contract for bundle artifacts.
 
 ## Design principle

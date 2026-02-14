@@ -811,9 +811,26 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
     return kExitFailure;
   }
 
+  hostprobe::NicProbeSnapshot nic_probe;
+  if (!hostprobe::CollectNicProbeSnapshot(nic_probe, error)) {
+    // NIC probing is best-effort by design; continue with whatever host facts
+    // we were able to collect and persist the probe error in raw output files.
+    std::cerr << "warning: NIC probe collection issue: " << error << '\n';
+  }
+  host_snapshot.nic_highlights = nic_probe.highlights;
+
   fs::path hostprobe_artifact_path;
   if (!artifacts::WriteHostProbeJson(host_snapshot, bundle_dir, hostprobe_artifact_path, error)) {
     std::cerr << "error: failed to write hostprobe.json: " << error << '\n';
+    return kExitFailure;
+  }
+
+  std::vector<fs::path> hostprobe_raw_artifact_paths;
+  if (!artifacts::WriteHostProbeRawCommandOutputs(nic_probe.raw_captures,
+                                                  bundle_dir,
+                                                  hostprobe_raw_artifact_paths,
+                                                  error)) {
+    std::cerr << "error: failed to write NIC raw command artifacts: " << error << '\n';
     return kExitFailure;
   }
 
@@ -999,7 +1016,7 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
   }
 
   fs::path bundle_manifest_path;
-  const std::vector<fs::path> bundle_artifact_paths = {
+  std::vector<fs::path> bundle_artifact_paths = {
       scenario_artifact_path,
       hostprobe_artifact_path,
       run_artifact_path,
@@ -1008,6 +1025,9 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
       metrics_json_path,
       summary_markdown_path,
   };
+  bundle_artifact_paths.insert(bundle_artifact_paths.end(),
+                               hostprobe_raw_artifact_paths.begin(),
+                               hostprobe_raw_artifact_paths.end());
   if (!artifacts::WriteBundleManifestJson(bundle_dir, bundle_artifact_paths, bundle_manifest_path, error)) {
     std::cerr << "error: failed to write bundle manifest: " << error << '\n';
     return kExitFailure;
@@ -1025,6 +1045,7 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
   std::cout << "bundle: " << bundle_dir.string() << '\n';
   std::cout << "scenario: " << scenario_artifact_path.string() << '\n';
   std::cout << "hostprobe: " << hostprobe_artifact_path.string() << '\n';
+  std::cout << "hostprobe_raw_count: " << hostprobe_raw_artifact_paths.size() << '\n';
   std::cout << "artifact: " << run_artifact_path.string() << '\n';
   std::cout << "events: " << events_path.string() << '\n';
   std::cout << "metrics_csv: " << metrics_csv_path.string() << '\n';

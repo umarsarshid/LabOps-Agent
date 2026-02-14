@@ -27,7 +27,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
   return non-zero when thresholds fail.
 - Emit standardized per-run bundles under `<out>/<run_id>/` including
   `scenario.json`, `run.json`, `events.jsonl`, metrics artifacts,
-  `summary.md`, `hostprobe.json`, and `bundle_manifest.json`
+  `summary.md`, `hostprobe.json`, platform NIC raw command outputs (`nic_*.txt`),
+  and `bundle_manifest.json`
   (artifact list + hashes).
 - Optionally emit support bundle zip archives via `--zip` at
   `<out>/<run_id>.zip`.

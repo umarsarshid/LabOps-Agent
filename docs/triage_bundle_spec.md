@@ -44,11 +44,12 @@ Current high-level write sequence:
 1. `scenario.json` snapshot is copied into bundle.
 2. `events.jsonl` starts receiving lifecycle and frame events.
 3. `hostprobe.json` is written with host system snapshot.
-4. `run.json` is written after stream completion.
-5. `metrics.csv` and `metrics.json` are written.
-6. `summary.md` is written as a one-page human triage report.
-7. `bundle_manifest.json` is generated from required artifacts.
-8. optional `.zip` archive is created as a sibling of bundle directory.
+4. raw NIC command outputs (`nic_*.txt`) are written (best-effort per platform).
+5. `run.json` is written after stream completion.
+6. `metrics.csv` and `metrics.json` are written.
+7. `summary.md` is written as a one-page human triage report.
+8. `bundle_manifest.json` is generated from required artifacts.
+9. optional `.zip` archive is created as a sibling of bundle directory.
 
 ## Directory Layout Contract
 
@@ -59,6 +60,7 @@ Required bundle structure:
   <run_id>/
     scenario.json
     hostprobe.json
+    nic_*.txt
     run.json
     events.jsonl
     metrics.csv
@@ -82,6 +84,7 @@ Optional output:
 | --- | --- | --- | --- |
 | `scenario.json` | yes | scenario writer | Preserves exact scenario input used for run reproducibility. |
 | `hostprobe.json` | yes | host probe writer | Captures host OS/CPU/RAM/uptime/load context for triage. |
+| `nic_*.txt` | yes | host probe writer | Raw NIC command outputs (platform-specific command set). |
 | `run.json` | yes | run writer | Captures run identity, immutable config, and run timestamps. |
 | `events.jsonl` | yes | event writer | Timeline-level evidence for stream behavior and failures. |
 | `metrics.csv` | yes | metrics writer | Human-readable metrics for spreadsheets and quick plotting. |
@@ -143,6 +146,35 @@ Current fields:
 - `uptime_seconds`
 - `load_avg` object:
   - `one_min`, `five_min`, `fifteen_min` (null when unavailable)
+- `nic_highlights` object:
+  - `default_route_interface` (string or null)
+  - `interfaces` array:
+    - `name`
+    - `mac_address` (string or null)
+    - `ipv4_addresses` (array)
+    - `ipv6_addresses` (array)
+    - `has_default_route` (bool)
+
+### `nic_*.txt`
+
+Purpose:
+
+- preserve raw network command evidence exactly as observed on the host
+- provide low-level context for transport/NIC triage without rerunning probes
+
+Platform command coverage:
+
+- Windows:
+  - `nic_ipconfig_all.txt` (`ipconfig /all`)
+- Linux:
+  - `nic_ip_a.txt` (`ip a`)
+  - `nic_ip_r.txt` (`ip r`)
+  - `nic_ethtool.txt` (`ethtool` per interface when available; otherwise
+    explicit unavailable note)
+- macOS:
+  - `nic_ifconfig_a.txt` (`ifconfig -a`)
+  - `nic_netstat_rn.txt` (`netstat -rn`)
+  - `nic_route_get_default.txt` (`route -n get default`)
 
 ### `events.jsonl`
 
@@ -259,6 +291,7 @@ Current manifest file inclusion list:
 
 - `scenario.json`
 - `hostprobe.json`
+- `nic_*.txt`
 - `run.json`
 - `events.jsonl`
 - `metrics.csv`
@@ -337,6 +370,7 @@ Use this checklist after changing bundle code:
    - `labops run scenarios/sim_baseline.json --out out`
 2. Confirm bundle layout exists at `out/<run_id>/`.
 3. Confirm all required files exist.
+   - includes at least one `nic_*.txt` raw network command artifact.
 4. Validate JSONL is non-empty:
    - includes `CONFIG_APPLIED`, `STREAM_STARTED`, and `STREAM_STOPPED`
 5. Confirm manifest references exactly current required artifacts.

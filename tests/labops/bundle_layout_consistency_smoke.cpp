@@ -76,6 +76,20 @@ std::vector<fs::path> CollectBundleDirs(const fs::path& out_root) {
   return bundle_dirs;
 }
 
+std::size_t CountNicRawFiles(const fs::path& bundle_dir) {
+  std::size_t count = 0;
+  for (const auto& entry : fs::directory_iterator(bundle_dir)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    const std::string name = entry.path().filename().string();
+    if (name.rfind("nic_", 0) == 0U && entry.path().extension() == ".txt") {
+      ++count;
+    }
+  }
+  return count;
+}
+
 void AssertBundleHasRequiredFiles(const fs::path& bundle_dir) {
   const fs::path run_json = bundle_dir / "run.json";
   const fs::path scenario_json = bundle_dir / "scenario.json";
@@ -109,6 +123,9 @@ void AssertBundleHasRequiredFiles(const fs::path& bundle_dir) {
   }
   if (!fs::exists(summary_markdown)) {
     Fail("bundle missing summary.md");
+  }
+  if (CountNicRawFiles(bundle_dir) == 0U) {
+    Fail("bundle missing raw NIC command output files (nic_*.txt)");
   }
 }
 

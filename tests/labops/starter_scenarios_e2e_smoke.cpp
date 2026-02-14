@@ -85,6 +85,20 @@ fs::path ResolveScenarioPath(const std::string& scenario_name) {
   return {};
 }
 
+std::size_t CountNicRawFiles(const fs::path& bundle_dir) {
+  std::size_t count = 0;
+  for (const auto& entry : fs::directory_iterator(bundle_dir)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    const std::string name = entry.path().filename().string();
+    if (name.rfind("nic_", 0) == 0U && entry.path().extension() == ".txt") {
+      ++count;
+    }
+  }
+  return count;
+}
+
 void RunScenarioE2E(const std::string& scenario_name, std::uint64_t run_suffix) {
   const fs::path scenario_path = ResolveScenarioPath(scenario_name);
   if (scenario_path.empty()) {
@@ -146,6 +160,9 @@ void RunScenarioE2E(const std::string& scenario_name, std::uint64_t run_suffix) 
   }
   if (!fs::exists(summary_markdown)) {
     Fail("summary.md missing for scenario: " + scenario_name);
+  }
+  if (CountNicRawFiles(bundle_dir) == 0U) {
+    Fail("raw NIC command outputs missing for scenario: " + scenario_name);
   }
 
   const std::vector<std::string> lines = ReadNonEmptyLines(events_jsonl);

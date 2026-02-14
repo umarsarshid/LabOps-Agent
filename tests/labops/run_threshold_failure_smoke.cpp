@@ -49,6 +49,20 @@ fs::path ResolveSingleBundleDir(const fs::path& out_root) {
   return bundle_dirs.front();
 }
 
+std::size_t CountNicRawFiles(const fs::path& bundle_dir) {
+  std::size_t count = 0;
+  for (const auto& entry : fs::directory_iterator(bundle_dir)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    const std::string name = entry.path().filename().string();
+    if (name.rfind("nic_", 0) == 0U && entry.path().extension() == ".txt") {
+      ++count;
+    }
+  }
+  return count;
+}
+
 } // namespace
 
 int main() {
@@ -118,6 +132,9 @@ int main() {
   }
   if (!fs::exists(bundle_dir / "hostprobe.json")) {
     Fail("hostprobe.json missing for threshold-fail run");
+  }
+  if (CountNicRawFiles(bundle_dir) == 0U) {
+    Fail("raw NIC command outputs missing for threshold-fail run");
   }
   if (!fs::exists(bundle_dir / "events.jsonl")) {
     Fail("events.jsonl missing for threshold-fail run");

@@ -13,7 +13,7 @@ Simple flow:
 - LabOps executes the backend with deterministic controls.
 - It records a per-run bundle with `scenario.json`, `run.json`,
   `events.jsonl`, `metrics.csv`, `metrics.json`, `summary.md`, and
-  `hostprobe.json`.
+  `hostprobe.json` plus raw NIC command outputs (`nic_*.txt`).
 - Tests verify contracts and determinism so behavior stays reproducible.
 
 ## Current Status
@@ -56,6 +56,7 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
 - Artifact writers for per-run bundle files:
   - `<out>/<run_id>/scenario.json`
   - `<out>/<run_id>/hostprobe.json`
+  - `<out>/<run_id>/nic_*.txt`
   - `<out>/<run_id>/run.json`
   - `<out>/<run_id>/events.jsonl`
   - `<out>/<run_id>/metrics.csv`
@@ -67,7 +68,7 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
   - `labops baseline capture <scenario.json>`
   - writes baseline artifacts directly under `baselines/<scenario_id>/`
   - baseline directory includes `metrics.csv`, `metrics.json`, `summary.md`,
-    and `hostprobe.json`
+    `hostprobe.json`, and raw NIC command outputs (`nic_*.txt`)
 - Compare command:
   - `labops compare --baseline ... --run ...`
   - compares summary metrics and writes `diff.json` + `diff.md`
@@ -94,7 +95,9 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
     top anomalies
 - Host probe pipeline:
   - writes `<out>/<run_id>/hostprobe.json`
-  - includes OS/CPU/RAM/uptime/load snapshot for hardware/software triage
+  - includes OS/CPU/RAM/uptime/load snapshot and parsed NIC highlights for
+    hardware/software triage
+  - writes platform NIC raw command outputs as `nic_*.txt`
 - Backend contract (`ICameraBackend`) plus deterministic sim backend.
 - Sim features:
   - Configurable FPS, jitter, seed, frame size.
@@ -185,6 +188,7 @@ cmake --build build
 Expected bundle layout per run:
 - `<out-dir>/<run_id>/scenario.json`
 - `<out-dir>/<run_id>/hostprobe.json`
+- `<out-dir>/<run_id>/nic_*.txt`
 - `<out-dir>/<run_id>/run.json`
 - `<out-dir>/<run_id>/events.jsonl`
 - `<out-dir>/<run_id>/metrics.csv`
@@ -215,7 +219,8 @@ If you want to author new scenarios, follow `docs/scenario_schema.md`.
   - `baselines/<scenario_id>/`
 - This folder is the stable baseline target for future regression comparison.
 - Baseline capture currently emits the same core evidence set as run mode,
-  including `metrics.csv`, `metrics.json`, `summary.md`, and `hostprobe.json`.
+  including `metrics.csv`, `metrics.json`, `summary.md`, `hostprobe.json`,
+  and `nic_*.txt`.
 
 ### Compare Diff Output
 
@@ -246,8 +251,18 @@ If you want to author new scenarios, follow `docs/scenario_schema.md`.
 ### hostprobe.json
 
 - Host context snapshot written by `labops run`.
-- Includes OS, CPU, RAM total bytes, uptime, and load snapshot.
+- Includes OS, CPU, RAM total bytes, uptime, load snapshot, and parsed NIC
+  highlights.
 - Stored at `<out>/<run_id>/hostprobe.json`.
+
+### nic_*.txt
+
+- Raw NIC command outputs captured best-effort per platform.
+- Examples:
+  - Windows: `nic_ipconfig_all.txt`
+  - Linux: `nic_ip_a.txt`, `nic_ip_r.txt`, `nic_ethtool.txt` (if available)
+  - macOS: `nic_ifconfig_a.txt`, `nic_netstat_rn.txt`, `nic_route_get_default.txt`
+- Stored at `<out>/<run_id>/nic_*.txt`.
 
 ### bundle_manifest.json
 

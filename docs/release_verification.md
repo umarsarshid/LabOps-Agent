@@ -27,7 +27,9 @@ Confirm that:
     - `./build/labops baseline capture scenarios/sim_baseline.json`
   - expected:
     - folder exists: `baselines/sim_baseline/`
-    - includes: `scenario.json`, `hostprobe.json`, `run.json`, `events.jsonl`, `metrics.csv`, `metrics.json`, `summary.md`, `bundle_manifest.json`
+    - includes: `scenario.json`, `hostprobe.json`, `nic_*.txt`, `run.json`,
+      `events.jsonl`, `metrics.csv`, `metrics.json`, `summary.md`,
+      `bundle_manifest.json`
 
 - [ ] 2. Execute candidate run.
   - command:

@@ -46,6 +46,20 @@ fs::path ResolveScenarioPath(const std::string& scenario_name) {
   return {};
 }
 
+std::vector<fs::path> CollectNicRawFiles(const fs::path& bundle_dir) {
+  std::vector<fs::path> files;
+  for (const auto& entry : fs::directory_iterator(bundle_dir)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    const std::string name = entry.path().filename().string();
+    if (name.rfind("nic_", 0) == 0U && entry.path().extension() == ".txt") {
+      files.push_back(entry.path());
+    }
+  }
+  return files;
+}
+
 void AssertNoRunIdSubdirectories(const fs::path& baseline_dir) {
   for (const auto& entry : fs::directory_iterator(baseline_dir)) {
     if (!entry.is_directory()) {
@@ -152,6 +166,10 @@ int main() {
   if (!fs::exists(bundle_manifest_json)) {
     fs::current_path(original_cwd, ec);
     Fail("baseline missing bundle_manifest.json");
+  }
+  if (CollectNicRawFiles(baseline_dir).empty()) {
+    fs::current_path(original_cwd, ec);
+    Fail("baseline missing raw NIC command output files (nic_*.txt)");
   }
 
   std::ifstream metrics_csv_input(metrics_csv, std::ios::binary);
