@@ -38,3 +38,7 @@ artifact consumers.
     - confidence threshold
     - stable repro rate
   - Verifies human-readable explanation text is emitted.
+- `engineer_packet_writer_smoke.cpp`
+  - Generates `engineer_packet.md` from state, attempts, and evidence links.
+  - Verifies required packet sections are present.
+  - Verifies exact artifact and diff paths are embedded in the packet.

@@ -134,6 +134,14 @@ scenario mutations to `out/agent_runs/`.
     - confidence threshold
     - stable repro rate
   - returns explicit human-readable explanation for why execution stopped
+- Engineer packet generation:
+  - writes `engineer_packet.md` with reproducible handoff content:
+    - repro steps
+    - configs tried
+    - what changed
+    - what we ruled out
+    - ranked hypotheses + evidence links
+  - includes exact artifact and diff paths for evidence traceability
 - Host probe pipeline:
   - writes `<out>/<run_id>/hostprobe.json`
   - includes OS/CPU/RAM/uptime/load snapshot and parsed NIC highlights

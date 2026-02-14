@@ -33,8 +33,9 @@ LabOps must be predictable. Tests verify command contracts, scenario validation,
   `agent_state.json` contract stability and in-process experiment runner flow
   (baseline + one variant), including clean failure behavior for invalid
   scenario paths, symptom-based playbook selection, and OAAT variant file
-  generation under `out/agent_runs`, plus deterministic stop-condition
-  decisions with explanation text.
+  generation under `out/agent_runs`, deterministic stop-condition decisions
+  with explanation text, and final engineer packet generation with exact
+  artifact/diff links.
 
 ## Design principle
 

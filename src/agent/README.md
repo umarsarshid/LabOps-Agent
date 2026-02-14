@@ -37,6 +37,15 @@ triage.
     3. confidence threshold
     4. stable repro rate
   - Returns both machine reason and human-readable explanation text.
+- `engineer_packet_writer.hpp` / `engineer_packet_writer.cpp`
+  - Writes `engineer_packet.md` for final handoff.
+  - Includes:
+    - repro steps
+    - configs tried
+    - what changed
+    - what we ruled out
+    - ranked hypotheses + evidence links
+  - Embeds exact artifact and diff paths for each evidence run.
 - `experiment_state.hpp` / `experiment_state.cpp`
   - Canonical `ExperimentState` model.
   - Structured lists for:
@@ -66,6 +75,9 @@ can be executed immediately, while preserving the one-knob-change discipline.
 
 Stop conditions complete the minimal loop control contract so the agent can end
 runs deterministically and explain exactly why it stopped.
+
+Engineer packet generation completes the handoff surface so humans get one
+evidence-rich markdown report instead of piecing together multiple artifacts.
 
 ## How it connects to the project
 

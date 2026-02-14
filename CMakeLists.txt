@@ -57,6 +57,7 @@ target_compile_features(labops_hostprobe PUBLIC cxx_std_20)
 
 # Agent-state contracts for experiment planning checkpoints (`agent_state.json`).
 add_library(labops_agent
+  src/agent/engineer_packet_writer.cpp
   src/agent/experiment_runner.cpp
   src/agent/experiment_state.cpp
   src/agent/playbook.cpp
@@ -171,6 +172,14 @@ add_executable(stop_conditions_smoke
 target_link_libraries(stop_conditions_smoke PRIVATE labops_agent)
 target_compile_features(stop_conditions_smoke PRIVATE cxx_std_20)
 add_test(NAME stop_conditions_smoke COMMAND stop_conditions_smoke)
+
+# Smoke test for engineer packet generation with exact artifact and diff links.
+add_executable(engineer_packet_writer_smoke
+  tests/agent/engineer_packet_writer_smoke.cpp
+)
+target_link_libraries(engineer_packet_writer_smoke PRIVATE labops_agent)
+target_compile_features(engineer_packet_writer_smoke PRIVATE cxx_std_20)
+add_test(NAME engineer_packet_writer_smoke COMMAND engineer_packet_writer_smoke)
 
 # Smoke test for scenario snapshot writer contract.
 add_executable(scenario_writer_smoke
