@@ -40,6 +40,27 @@ cmake -S . -B tmp/build-real -DLABOPS_ENABLE_REAL_BACKEND=ON
 cmake --build tmp/build-real
 ```
 
+You can point SDK discovery to your local install using either CMake cache vars
+or environment variables:
+
+- `VENDOR_SDK_ROOT` (expected to contain `include/` and `lib/` or `lib64/`)
+- `VENDOR_SDK_INCLUDE` (explicit include dir override)
+- `VENDOR_SDK_LIB` (explicit library dir override)
+
+Examples:
+
+```bash
+cmake -S . -B tmp/build-real \
+  -DLABOPS_ENABLE_REAL_BACKEND=ON \
+  -DVENDOR_SDK_ROOT=/opt/vendor_sdk
+```
+
+```bash
+export VENDOR_SDK_INCLUDE=/opt/vendor_sdk/include
+export VENDOR_SDK_LIB=/opt/vendor_sdk/lib
+cmake -S . -B tmp/build-real -DLABOPS_ENABLE_REAL_BACKEND=ON
+```
+
 If you are validating default repo behavior (no SDK path):
 
 ```bash

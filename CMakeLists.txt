@@ -23,6 +23,34 @@ option(LABOPS_ENABLE_REAL_BACKEND
   OFF
 )
 
+# Vendor SDK discovery inputs. These are intentionally path-only plumbing so
+# local integration can be configured without checking proprietary artifacts
+# into source control.
+set(VENDOR_SDK_ROOT "" CACHE PATH "Vendor SDK root directory (contains include/ and lib/)")
+set(VENDOR_SDK_INCLUDE "" CACHE PATH "Vendor SDK include directory override")
+set(VENDOR_SDK_LIB "" CACHE PATH "Vendor SDK library directory override")
+
+# Keep custom CMake discovery modules colocated under `cmake/`.
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+# Effective backend state used by compile definitions and future SDK wiring.
+# If real backend is requested but SDK paths cannot be resolved, we degrade
+# safely to OFF so builds stay portable across environments.
+set(LABOPS_REAL_BACKEND_EFFECTIVE OFF)
+if(LABOPS_ENABLE_REAL_BACKEND)
+  find_package(VendorSDK QUIET)
+  if(VendorSDK_FOUND)
+    set(LABOPS_REAL_BACKEND_EFFECTIVE ON)
+    message(STATUS "Real backend enabled: SDK found")
+    message(STATUS "Vendor SDK include dir: ${VendorSDK_INCLUDE_DIR}")
+    message(STATUS "Vendor SDK library dir: ${VendorSDK_LIBRARY_DIR}")
+  else()
+    message(STATUS "SDK missing (real backend disabled)")
+  endif()
+else()
+  message(STATUS "Real backend disabled (LABOPS_ENABLE_REAL_BACKEND=OFF)")
+endif()
+
 # Shared schema library for run contracts. Keeping this in a standalone target
 # makes it easy for CLI, tests, and future modules to reuse the same contract
 # and serialization behavior.
@@ -49,8 +77,9 @@ add_library(labops_backends
 )
 target_include_directories(labops_backends PUBLIC src)
 target_compile_features(labops_backends PUBLIC cxx_std_20)
-if(LABOPS_ENABLE_REAL_BACKEND)
+if(LABOPS_REAL_BACKEND_EFFECTIVE)
   target_compile_definitions(labops_backends PUBLIC LABOPS_ENABLE_REAL_BACKEND=1)
+  target_include_directories(labops_backends PUBLIC "${VendorSDK_INCLUDE_DIR}")
 else()
   target_compile_definitions(labops_backends PUBLIC LABOPS_ENABLE_REAL_BACKEND=0)
 endif()
