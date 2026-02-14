@@ -19,7 +19,8 @@ namespace labops::metrics {
 // - returns a deterministic list ordered by heuristic priority.
 // - includes threshold-failure notes when provided.
 // - list is capped for concise run-summary readability.
-std::vector<std::string> BuildAnomalyHighlights(const FpsReport& report, std::uint32_t configured_fps,
+std::vector<std::string> BuildAnomalyHighlights(const FpsReport& report,
+                                                std::uint32_t configured_fps,
                                                 const std::vector<std::string>& threshold_failures);
 
 } // namespace labops::metrics

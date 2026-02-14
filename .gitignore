@@ -1,0 +1,4 @@
+# Local workspace scratch area for build/test outputs and ad-hoc bundles.
+# Keep the directory itself via `.gitkeep`, ignore everything else inside.
+tmp/*
+!tmp/.gitkeep

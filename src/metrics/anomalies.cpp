@@ -60,7 +60,8 @@ bool TryDetectResendSpike(const FpsReport& report, const std::uint32_t configure
   const bool spike_by_config = configured_fps > 0U && peak_fps >= configured_floor;
   const bool corroborated_by_fault_signals =
       report.dropped_frames_total > 0U ||
-      (report.inter_frame_jitter_us.sample_count > 0U && report.inter_frame_jitter_us.avg_us > 0.0 &&
+      (report.inter_frame_jitter_us.sample_count > 0U &&
+       report.inter_frame_jitter_us.avg_us > 0.0 &&
        report.inter_frame_jitter_us.p95_us >= report.inter_frame_jitter_us.avg_us * 2.50);
 
   if ((!spike_by_shape && !spike_by_config) || !corroborated_by_fault_signals) {
@@ -75,7 +76,8 @@ bool TryDetectResendSpike(const FpsReport& report, const std::uint32_t configure
 
 bool TryDetectJitterCliff(const FpsReport& report, const std::uint32_t configured_fps,
                           std::string& message) {
-  if (report.inter_frame_jitter_us.sample_count < 10U || report.inter_frame_jitter_us.avg_us <= 0.0) {
+  if (report.inter_frame_jitter_us.sample_count < 10U ||
+      report.inter_frame_jitter_us.avg_us <= 0.0) {
     return false;
   }
 
@@ -174,26 +176,24 @@ void AddLegacySignals(const FpsReport& report, const std::uint32_t configured_fp
 
   if (report.inter_frame_interval_us.sample_count > 0U &&
       report.inter_frame_interval_us.p95_us > expected_interval_us * 1.50) {
-    anomalies.push_back("Inter-frame interval p95 " +
-                        FormatDouble(report.inter_frame_interval_us.p95_us, 1) +
-                        "us is >150% of expected cadence " + FormatDouble(expected_interval_us, 1) +
-                        "us.");
+    anomalies.push_back(
+        "Inter-frame interval p95 " + FormatDouble(report.inter_frame_interval_us.p95_us, 1) +
+        "us is >150% of expected cadence " + FormatDouble(expected_interval_us, 1) + "us.");
   }
 
   if (report.inter_frame_jitter_us.sample_count > 0U &&
       report.inter_frame_jitter_us.p95_us > expected_interval_us * 0.50) {
-    anomalies.push_back("Inter-frame jitter p95 " +
-                        FormatDouble(report.inter_frame_jitter_us.p95_us, 1) +
-                        "us is high relative to expected cadence " +
-                        FormatDouble(expected_interval_us, 1) + "us.");
+    anomalies.push_back(
+        "Inter-frame jitter p95 " + FormatDouble(report.inter_frame_jitter_us.p95_us, 1) +
+        "us is high relative to expected cadence " + FormatDouble(expected_interval_us, 1) + "us.");
   }
 }
 
 } // namespace
 
-std::vector<std::string> BuildAnomalyHighlights(const FpsReport& report,
-                                                const std::uint32_t configured_fps,
-                                                const std::vector<std::string>& threshold_failures) {
+std::vector<std::string>
+BuildAnomalyHighlights(const FpsReport& report, const std::uint32_t configured_fps,
+                       const std::vector<std::string>& threshold_failures) {
   std::vector<std::string> anomalies;
 
   // Named heuristics first so the top-anomaly section surfaces recognizable
