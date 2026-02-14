@@ -18,4 +18,3 @@ bool WriteKbDraftFromRunFolder(const std::filesystem::path& run_dir,
                                std::filesystem::path& written_path, std::string& error);
 
 } // namespace labops::artifacts
-

@@ -33,16 +33,14 @@ bool ReadTextFile(const fs::path& file_path, std::string& text, std::string& err
 
 std::string Trim(std::string_view value) {
   std::size_t start = 0;
-  while (start < value.size() &&
-         (value[start] == ' ' || value[start] == '\t' || value[start] == '\n' ||
-          value[start] == '\r')) {
+  while (start < value.size() && (value[start] == ' ' || value[start] == '\t' ||
+                                  value[start] == '\n' || value[start] == '\r')) {
     ++start;
   }
 
   std::size_t end = value.size();
-  while (end > start &&
-         (value[end - 1] == ' ' || value[end - 1] == '\t' || value[end - 1] == '\n' ||
-          value[end - 1] == '\r')) {
+  while (end > start && (value[end - 1] == ' ' || value[end - 1] == '\t' ||
+                         value[end - 1] == '\n' || value[end - 1] == '\r')) {
     --end;
   }
 
@@ -205,7 +203,8 @@ bool WriteKbDraftFromRunFolder(const fs::path& run_dir, const fs::path& output_p
   const std::string stop_reason = ExtractRunContextValue(run_context, "stop_reason");
 
   fs::path normalized_output_path = output_path;
-  if (fs::exists(normalized_output_path, ec) && !ec && fs::is_directory(normalized_output_path, ec)) {
+  if (fs::exists(normalized_output_path, ec) && !ec &&
+      fs::is_directory(normalized_output_path, ec)) {
     normalized_output_path /= "kb_draft.md";
   }
 
@@ -213,8 +212,8 @@ bool WriteKbDraftFromRunFolder(const fs::path& run_dir, const fs::path& output_p
   if (!output_parent.empty()) {
     fs::create_directories(output_parent, ec);
     if (ec) {
-      error = "failed to create kb draft output directory '" + output_parent.string() + "': " +
-              ec.message();
+      error = "failed to create kb draft output directory '" + output_parent.string() +
+              "': " + ec.message();
       return false;
     }
   }
