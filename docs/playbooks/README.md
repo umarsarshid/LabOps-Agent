@@ -12,6 +12,7 @@ When failures recur, teams should follow a known decision path rather than reinv
 - Escalation criteria and ownership handoff.
 - Recovery steps and verification criteria.
 - Links to required artifacts for each incident type.
+- Deterministic agent decision references (example: `agent_decisions.md`).
 
 ## Connection to the project
 
