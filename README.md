@@ -12,7 +12,8 @@ Simple flow:
 - You run a scenario.
 - LabOps executes the backend with deterministic controls.
 - It records a per-run bundle with `scenario.json`, `run.json`,
-  `events.jsonl`, `metrics.csv`, `metrics.json`, and `summary.md`.
+  `events.jsonl`, `metrics.csv`, `metrics.json`, `summary.md`, and
+  `hostprobe.json`.
 - Tests verify contracts and determinism so behavior stays reproducible.
 
 ## Current Status
@@ -33,7 +34,7 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
 - Milestone 4: done (scenario schema, validation, scenario application in run)
 - Milestone 5: done (bundle layout, manifest, optional support zip, bundle docs)
 - Milestone 6: done (baseline capture + compare diff outputs + threshold pass/fail)
-- Milestone 7: in progress (`summary.md` run report contract started)
+- Milestone 7: in progress (run summary + host probe evidence)
 
 ## Implemented So Far
 
@@ -54,6 +55,7 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
 - Run contract schema (`RunConfig`, `RunInfo`) with JSON serialization.
 - Artifact writers for per-run bundle files:
   - `<out>/<run_id>/scenario.json`
+  - `<out>/<run_id>/hostprobe.json`
   - `<out>/<run_id>/run.json`
   - `<out>/<run_id>/events.jsonl`
   - `<out>/<run_id>/metrics.csv`
@@ -64,7 +66,8 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
 - Baseline capture command:
   - `labops baseline capture <scenario.json>`
   - writes baseline artifacts directly under `baselines/<scenario_id>/`
-  - baseline directory includes `metrics.csv`, `metrics.json`, and `summary.md`
+  - baseline directory includes `metrics.csv`, `metrics.json`, `summary.md`,
+    and `hostprobe.json`
 - Compare command:
   - `labops compare --baseline ... --run ...`
   - compares summary metrics and writes `diff.json` + `diff.md`
@@ -89,6 +92,9 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
   - writes `<out>/<run_id>/summary.md`
   - includes run status (`PASS`/`FAIL`), key metrics, threshold findings, and
     top anomalies
+- Host probe pipeline:
+  - writes `<out>/<run_id>/hostprobe.json`
+  - includes OS/CPU/RAM/uptime/load snapshot for hardware/software triage
 - Backend contract (`ICameraBackend`) plus deterministic sim backend.
 - Sim features:
   - Configurable FPS, jitter, seed, frame size.
@@ -178,6 +184,7 @@ cmake --build build
 
 Expected bundle layout per run:
 - `<out-dir>/<run_id>/scenario.json`
+- `<out-dir>/<run_id>/hostprobe.json`
 - `<out-dir>/<run_id>/run.json`
 - `<out-dir>/<run_id>/events.jsonl`
 - `<out-dir>/<run_id>/metrics.csv`
@@ -208,7 +215,7 @@ If you want to author new scenarios, follow `docs/scenario_schema.md`.
   - `baselines/<scenario_id>/`
 - This folder is the stable baseline target for future regression comparison.
 - Baseline capture currently emits the same core evidence set as run mode,
-  including `metrics.csv`, `metrics.json`, and `summary.md`.
+  including `metrics.csv`, `metrics.json`, `summary.md`, and `hostprobe.json`.
 
 ### Compare Diff Output
 
@@ -235,6 +242,12 @@ If you want to author new scenarios, follow `docs/scenario_schema.md`.
 
 - Byte-for-byte snapshot copy of the source scenario used for the run.
 - Stored at `<out>/<run_id>/scenario.json`.
+
+### hostprobe.json
+
+- Host context snapshot written by `labops run`.
+- Includes OS, CPU, RAM total bytes, uptime, and load snapshot.
+- Stored at `<out>/<run_id>/hostprobe.json`.
 
 ### bundle_manifest.json
 

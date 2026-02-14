@@ -9,6 +9,7 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 ## Expected outputs
 
 - `scenario.json` snapshot of the exact scenario that was run.
+- `hostprobe.json` host system snapshot captured for run context.
 - `run.json` for run metadata.
 - `events.jsonl` append-only run timeline.
 - `metrics.csv` for plotting and spreadsheet workflows.
@@ -29,6 +30,8 @@ The project promise is a clean, reproducible evidence packet. This module ensure
   - `metrics.json` for machine parsing by agent logic
 - `scenario_writer.hpp/.cpp`: copies source scenario into bundle as
   `scenario.json` for reproducibility.
+- `hostprobe_writer.hpp/.cpp`: writes host context snapshot to
+  `hostprobe.json` (OS/CPU/RAM/uptime/load).
 - `bundle_manifest_writer.hpp/.cpp`: writes `bundle_manifest.json` with
   per-file `size_bytes` and `fnv1a_64` hash values.
 - `bundle_zip_writer.hpp/.cpp`: writes optional support zip archives

@@ -116,6 +116,9 @@ int main() {
   if (!fs::exists(bundle_dir / "run.json")) {
     Fail("run.json missing for threshold-fail run");
   }
+  if (!fs::exists(bundle_dir / "hostprobe.json")) {
+    Fail("hostprobe.json missing for threshold-fail run");
+  }
   if (!fs::exists(bundle_dir / "events.jsonl")) {
     Fail("events.jsonl missing for threshold-fail run");
   }

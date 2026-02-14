@@ -10,6 +10,7 @@ This file helps the next coding agent continue work without re-discovery.
 - run artifact generation (`scenario.json`, `run.json`, `events.jsonl`)
 - metrics generation (`metrics.csv`, `metrics.json`)
 - one-page run summary generation (`summary.md`)
+- host system snapshot generation (`hostprobe.json`)
 - bundle manifest generation (`bundle_manifest.json`)
 - optional support bundle zip (`--zip`)
 
@@ -19,7 +20,7 @@ Long-term goal:
 
 ## Current Snapshot (as of February 14, 2026)
 
-- Latest commit: `55937c5` (`feat(thresholds): enforce scenario pass/fail in run`)
+- Latest commit: `6be90c9` (`docs(release): add verification checklist`)
 - Milestones completed:
   - Milestone 0: repo/build/style/CI foundation
   - Milestone 1: CLI skeleton + output contracts
@@ -28,9 +29,11 @@ Long-term goal:
   - Milestone 4: scenario schema, loader/validator, scenario->backend apply
   - Milestone 5: bundle layout, manifest, optional zip, bundle docs
   - Milestone 6: baseline capture + compare diff outputs + threshold pass/fail
+  - Milestone 7: `0033` complete (per-run `summary.md`)
 - Milestone 7 status:
-  - `0033` in progress: per-run `summary.md` one-page report
-- Latest known test status: baseline/compare/threshold/run smoke suite passing.
+  - `0035` in progress: host probe evidence (`hostprobe.json`) in run bundle
+- Latest known test status: baseline/compare/threshold/run smoke suite passing
+  after `0034`.
 
 ## Confirmed Working Commands
 
@@ -47,6 +50,7 @@ CLI:
 
 Expected run outputs:
 - `<out>/<run_id>/scenario.json`
+- `<out>/<run_id>/hostprobe.json`
 - `<out>/<run_id>/run.json`
 - `<out>/<run_id>/events.jsonl`
 - `<out>/<run_id>/metrics.csv`
@@ -98,7 +102,7 @@ Commands still run; it is a shell startup warning, not a LabOps failure.
 
 Use the user's explicit next commit request first. If no explicit task is
 provided, likely follow-on work is:
-- finish and commit `0033` (`summary.md` writer + docs/tests)
+- finish and commit `0035` (host probe bundle evidence)
 - agent experiment planner/runner (OAAT isolation loop)
 - engineer packet generation
 - hardware SDK backend implementation behind `ICameraBackend`

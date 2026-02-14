@@ -43,11 +43,12 @@ Current high-level write sequence:
 
 1. `scenario.json` snapshot is copied into bundle.
 2. `events.jsonl` starts receiving lifecycle and frame events.
-3. `run.json` is written after stream completion.
-4. `metrics.csv` and `metrics.json` are written.
-5. `summary.md` is written as a one-page human triage report.
-6. `bundle_manifest.json` is generated from required artifacts.
-7. optional `.zip` archive is created as a sibling of bundle directory.
+3. `hostprobe.json` is written with host system snapshot.
+4. `run.json` is written after stream completion.
+5. `metrics.csv` and `metrics.json` are written.
+6. `summary.md` is written as a one-page human triage report.
+7. `bundle_manifest.json` is generated from required artifacts.
+8. optional `.zip` archive is created as a sibling of bundle directory.
 
 ## Directory Layout Contract
 
@@ -57,6 +58,7 @@ Required bundle structure:
 <out>/
   <run_id>/
     scenario.json
+    hostprobe.json
     run.json
     events.jsonl
     metrics.csv
@@ -79,6 +81,7 @@ Optional output:
 | File | Required | Producer | Why it exists |
 | --- | --- | --- | --- |
 | `scenario.json` | yes | scenario writer | Preserves exact scenario input used for run reproducibility. |
+| `hostprobe.json` | yes | host probe writer | Captures host OS/CPU/RAM/uptime/load context for triage. |
 | `run.json` | yes | run writer | Captures run identity, immutable config, and run timestamps. |
 | `events.jsonl` | yes | event writer | Timeline-level evidence for stream behavior and failures. |
 | `metrics.csv` | yes | metrics writer | Human-readable metrics for spreadsheets and quick plotting. |
@@ -121,6 +124,25 @@ Field notes:
 - `scenario_id`: currently derived from scenario filename stem
 - `backend`: currently `sim` in default flow
 - `timestamps.*`: UTC with millisecond precision (`YYYY-MM-DDTHH:MM:SS.mmmZ`)
+
+### `hostprobe.json`
+
+Purpose:
+
+- capture host context that often explains environment-specific failures
+- keep a lightweight machine snapshot alongside run metrics/events
+
+Current fields:
+
+- `captured_at_utc`
+- `os` object:
+  - `name`, `version`
+- `cpu` object:
+  - `model`, `logical_cores`
+- `ram_total_bytes`
+- `uptime_seconds`
+- `load_avg` object:
+  - `one_min`, `five_min`, `fifteen_min` (null when unavailable)
 
 ### `events.jsonl`
 
@@ -236,6 +258,7 @@ Canonical structure:
 Current manifest file inclusion list:
 
 - `scenario.json`
+- `hostprobe.json`
 - `run.json`
 - `events.jsonl`
 - `metrics.csv`

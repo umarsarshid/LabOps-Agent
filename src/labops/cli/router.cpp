@@ -3,6 +3,7 @@
 #include "artifacts/bundle_manifest_writer.hpp"
 #include "artifacts/metrics_writer.hpp"
 #include "artifacts/metrics_diff_writer.hpp"
+#include "artifacts/hostprobe_writer.hpp"
 #include "artifacts/run_summary_writer.hpp"
 #include "artifacts/run_writer.hpp"
 #include "artifacts/scenario_writer.hpp"
@@ -15,6 +16,7 @@
 #include "events/jsonl_writer.hpp"
 #include "metrics/fps.hpp"
 #include "scenarios/validator.hpp"
+#include "hostprobe/system_probe.hpp"
 
 #include <cctype>
 #include <charconv>
@@ -803,6 +805,18 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
     return kExitFailure;
   }
 
+  hostprobe::HostProbeSnapshot host_snapshot;
+  if (!hostprobe::CollectHostProbeSnapshot(host_snapshot, error)) {
+    std::cerr << "error: failed to collect host probe data: " << error << '\n';
+    return kExitFailure;
+  }
+
+  fs::path hostprobe_artifact_path;
+  if (!artifacts::WriteHostProbeJson(host_snapshot, bundle_dir, hostprobe_artifact_path, error)) {
+    std::cerr << "error: failed to write hostprobe.json: " << error << '\n';
+    return kExitFailure;
+  }
+
   std::unique_ptr<backends::ICameraBackend> backend =
       std::make_unique<backends::sim::SimCameraBackend>();
 
@@ -987,6 +1001,7 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
   fs::path bundle_manifest_path;
   const std::vector<fs::path> bundle_artifact_paths = {
       scenario_artifact_path,
+      hostprobe_artifact_path,
       run_artifact_path,
       events_path,
       metrics_csv_path,
@@ -1009,6 +1024,7 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
   std::cout << success_prefix << options.scenario_path << '\n';
   std::cout << "bundle: " << bundle_dir.string() << '\n';
   std::cout << "scenario: " << scenario_artifact_path.string() << '\n';
+  std::cout << "hostprobe: " << hostprobe_artifact_path.string() << '\n';
   std::cout << "artifact: " << run_artifact_path.string() << '\n';
   std::cout << "events: " << events_path.string() << '\n';
   std::cout << "metrics_csv: " << metrics_csv_path.string() << '\n';

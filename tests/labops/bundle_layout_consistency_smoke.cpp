@@ -79,6 +79,7 @@ std::vector<fs::path> CollectBundleDirs(const fs::path& out_root) {
 void AssertBundleHasRequiredFiles(const fs::path& bundle_dir) {
   const fs::path run_json = bundle_dir / "run.json";
   const fs::path scenario_json = bundle_dir / "scenario.json";
+  const fs::path hostprobe_json = bundle_dir / "hostprobe.json";
   const fs::path bundle_manifest_json = bundle_dir / "bundle_manifest.json";
   const fs::path events_jsonl = bundle_dir / "events.jsonl";
   const fs::path metrics_csv = bundle_dir / "metrics.csv";
@@ -90,6 +91,9 @@ void AssertBundleHasRequiredFiles(const fs::path& bundle_dir) {
   }
   if (!fs::exists(scenario_json)) {
     Fail("bundle missing scenario.json");
+  }
+  if (!fs::exists(hostprobe_json)) {
+    Fail("bundle missing hostprobe.json");
   }
   if (!fs::exists(bundle_manifest_json)) {
     Fail("bundle missing bundle_manifest.json");

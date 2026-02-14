@@ -131,6 +131,7 @@ int main() {
   const fs::path bundle_dir = ResolveSingleBundleDir(out_dir);
   const fs::path run_json = bundle_dir / "run.json";
   const fs::path scenario_json = bundle_dir / "scenario.json";
+  const fs::path hostprobe_json = bundle_dir / "hostprobe.json";
   const fs::path bundle_manifest_json = bundle_dir / "bundle_manifest.json";
   const fs::path events_jsonl = bundle_dir / "events.jsonl";
   const fs::path metrics_csv = bundle_dir / "metrics.csv";
@@ -141,6 +142,9 @@ int main() {
   }
   if (!fs::exists(scenario_json)) {
     Fail("scenario.json was not produced");
+  }
+  if (!fs::exists(hostprobe_json)) {
+    Fail("hostprobe.json was not produced");
   }
   if (!fs::exists(bundle_manifest_json)) {
     Fail("bundle_manifest.json was not produced");
@@ -218,6 +222,18 @@ int main() {
   AssertContains(metrics_json_content, "\"drop_rate_percent\":");
   AssertContains(metrics_json_content, "\"rolling_fps\":[");
 
+  std::ifstream hostprobe_input(hostprobe_json, std::ios::binary);
+  if (!hostprobe_input) {
+    Fail("failed to open hostprobe.json");
+  }
+  const std::string hostprobe_content((std::istreambuf_iterator<char>(hostprobe_input)),
+                                      std::istreambuf_iterator<char>());
+  AssertContains(hostprobe_content, "\"os\":{");
+  AssertContains(hostprobe_content, "\"cpu\":{");
+  AssertContains(hostprobe_content, "\"ram_total_bytes\":");
+  AssertContains(hostprobe_content, "\"uptime_seconds\":");
+  AssertContains(hostprobe_content, "\"load_avg\":{");
+
   std::ifstream summary_input(summary_markdown, std::ios::binary);
   if (!summary_input) {
     Fail("failed to open summary.md");
@@ -237,6 +253,7 @@ int main() {
                                      std::istreambuf_iterator<char>());
   AssertContains(manifest_content, "\"hash_algorithm\":\"fnv1a_64\"");
   AssertContains(manifest_content, "\"path\":\"scenario.json\"");
+  AssertContains(manifest_content, "\"path\":\"hostprobe.json\"");
   AssertContains(manifest_content, "\"path\":\"run.json\"");
   AssertContains(manifest_content, "\"path\":\"events.jsonl\"");
   AssertContains(manifest_content, "\"path\":\"metrics.csv\"");

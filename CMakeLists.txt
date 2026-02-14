@@ -48,6 +48,13 @@ add_library(labops_scenarios
 target_include_directories(labops_scenarios PUBLIC src)
 target_compile_features(labops_scenarios PUBLIC cxx_std_20)
 
+# Host probe collectors for machine context evidence (`hostprobe.json`).
+add_library(labops_hostprobe
+  src/hostprobe/system_probe.cpp
+)
+target_include_directories(labops_hostprobe PUBLIC src)
+target_compile_features(labops_hostprobe PUBLIC cxx_std_20)
+
 # Metrics formulas and writers for run performance outputs.
 add_library(labops_metrics
   src/metrics/fps.cpp
@@ -59,6 +66,7 @@ target_compile_features(labops_metrics PUBLIC cxx_std_20)
 add_library(labops_artifacts
   src/artifacts/bundle_manifest_writer.cpp
   src/artifacts/bundle_zip_writer.cpp
+  src/artifacts/hostprobe_writer.cpp
   src/artifacts/metrics_diff_writer.cpp
   src/artifacts/metrics_writer.cpp
   src/artifacts/run_summary_writer.cpp
@@ -67,7 +75,7 @@ add_library(labops_artifacts
 )
 target_include_directories(labops_artifacts PUBLIC src)
 target_compile_features(labops_artifacts PUBLIC cxx_std_20)
-target_link_libraries(labops_artifacts PUBLIC labops_metrics labops_schema)
+target_link_libraries(labops_artifacts PUBLIC labops_hostprobe labops_metrics labops_schema)
 
 add_executable(labops
   src/labops/cli/router.cpp

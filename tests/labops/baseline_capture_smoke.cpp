@@ -113,6 +113,7 @@ int main() {
   }
 
   const fs::path scenario_json = baseline_dir / "scenario.json";
+  const fs::path hostprobe_json = baseline_dir / "hostprobe.json";
   const fs::path run_json = baseline_dir / "run.json";
   const fs::path events_jsonl = baseline_dir / "events.jsonl";
   const fs::path metrics_csv = baseline_dir / "metrics.csv";
@@ -123,6 +124,10 @@ int main() {
   if (!fs::exists(scenario_json)) {
     fs::current_path(original_cwd, ec);
     Fail("baseline missing scenario.json");
+  }
+  if (!fs::exists(hostprobe_json)) {
+    fs::current_path(original_cwd, ec);
+    Fail("baseline missing hostprobe.json");
   }
   if (!fs::exists(run_json)) {
     fs::current_path(original_cwd, ec);

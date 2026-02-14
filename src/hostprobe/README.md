@@ -8,9 +8,20 @@ Camera performance issues are often host-dependent (OS version, driver, NIC sett
 
 ## Expected responsibilities
 
-- Collect machine metadata (OS, CPU, memory, network basics, clock info).
+- Collect machine metadata (OS, CPU, memory, uptime, load snapshot).
 - Normalize host facts into run metadata.
 - Flag missing/unknown probe fields safely.
+
+## Current contents
+
+- `system_probe.hpp/.cpp`:
+  - collects lightweight host snapshot fields used by triage:
+    - OS name/version
+    - CPU model/logical core count
+    - total RAM bytes
+    - uptime seconds
+    - load snapshot (`1m/5m/15m` when platform supports it)
+  - serializes snapshot into stable JSON contract for bundle artifacts.
 
 ## Design principle
 
