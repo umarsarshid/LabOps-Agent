@@ -16,7 +16,11 @@ fi
 
 # Restrict formatting scope to tracked source files so generated or temporary
 # workspace artifacts are never reformatted by accident.
-mapfile -d '' FILES < <(
+# Use a read loop instead of `mapfile` so this works on macOS default Bash 3.x.
+FILES=()
+while IFS= read -r -d '' file; do
+  FILES+=("${file}")
+done < <(
   git ls-files -z \
     '*.c' '*.cc' '*.cpp' '*.cxx' \
     '*.h' '*.hh' '*.hpp' '*.hxx'
