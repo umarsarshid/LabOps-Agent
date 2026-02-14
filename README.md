@@ -14,6 +14,7 @@ C++-first autopilot lab assistant for repeatable camera testing and faster triag
 - Capture baselines and compare runs (`diff.json`, `diff.md`).
 - Enforce scenario thresholds with stable non-zero exit codes.
 - Generate agent artifacts (`agent_state.json`, `engineer_packet.md`) with hypothesis evidence citations.
+- Run long soak tests with periodic checkpoints and safe pause/resume (`soak_checkpoint.json`, `soak_frames.jsonl`).
 
 ## Quick Start
 
@@ -34,6 +35,7 @@ Optional flows:
 ./tmp/build/labops baseline capture scenarios/sim_baseline.json
 ./tmp/build/labops compare --baseline baselines/sim_baseline --run tmp/runs/<run_id>
 ./tmp/build/labops run scenarios/sim_baseline.json --out tmp/runs --zip --redact
+./tmp/build/labops run scenarios/sim_baseline.json --out tmp/runs --soak --checkpoint-interval-ms 60000
 ```
 
 ## Typical Triage Flow
@@ -60,6 +62,10 @@ Optional flows:
 - `report.html`
 - `bundle_manifest.json`
 - optional `<out>/<run_id>.zip` when `--zip` is set
+- optional soak-mode artifacts:
+  - `soak_checkpoint.json`
+  - `checkpoints/checkpoint_*.json`
+  - `soak_frames.jsonl`
 
 ## Docs Map
 

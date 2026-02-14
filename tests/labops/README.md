@@ -50,6 +50,10 @@ surface (argument parsing + runtime orchestration + artifact/event output).
 - `logging_contract_smoke.cpp`: verifies structured run logs honor
   `--log-level` and include the same `run_id` written to `run.json` so logs
   correlate directly with bundle artifacts.
+- `soak_checkpoint_resume_smoke.cpp`: verifies long-run soak mode emits
+  periodic checkpoints, supports safe pause at checkpoint boundaries, resumes
+  from `soak_checkpoint.json`, and completes with full artifacts without
+  losing previously captured evidence.
 
 ## Connection to the project
 

@@ -17,7 +17,7 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
 - `labops version`: prints tool version.
 - `labops validate <scenario.json>`: validates scenario schema and prints
   actionable field-level errors when invalid.
-- `labops run <scenario.json> --out <dir> [--zip] [--redact] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: emits a per-run bundle under
+- `labops run <scenario.json> --out <dir> [--zip] [--redact] [--soak --checkpoint-interval-ms <ms> [--soak-stop-file <path>] [--resume <checkpoint.json>]] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: emits a per-run bundle under
   `<dir>/<run_id>/` containing `scenario.json`, `run.json`, `events.jsonl`,
   `metrics.csv`, `metrics.json`, `summary.md`, `report.html`,
   `hostprobe.json`, and
@@ -25,7 +25,10 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
   `bundle_manifest.json`; optionally emits `<dir>/<run_id>.zip` when `--zip`
   is set; optionally redacts obvious host/user identifiers in hostprobe outputs
   when `--redact` is set; optionally applies Linux netem impairment when
-  explicitly requested; runs sim backend lifecycle;
+  explicitly requested; optionally runs in long-run soak mode with periodic
+  checkpoints (`soak_checkpoint.json`, `checkpoints/checkpoint_*.json`) and
+  resumable frame cache (`soak_frames.jsonl`) so evidence survives safe
+  stop/resume; runs sim backend lifecycle;
   evaluates configured scenario thresholds against computed metrics; returns
   non-zero when thresholds fail; and reports output paths.
 - `labops baseline capture <scenario.json> [--redact] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: captures a scenario baseline into

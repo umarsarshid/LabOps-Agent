@@ -408,6 +408,19 @@ target_link_libraries(logging_contract_smoke PRIVATE labops_artifacts labops_bac
 target_compile_features(logging_contract_smoke PRIVATE cxx_std_20)
 add_test(NAME logging_contract_smoke COMMAND logging_contract_smoke)
 
+# Integration smoke test for checkpointed soak mode:
+# - periodic checkpoint emission
+# - safe pause at checkpoint boundary
+# - resume from checkpoint without evidence loss
+add_executable(soak_checkpoint_resume_smoke
+  tests/labops/soak_checkpoint_resume_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(soak_checkpoint_resume_smoke PRIVATE src)
+target_link_libraries(soak_checkpoint_resume_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(soak_checkpoint_resume_smoke PRIVATE cxx_std_20)
+add_test(NAME soak_checkpoint_resume_smoke COMMAND soak_checkpoint_resume_smoke)
+
 # Scenario schema validation smoke tests.
 add_executable(scenario_validation_smoke
   tests/scenarios/scenario_validation_smoke.cpp

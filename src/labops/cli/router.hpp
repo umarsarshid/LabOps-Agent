@@ -2,6 +2,7 @@
 
 #include "core/logging/logger.hpp"
 
+#include <chrono>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -16,6 +17,10 @@ struct RunOptions {
   std::filesystem::path output_dir = "out";
   bool zip_bundle = false;
   bool redact_identifiers = false;
+  bool soak_mode = false;
+  std::chrono::milliseconds checkpoint_interval{60'000};
+  std::filesystem::path resume_checkpoint_path;
+  std::filesystem::path soak_stop_file;
   bool apply_netem = false;
   bool apply_netem_force = false;
   std::string netem_interface;

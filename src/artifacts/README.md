@@ -18,6 +18,9 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 - `summary.md` one-page human triage summary per run.
 - `report.html` static browser-friendly triage summary with plots-ready tables.
 - `bundle_manifest.json` listing artifact files, sizes, and hashes.
+- `soak_checkpoint.json` latest soak progress checkpoint (when soak mode is enabled).
+- `checkpoints/checkpoint_*.json` periodic checkpoint history snapshots (soak mode).
+- `soak_frames.jsonl` resumable frame cache used by soak pause/resume flow.
 - optional `<run_id>.zip` support bundle archive.
 - Diff/report files against baseline.
 - Structured bundle directories (`<out>/<run_id>/`) ready to share with

@@ -40,6 +40,15 @@ The system is designed to work without physical camera hardware first (via deter
 - Writes triage bundle artifacts.
 - Evaluates thresholds and returns deterministic exit codes.
 
+Soak mode extension:
+
+`labops run <scenario.json> --soak --checkpoint-interval-ms <ms> [--soak-stop-file <path>] [--resume <checkpoint.json>]`
+
+- Splits long runs into checkpointed chunks.
+- Persists periodic progress snapshots and frame cache.
+- Supports safe pause at checkpoint boundaries and deterministic resume without
+  losing already captured evidence.
+
 ### C) Baseline Capture
 
 `labops baseline capture <scenario.json>`
@@ -184,6 +193,10 @@ Per-run bundle layout:
 - `summary.md`
 - `report.html`
 - `bundle_manifest.json`
+- optional soak-mode state artifacts:
+  - `soak_checkpoint.json`
+  - `checkpoints/checkpoint_*.json`
+  - `soak_frames.jsonl`
 
 Optional archive:
 

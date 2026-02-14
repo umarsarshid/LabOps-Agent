@@ -13,8 +13,9 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Preserve stable exit-code semantics for automation.
 - Print deterministic command outputs.
 - Parse run artifact options (`--out <dir>`, `--zip`, `--redact`,
-  `--log-level <debug|info|warn|error>`, `--apply-netem`, `--netem-iface`,
-  `--apply-netem-force`).
+  `--soak`, `--checkpoint-interval-ms <ms>`, `--soak-stop-file <path>`,
+  `--resume <checkpoint.json>`, `--log-level <debug|info|warn|error>`,
+  `--apply-netem`, `--netem-iface`, `--apply-netem-force`).
 - Parse baseline capture command contracts (`baseline capture <scenario.json>
   [--redact] [--log-level <debug|info|warn|error>] [--apply-netem
   --netem-iface <iface> [--apply-netem-force]]`).
@@ -50,6 +51,11 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
   `<out>/<run_id>.zip`.
 - Optionally redact obvious host/user identifiers in `hostprobe.json` and
   raw NIC outputs (`nic_*.txt`) via `--redact`.
+- Optionally run long-duration soak mode with periodic checkpoints and safe
+  pause/resume behavior:
+  - `soak_checkpoint.json` + `checkpoints/checkpoint_*.json`
+  - `soak_frames.jsonl` frame cache used for resume without evidence loss
+  - checkpoint-boundary safe stop via signal (`Ctrl-C`) or `--soak-stop-file`
 - Emit scenario baseline captures under `baselines/<scenario_id>/` with
   `metrics.csv` + `metrics.json` for release-style comparison workflows.
 - Compare baseline and run metric artifacts to emit `diff.json` + `diff.md`
