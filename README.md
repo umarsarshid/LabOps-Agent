@@ -47,6 +47,29 @@ Optional flows:
 5. Review `summary.md`, `report.html`, and event/metric evidence.
 6. Use agent outputs (`agent_state.json`, `engineer_packet.md`) for handoff.
 
+## Example Flow (Need -> Do -> Get)
+
+What you need:
+- A scenario file (for example `scenarios/dropped_frames.json`)
+- A build of `labops` (`./tmp/build/labops`)
+- An output folder (for example `tmp/runs`)
+
+What you do:
+```bash
+./tmp/build/labops validate scenarios/dropped_frames.json
+./tmp/build/labops baseline capture scenarios/sim_baseline.json
+./tmp/build/labops run scenarios/dropped_frames.json --out tmp/runs --soak --checkpoint-interval-ms 60000
+./tmp/build/labops compare --baseline baselines/sim_baseline --run tmp/runs/<run_id>
+```
+
+What you get:
+- A reproducible run bundle in `tmp/runs/<run_id>/`
+- Timeline evidence in `events.jsonl`
+- Performance outputs in `metrics.csv` and `metrics.json`
+- Human-readable triage outputs in `summary.md` and `report.html`
+- Regression deltas in `diff.json` and `diff.md`
+- If soak mode is used: resumable progress files (`soak_checkpoint.json`, `soak_frames.jsonl`)
+
 ## Bundle Output (Per Run)
 
 `<out>/<run_id>/`
