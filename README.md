@@ -87,6 +87,12 @@ RUN_DIR="$(find "$OUT_ROOT" -maxdepth 1 -type d -name 'run-*' | sort | tail -n 1
 Right now, the default backend is a simulator.
 That means LabOps is already useful for repeatable testing and triage flow, even before full real-camera SDK integration.
 
+### What this means in practice
+
+- If you want to test a physical camera today: the real camera backend still needs to be implemented.
+- If you want to build and prove your team workflow today: this is already useful (same commands, same evidence files, same compare flow).
+- Once the real backend is plugged in, this exact pipeline works on live camera data instead of simulated data.
+
 ## Main Commands
 
 - `labops version`
