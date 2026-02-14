@@ -27,6 +27,12 @@ jobs:
     name: Build (${{ matrix.os }})
     needs: format
     runs-on: ${{ matrix.os }}
+    # Point temp directories at workspace `out/` so failing smoke tests leave
+    # their triage bundles in a stable location that can be uploaded.
+    env:
+      TMPDIR: ${{ github.workspace }}/out/tmp
+      TMP: ${{ github.workspace }}/out/tmp
+      TEMP: ${{ github.workspace }}/out/tmp
     strategy:
       fail-fast: false
       matrix:
@@ -39,6 +45,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Prepare artifact directories
+        run: cmake -E make_directory out/tmp
+
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLABOPS_FETCH_CATCH2=ON
 
@@ -47,3 +56,14 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Upload triage artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-failure-${{ matrix.os }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            out/**
+            build/Testing/Temporary/**
