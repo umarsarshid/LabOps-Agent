@@ -14,3 +14,7 @@ artifact consumers.
   - Builds a representative experiment state.
   - Writes `agent_state.json`.
   - Verifies required model sections and key fields are present.
+- `experiment_runner_smoke.cpp`
+  - Runs baseline + one variant automatically via `ExperimentRunner`.
+  - Confirms both runs produce expected bundle artifacts.
+  - Verifies execution happens in-process through shared runner contracts.

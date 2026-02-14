@@ -25,7 +25,8 @@ contracts are documented as an internal tooling spec in
 `docs/triage_bundle_spec.md`. Runs now also emit a one-page `summary.md`
 artifact for quick human triage. Agent-mode execution is still upcoming, but
 the experiment-state model and `agent_state.json` serialization contract now
-exist as the first milestone-9 foundation.
+exist, and a first in-process `ExperimentRunner` can execute baseline + one
+variant automatically.
 
 ## Milestone Progress
 
@@ -109,6 +110,11 @@ exist as the first milestone-9 foundation.
   - canonical model for hypotheses, tested variables, and results table
   - deterministic JSON serialization into `agent_state.json`
   - dedicated smoke test to keep this artifact contract stable
+- Agent experiment runner foundation:
+  - `ExperimentRunner` executes baseline capture + one variant run
+    automatically in-process
+  - reuses the same scenario runner pipeline as CLI (`ExecuteScenarioRun`)
+    rather than shelling out to subprocess commands
 - Host probe pipeline:
   - writes `<out>/<run_id>/hostprobe.json`
   - includes OS/CPU/RAM/uptime/load snapshot and parsed NIC highlights
@@ -155,8 +161,8 @@ exist as the first milestone-9 foundation.
   constraints; deeper domain-specific rules can be added).
 - Full metrics suite completion (disconnect-specific metrics beyond current FPS+drop+jitter timing).
 - SDK-backed camera implementation (only interface boundary/stub exists).
-- Agent experiment planner/runner and final engineer packet generation
-  (state model exists; planner orchestration is next).
+- Full agent planning policy (multi-step hypothesis ranking/selection) and
+  final engineer packet generation (baseline+variant orchestration exists).
 
 ## Quick Start
 

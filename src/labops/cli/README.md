@@ -46,6 +46,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
   `metrics.csv` + `metrics.json` for release-style comparison workflows.
 - Compare baseline and run metric artifacts to emit `diff.json` + `diff.md`
   with per-metric deltas.
+- Expose shared in-process run execution (`ExecuteScenarioRun`) so agent-mode
+  can reuse the exact scenario pipeline without shelling out.
 
 ## Design intent
 

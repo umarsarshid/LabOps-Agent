@@ -11,6 +11,11 @@ triage.
 
 ## What is implemented now
 
+- `experiment_runner.hpp` / `experiment_runner.cpp`
+  - In-process `ExperimentRunner` for milestone-9 bootstrap.
+  - Runs baseline capture + one variant automatically.
+  - Reuses the same internal scenario runner used by CLI (`ExecuteScenarioRun`)
+    so behavior stays aligned with standard run contracts.
 - `experiment_state.hpp` / `experiment_state.cpp`
   - Canonical `ExperimentState` model.
   - Structured lists for:
@@ -27,6 +32,9 @@ Even before full planner/runner logic lands, we can persist the agent's working
 memory in a consistent file contract (`agent_state.json`). This prevents
 "stateless" debugging and gives future automation and humans the same source of
 truth.
+
+We now also have a first orchestration primitive: baseline + one variant in a
+single in-process flow, without shelling out to CLI subprocesses.
 
 ## How it connects to the project
 

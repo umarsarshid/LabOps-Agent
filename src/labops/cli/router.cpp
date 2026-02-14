@@ -157,16 +157,6 @@ int CommandValidate(const std::vector<std::string_view>& args) {
   return kExitSuccess;
 }
 
-struct RunOptions {
-  std::string scenario_path;
-  fs::path output_dir = "out";
-  bool zip_bundle = false;
-  bool redact_identifiers = false;
-  bool apply_netem = false;
-  bool apply_netem_force = false;
-  std::string netem_interface;
-};
-
 struct RunPlan {
   backends::sim::SimScenarioConfig sim_config;
   std::chrono::milliseconds duration{1'000};
@@ -1220,8 +1210,13 @@ std::vector<std::string> BuildTopAnomalies(const metrics::FpsReport& report,
 
 // Centralized run execution keeps `run` and `baseline capture` behavior aligned
 // so artifact contracts and metrics math never diverge between modes.
-int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
-                       bool allow_zip_bundle, std::string_view success_prefix) {
+int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundle_dir,
+                               bool allow_zip_bundle, std::string_view success_prefix,
+                               ScenarioRunResult* run_result) {
+  if (run_result != nullptr) {
+    *run_result = ScenarioRunResult{};
+  }
+
   std::string error;
   if (options.zip_bundle && !allow_zip_bundle) {
     std::cerr << "error: zip output is not supported for this command\n";
@@ -1253,6 +1248,10 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
   core::schema::RunInfo run_info = BuildRunInfo(options, run_plan, created_at);
   const fs::path bundle_dir =
       ResolveExecutionOutputDir(options, run_info, use_per_run_bundle_dir);
+  if (run_result != nullptr) {
+    run_result->run_id = run_info.run_id;
+    run_result->bundle_dir = bundle_dir;
+  }
 
   fs::path scenario_artifact_path;
   if (!artifacts::WriteScenarioJson(options.scenario_path, bundle_dir, scenario_artifact_path, error)) {
@@ -1446,6 +1445,10 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
     std::cerr << "error: " << error << '\n';
     return kExitFailure;
   }
+  if (run_result != nullptr) {
+    run_result->run_json_path = run_artifact_path;
+    run_result->events_jsonl_path = events_path;
+  }
 
   metrics::FpsReport fps_report;
   if (!metrics::ComputeFpsReport(frames,
@@ -1468,9 +1471,15 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
     std::cerr << "error: failed to write metrics.json: " << error << '\n';
     return kExitFailure;
   }
+  if (run_result != nullptr) {
+    run_result->metrics_json_path = metrics_json_path;
+  }
 
   std::vector<std::string> threshold_failures;
   const bool thresholds_passed = EvaluateRunThresholds(run_plan.thresholds, fps_report, threshold_failures);
+  if (run_result != nullptr) {
+    run_result->thresholds_passed = thresholds_passed;
+  }
   const std::vector<std::string> top_anomalies =
       BuildTopAnomalies(fps_report, run_plan.sim_config.fps, threshold_failures);
 
@@ -1568,10 +1577,11 @@ int CommandRun(const std::vector<std::string_view>& args) {
     return kExitUsage;
   }
 
-  return ExecuteScenarioRun(options,
-                            /*use_per_run_bundle_dir=*/true,
-                            /*allow_zip_bundle=*/true,
-                            "run queued: ");
+  return labops::cli::ExecuteScenarioRun(options,
+                                         /*use_per_run_bundle_dir=*/true,
+                                         /*allow_zip_bundle=*/true,
+                                         "run queued: ",
+                                         nullptr);
 }
 
 int CommandBaselineCapture(const std::vector<std::string_view>& args) {
@@ -1582,10 +1592,11 @@ int CommandBaselineCapture(const std::vector<std::string_view>& args) {
     return kExitUsage;
   }
 
-  return ExecuteScenarioRun(options,
-                            /*use_per_run_bundle_dir=*/false,
-                            /*allow_zip_bundle=*/false,
-                            "baseline captured: ");
+  return labops::cli::ExecuteScenarioRun(options,
+                                         /*use_per_run_bundle_dir=*/false,
+                                         /*allow_zip_bundle=*/false,
+                                         "baseline captured: ",
+                                         nullptr);
 }
 
 int CommandBaseline(const std::vector<std::string_view>& args) {
@@ -1667,6 +1678,16 @@ int CommandCompare(const std::vector<std::string_view>& args) {
 }
 
 } // namespace
+
+int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
+                       bool allow_zip_bundle, std::string_view success_prefix,
+                       ScenarioRunResult* run_result) {
+  return ExecuteScenarioRunInternal(options,
+                                    use_per_run_bundle_dir,
+                                    allow_zip_bundle,
+                                    success_prefix,
+                                    run_result);
+}
 
 int Dispatch(int argc, char** argv) {
   if (argc < 2) {
