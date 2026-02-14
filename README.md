@@ -343,6 +343,7 @@ GitHub Actions:
 - `src/README.md`
 - `docs/README.md`
 - `docs/triage_bundle_spec.md`
+- `docs/release_verification.md`
 - `tests/README.md`
 - `scenarios/README.md`
 
