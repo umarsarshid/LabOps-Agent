@@ -198,6 +198,18 @@ scenario mutations to `out/agent_runs/`.
 - Full agent planning policy (multi-step hypothesis ranking/selection) and
   final engineer packet generation (baseline+variant orchestration exists).
 
+## Formatting
+
+This repo uses `.clang-format` for C/C++ style consistency.
+
+- Check formatting:
+  - `bash tools/clang_format.sh --check`
+- Apply formatting:
+  - `bash tools/clang_format.sh --fix`
+
+If `clang-format` is not installed locally, install it first and rerun the
+command.
+
 ## Quick Start
 
 ### 1) Configure and build
