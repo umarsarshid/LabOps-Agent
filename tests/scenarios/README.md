@@ -11,7 +11,8 @@ Scenario files drive repeatability. These tests ensure:
 ## Current contents
 
 - `scenario_validation_smoke.cpp`: validates core schema checks and parse error
-  messaging for `labops validate`.
+  messaging for `labops validate`, including optional `netem_profile`
+  reference checks.
 - `sim_baseline_metrics_integration_smoke.cpp`: runs
   `scenarios/sim_baseline.json` through `labops run` and validates
   `<out>/<run_id>/metrics.json` stays within expected baseline ranges

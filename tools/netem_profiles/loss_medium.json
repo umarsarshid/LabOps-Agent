@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "loss_medium",
+  "description": "Moderate random packet loss profile for reproducible loss triage.",
+  "netem": {
+    "delay_ms": 0.0,
+    "jitter_ms": 0.0,
+    "loss_percent": 2.0,
+    "reorder_percent": 0.0,
+    "correlation_percent": 20.0
+  }
+}

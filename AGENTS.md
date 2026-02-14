@@ -14,6 +14,8 @@ This file helps the next coding agent continue work without re-discovery.
 - NIC raw command evidence (`nic_*.txt`) + parsed highlights in host probe
   (including MTU/link hints when available)
 - optional identifier redaction in host evidence via `--redact`
+- scenario-level `netem_profile` references validated against
+  `tools/netem_profiles/*.json` presets (definition-only stage)
 - bundle manifest generation (`bundle_manifest.json`)
 - optional support bundle zip (`--zip`)
 
@@ -49,6 +51,7 @@ CLI:
 - `./build/labops run scenarios/sim_baseline.json --out out/`
 - `./build/labops run scenarios/sim_baseline.json --out out/ --zip`
 - `./build/labops run scenarios/sim_baseline.json --out out-redacted/ --redact`
+- `./build/labops validate scenarios/trigger_roi.json`
 
 Expected run outputs:
 - `<out>/<run_id>/scenario.json`

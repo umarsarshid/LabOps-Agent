@@ -2,6 +2,7 @@
   "schema_version": "1.0",
   "scenario_id": "trigger_roi",
   "description": "Trigger and ROI configuration starter for one-variable-at-a-time investigations.",
+  "netem_profile": "jitter_light",
   "tags": ["trigger", "roi", "investigation", "sim"],
   "duration": {
     "duration_ms": 5000

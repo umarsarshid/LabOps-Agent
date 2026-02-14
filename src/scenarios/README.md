@@ -15,7 +15,9 @@ A repeatable lab depends on declarative scenario files. This module ensures scen
 ## Current contents
 
 - `validator.hpp/.cpp`: scenario JSON loader + schema validation with
-  actionable error messages keyed by field path (used by `labops validate`).
+  actionable error messages keyed by field path (used by `labops validate`),
+  including `netem_profile` reference checks against
+  `tools/netem_profiles/<profile>.json`.
 
 ## Design principle
 

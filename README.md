@@ -48,6 +48,8 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
   - `labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]`
 - Scenario loader + schema validation in `labops validate` with actionable
   field-level errors.
+- Netem profile definitions under `tools/netem_profiles/` (jitter/loss/reorder
+  presets) with scenario reference validation via optional `netem_profile`.
 - Starter scenario set in `scenarios/`:
   - `sim_baseline.json`
   - `dropped_frames.json`

@@ -1,9 +1,14 @@
 #include "scenarios/validator.hpp"
 
+#include <chrono>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <string_view>
+
+namespace fs = std::filesystem;
 
 namespace {
 
@@ -31,6 +36,7 @@ int main() {
 {
   "schema_version": "1.0",
   "scenario_id": "baseline_smoke",
+  "netem_profile": "jitter_light",
   "duration": {
     "duration_ms": 10000
   },
@@ -53,6 +59,87 @@ int main() {
     if (!report.valid || !report.issues.empty()) {
       Fail("expected valid scenario to produce zero validation issues");
     }
+  }
+
+  {
+    const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::system_clock::now().time_since_epoch())
+                            .count();
+    const fs::path temp_root =
+        fs::temp_directory_path() / ("labops-netem-profile-smoke-" + std::to_string(now_ms));
+    const fs::path tools_dir = temp_root / "tools" / "netem_profiles";
+    const fs::path scenarios_dir = temp_root / "scenarios";
+    const fs::path valid_scenario_path = scenarios_dir / "valid_with_profile.json";
+    const fs::path invalid_scenario_path = scenarios_dir / "missing_profile.json";
+    const fs::path profile_path = tools_dir / "jitter_light.json";
+
+    std::error_code ec;
+    fs::remove_all(temp_root, ec);
+    fs::create_directories(tools_dir, ec);
+    fs::create_directories(scenarios_dir, ec);
+    if (ec) {
+      Fail("failed to create temp paths for netem profile validation smoke");
+    }
+
+    {
+      std::ofstream profile(profile_path, std::ios::binary);
+      profile << "{\n"
+              << "  \"profile_id\": \"jitter_light\",\n"
+              << "  \"description\": \"smoke profile\",\n"
+              << "  \"netem\": { \"delay_ms\": 5, \"jitter_ms\": 2, \"loss_percent\": 0, \"reorder_percent\": 0 }\n"
+              << "}\n";
+    }
+
+    {
+      std::ofstream scenario(valid_scenario_path, std::ios::binary);
+      scenario << "{\n"
+               << "  \"schema_version\": \"1.0\",\n"
+               << "  \"scenario_id\": \"valid_with_profile\",\n"
+               << "  \"netem_profile\": \"jitter_light\",\n"
+               << "  \"duration\": {\"duration_ms\": 1000},\n"
+               << "  \"camera\": {\"fps\": 30},\n"
+               << "  \"thresholds\": {\"min_avg_fps\": 10}\n"
+               << "}\n";
+    }
+
+    {
+      std::ofstream scenario(invalid_scenario_path, std::ios::binary);
+      scenario << "{\n"
+               << "  \"schema_version\": \"1.0\",\n"
+               << "  \"scenario_id\": \"missing_profile\",\n"
+               << "  \"netem_profile\": \"does_not_exist\",\n"
+               << "  \"duration\": {\"duration_ms\": 1000},\n"
+               << "  \"camera\": {\"fps\": 30},\n"
+               << "  \"thresholds\": {\"min_avg_fps\": 10}\n"
+               << "}\n";
+    }
+
+    {
+      labops::scenarios::ValidationReport report;
+      std::string error;
+      if (!labops::scenarios::ValidateScenarioFile(valid_scenario_path.string(), report, error)) {
+        Fail("ValidateScenarioFile failed unexpectedly for valid netem profile scenario: " + error);
+      }
+      if (!report.valid || !report.issues.empty()) {
+        Fail("expected scenario with existing netem profile to pass validation");
+      }
+    }
+
+    {
+      labops::scenarios::ValidationReport report;
+      std::string error;
+      if (!labops::scenarios::ValidateScenarioFile(invalid_scenario_path.string(), report, error)) {
+        Fail("ValidateScenarioFile failed unexpectedly for missing netem profile scenario: " + error);
+      }
+      if (report.valid) {
+        Fail("expected scenario with missing netem profile to fail validation");
+      }
+      if (!ContainsIssue(report, "netem_profile", "not found under tools/netem_profiles")) {
+        Fail("missing actionable issue for netem_profile missing file");
+      }
+    }
+
+    fs::remove_all(temp_root, ec);
   }
 
   {

@@ -24,6 +24,9 @@ This directory is the source of truth for runnable test definitions. Scenarios s
 - Follow `docs/scenario_schema.md` for required fields and constraints.
 - Set realistic `thresholds` values because `labops run` now enforces them and
   returns non-zero when thresholds fail.
+- Optional network profile reference:
+  - `netem_profile`: points to `tools/netem_profiles/<profile>.json`
+  - this milestone validates references only (no netem execution yet)
 
 ## Connection to the project
 

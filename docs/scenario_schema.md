@@ -24,6 +24,7 @@ A scenario JSON document is an object with these top-level sections:
 - `description`
 - `tags`
 - `duration`
+- `netem_profile`
 - `camera`
 - `sim_faults`
 - `thresholds`
@@ -61,6 +62,15 @@ A scenario JSON document is an object with these top-level sections:
 - Required fields:
   - `duration_ms` (integer, `> 0`)
 - Purpose: run length definition.
+
+### `netem_profile` (optional)
+
+- Type: string
+- Purpose: reference to a named Linux network impairment preset.
+- Constraint: lowercase slug (`[a-z0-9_-]+`).
+- Resolution: `labops validate <scenario>` checks the profile exists under
+  `tools/netem_profiles/<netem_profile>.json`.
+- Runtime note: in this milestone the value is validated only (no execution).
 
 ### `camera` (required)
 
@@ -142,6 +152,7 @@ At least one threshold should be present.
 {
   "schema_version": "1.0",
   "scenario_id": "baseline_smoke",
+  "netem_profile": "jitter_light",
   "duration": {
     "duration_ms": 10000
   },
@@ -164,6 +175,7 @@ At least one threshold should be present.
   "schema_version": "1.0",
   "scenario_id": "trigger_roi_stress",
   "description": "Validate stream behavior under ROI + trigger + injected transport faults.",
+  "netem_profile": "loss_medium",
   "tags": ["stress", "trigger", "roi", "sim"],
   "duration": {
     "duration_ms": 600000

@@ -414,6 +414,38 @@ bool IsValidSlug(std::string_view value) {
   return true;
 }
 
+bool ResolveNetemProfilePath(const fs::path& scenario_path, std::string_view profile_id,
+                             fs::path& resolved_path) {
+  resolved_path.clear();
+  if (scenario_path.empty() || profile_id.empty()) {
+    return false;
+  }
+
+  std::error_code ec;
+  const fs::path scenario_absolute = fs::absolute(scenario_path, ec);
+  if (ec) {
+    return false;
+  }
+  fs::path cursor = scenario_absolute.parent_path();
+  while (!cursor.empty()) {
+    const fs::path candidate =
+        cursor / "tools" / "netem_profiles" / (std::string(profile_id) + ".json");
+    std::error_code ec;
+    if (fs::exists(candidate, ec) && !ec && fs::is_regular_file(candidate, ec) && !ec) {
+      resolved_path = candidate;
+      return true;
+    }
+
+    const fs::path parent = cursor.parent_path();
+    if (parent.empty() || parent == cursor) {
+      break;
+    }
+    cursor = parent;
+  }
+
+  return false;
+}
+
 void ValidateRequiredString(const JsonValue& root, std::string_view key, std::string path,
                             std::string hint, ValidationReport& report) {
   const JsonValue* field = GetField(root, key);
@@ -762,7 +794,41 @@ void ValidateOaat(const JsonValue& root, ValidationReport& report) {
   }
 }
 
-void ValidateScenarioObject(const JsonValue& root, ValidationReport& report) {
+void ValidateNetemProfile(const JsonValue& root, const fs::path& scenario_path,
+                          ValidationReport& report) {
+  const JsonValue* profile = GetField(root, "netem_profile");
+  if (profile == nullptr) {
+    return;
+  }
+
+  if (!IsString(profile)) {
+    AddIssue(report, "netem_profile", "must be a string profile id");
+    return;
+  }
+  if (profile->string_value.empty()) {
+    AddIssue(report, "netem_profile", "must not be empty when provided");
+    return;
+  }
+  if (!IsValidSlug(profile->string_value)) {
+    AddIssue(report, "netem_profile", "must use lowercase slug format [a-z0-9_-]+");
+    return;
+  }
+
+  if (scenario_path.empty()) {
+    return;
+  }
+
+  fs::path resolved_profile_path;
+  if (!ResolveNetemProfilePath(scenario_path, profile->string_value, resolved_profile_path)) {
+    AddIssue(report,
+             "netem_profile",
+             "profile '" + profile->string_value +
+                 "' was not found under tools/netem_profiles/<profile>.json");
+  }
+}
+
+void ValidateScenarioObject(const JsonValue& root, const fs::path& scenario_path,
+                            ValidationReport& report) {
   if (root.type != JsonValue::Type::kObject) {
     AddIssue(report, "$", "root JSON value must be an object");
     return;
@@ -795,6 +861,7 @@ void ValidateScenarioObject(const JsonValue& root, ValidationReport& report) {
   ValidateSimFaults(root, report);
   ValidateThresholds(root, report);
   ValidateOaat(root, report);
+  ValidateNetemProfile(root, scenario_path, report);
 }
 
 } // namespace
@@ -813,7 +880,7 @@ bool ValidateScenarioText(std::string_view json_text, ValidationReport& report, 
     return true;
   }
 
-  ValidateScenarioObject(root, report);
+  ValidateScenarioObject(root, fs::path{}, report);
   report.valid = report.issues.empty();
   return true;
 }
@@ -835,7 +902,22 @@ bool ValidateScenarioFile(const std::string& scenario_path, ValidationReport& re
     return true;
   }
 
-  return ValidateScenarioText(contents, report, error);
+  JsonValue root;
+  JsonParser parser(contents);
+  std::string parse_error;
+  if (!parser.Parse(root, parse_error)) {
+    report = ValidationReport{};
+    AddIssue(report,
+             "$",
+             parse_error + " (fix JSON syntax and rerun 'labops validate <scenario.json>')");
+    report.valid = false;
+    return true;
+  }
+
+  report = ValidationReport{};
+  ValidateScenarioObject(root, fs::path(scenario_path), report);
+  report.valid = report.issues.empty();
+  return true;
 }
 
 } // namespace labops::scenarios

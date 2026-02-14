@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "jitter_light",
+  "description": "Mild timing noise profile for early transport stability checks.",
+  "netem": {
+    "delay_ms": 4.0,
+    "jitter_ms": 1.5,
+    "loss_percent": 0.0,
+    "reorder_percent": 0.0,
+    "correlation_percent": 10.0
+  }
+}

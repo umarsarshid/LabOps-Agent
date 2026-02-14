@@ -16,6 +16,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Parse baseline capture command contracts (`baseline capture <scenario.json> [--redact]`).
 - Parse compare command contracts (`compare --baseline ... --run ... [--out ...]`).
 - Route scenario validation through schema loader with actionable errors.
+- Validate optional `netem_profile` references against
+  `tools/netem_profiles/<profile>.json`.
 - Apply scenario settings to backend params and emit `CONFIG_APPLIED` audit
   events.
 - Execute sim backend run lifecycle and emit stream trace events.
