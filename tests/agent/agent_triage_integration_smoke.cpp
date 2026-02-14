@@ -59,7 +59,8 @@ void WriteSeededKnownIssueScenario(const fs::path& scenario_path) {
   scenario_file << "{\n"
                 << "  \"schema_version\": \"1.0\",\n"
                 << "  \"scenario_id\": \"agent_seeded_known_issue\",\n"
-                << "  \"description\": \"Seeded triage fixture where OAAT fps mutation reproduces failure.\",\n"
+                << "  \"description\": \"Seeded triage fixture where OAAT fps mutation reproduces "
+                   "failure.\",\n"
                 << "  \"tags\": [\"agent\", \"triage\", \"seeded\", \"integration\"],\n"
                 << "  \"duration\": {\n"
                 << "    \"duration_ms\": 600\n"
@@ -91,8 +92,7 @@ labops::agent::ResultStatus ToResultStatus(int exit_code) {
   if (exit_code == labops::core::errors::ToInt(labops::core::errors::ExitCode::kSuccess)) {
     return labops::agent::ResultStatus::kPass;
   }
-  if (exit_code ==
-      labops::core::errors::ToInt(labops::core::errors::ExitCode::kThresholdsFailed)) {
+  if (exit_code == labops::core::errors::ToInt(labops::core::errors::ExitCode::kThresholdsFailed)) {
     return labops::agent::ResultStatus::kFail;
   }
   return labops::agent::ResultStatus::kInconclusive;
@@ -146,9 +146,7 @@ int main() {
   const int baseline_exit = labops::cli::ExecuteScenarioRun(
       baseline_options,
       /*use_per_run_bundle_dir=*/false,
-      /*allow_zip_bundle=*/false,
-      "agent triage baseline captured: ",
-      &baseline_run);
+      /*allow_zip_bundle=*/false, "agent triage baseline captured: ", &baseline_run);
   if (baseline_exit != 0) {
     Fail("baseline run should pass, got exit code " + std::to_string(baseline_exit));
   }
@@ -191,9 +189,7 @@ int main() {
     const int variant_exit = labops::cli::ExecuteScenarioRun(
         variant_options,
         /*use_per_run_bundle_dir=*/true,
-        /*allow_zip_bundle=*/true,
-        "agent triage variant queued: ",
-        &variant_run);
+        /*allow_zip_bundle=*/true, "agent triage variant queued: ", &variant_run);
 
     if (variant_exit != 0 &&
         variant_exit !=
@@ -206,25 +202,19 @@ int main() {
 
     labops::artifacts::MetricsDiffReport diff_report;
     if (!labops::artifacts::ComputeMetricsDiffFromCsv(baseline_run.bundle_dir / "metrics.csv",
-                                                      variant_metrics_csv,
-                                                      diff_report,
-                                                      error)) {
+                                                      variant_metrics_csv, diff_report, error)) {
       Fail("failed to compute variant diff: " + error);
     }
 
     fs::path diff_json_path;
-    if (!labops::artifacts::WriteMetricsDiffJson(diff_report,
-                                                 variant_run.bundle_dir,
-                                                 diff_json_path,
-                                                 error)) {
+    if (!labops::artifacts::WriteMetricsDiffJson(diff_report, variant_run.bundle_dir,
+                                                 diff_json_path, error)) {
       Fail("failed to write diff.json: " + error);
     }
 
     fs::path diff_markdown_path;
-    if (!labops::artifacts::WriteMetricsDiffMarkdown(diff_report,
-                                                     variant_run.bundle_dir,
-                                                     diff_markdown_path,
-                                                     error)) {
+    if (!labops::artifacts::WriteMetricsDiffMarkdown(diff_report, variant_run.bundle_dir,
+                                                     diff_markdown_path, error)) {
       Fail("failed to write diff.md: " + error);
     }
 
@@ -265,9 +255,8 @@ int main() {
       saw_fps_variant = true;
       fps_before_value = variant.before_value;
       fps_after_value = variant.after_value;
-      saw_fps_failure = (variant_exit ==
-                         labops::core::errors::ToInt(
-                             labops::core::errors::ExitCode::kThresholdsFailed));
+      saw_fps_failure = (variant_exit == labops::core::errors::ToInt(
+                                             labops::core::errors::ExitCode::kThresholdsFailed));
     }
   }
 
