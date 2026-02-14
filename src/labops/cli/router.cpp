@@ -61,8 +61,10 @@ constexpr int kExitUsage = 2;
 void PrintUsage(std::ostream& out) {
   out << "usage:\n"
       << "  labops run <scenario.json> [--out <dir>] [--zip] [--redact] "
+         "[--log-level <debug|info|warn|error>] "
          "[--apply-netem --netem-iface <iface> [--apply-netem-force]]\n"
       << "  labops baseline capture <scenario.json> [--redact] "
+         "[--log-level <debug|info|warn|error>] "
          "[--apply-netem --netem-iface <iface> [--apply-netem-force]]\n"
       << "  labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]\n"
       << "  labops validate <scenario.json>\n"
@@ -73,6 +75,7 @@ void PrintUsage(std::ostream& out) {
 void PrintBaselineUsage(std::ostream& out) {
   out << "usage:\n"
       << "  labops baseline capture <scenario.json> [--redact] "
+         "[--log-level <debug|info|warn|error>] "
          "[--apply-netem --netem-iface <iface> [--apply-netem-force]]\n";
 }
 
@@ -220,6 +223,19 @@ bool ParseRunOptions(const std::vector<std::string_view>& args, RunOptions& opti
       ++i;
       continue;
     }
+    if (token == "--log-level") {
+      if (i + 1 >= args.size()) {
+        error = "missing value for --log-level";
+        return false;
+      }
+      core::logging::LogLevel parsed = core::logging::LogLevel::kInfo;
+      if (!core::logging::ParseLogLevel(args[i + 1], parsed, error)) {
+        return false;
+      }
+      options.log_level = parsed;
+      ++i;
+      continue;
+    }
 
     if (!token.empty() && token.front() == '-') {
       error = "unknown option: " + std::string(token);
@@ -276,6 +292,19 @@ bool ParseBaselineCaptureOptions(const std::vector<std::string_view>& args, RunO
         return false;
       }
       options.netem_interface = std::string(args[i + 1]);
+      ++i;
+      continue;
+    }
+    if (token == "--log-level") {
+      if (i + 1 >= args.size()) {
+        error = "missing value for --log-level";
+        return false;
+      }
+      core::logging::LogLevel parsed = core::logging::LogLevel::kInfo;
+      if (!core::logging::ParseLogLevel(args[i + 1], parsed, error)) {
+        return false;
+      }
+      options.log_level = parsed;
       ++i;
       continue;
     }
@@ -805,7 +834,8 @@ bool IsRunningAsRoot() {
 
 class ScopedNetemTeardown {
 public:
-  ScopedNetemTeardown() = default;
+  explicit ScopedNetemTeardown(core::logging::Logger* logger = nullptr) : logger_(logger) {}
+
   ~ScopedNetemTeardown() {
     if (!armed_) {
       return;
@@ -814,11 +844,22 @@ public:
     int exit_code = -1;
     std::string error;
     if (!RunShellCommandNoCapture(teardown_command_, exit_code, error)) {
-      std::cerr << "warning: netem teardown failed to execute: " << error << '\n';
+      if (logger_ != nullptr) {
+        logger_->Warn("netem teardown command execution failed",
+                      {{"teardown_command", teardown_command_}, {"error", error}});
+      } else {
+        std::cerr << "warning: netem teardown failed to execute: " << error << '\n';
+      }
       return;
     }
     if (exit_code != 0) {
-      std::cerr << "warning: netem teardown returned non-zero exit code: " << exit_code << '\n';
+      if (logger_ != nullptr) {
+        logger_->Warn("netem teardown returned non-zero exit code",
+                      {{"teardown_command", teardown_command_},
+                       {"exit_code", std::to_string(exit_code)}});
+      } else {
+        std::cerr << "warning: netem teardown returned non-zero exit code: " << exit_code << '\n';
+      }
     }
   }
 
@@ -833,6 +874,7 @@ public:
 private:
   bool armed_ = false;
   std::string teardown_command_;
+  core::logging::Logger* logger_ = nullptr;
 };
 
 bool ApplyNetemIfRequested(const RunOptions& options,
@@ -1213,23 +1255,37 @@ std::vector<std::string> BuildTopAnomalies(const metrics::FpsReport& report,
 int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundle_dir,
                                bool allow_zip_bundle, std::string_view success_prefix,
                                ScenarioRunResult* run_result) {
+  core::logging::Logger logger(options.log_level);
+
   if (run_result != nullptr) {
     *run_result = ScenarioRunResult{};
   }
 
+  logger.Info("run execution requested",
+              {{"scenario_path", options.scenario_path},
+               {"output_root", options.output_dir.string()},
+               {"zip_bundle", options.zip_bundle ? "true" : "false"},
+               {"redact", options.redact_identifiers ? "true" : "false"},
+               {"netem_apply", options.apply_netem ? "true" : "false"}});
+
   std::string error;
   if (options.zip_bundle && !allow_zip_bundle) {
+    logger.Error("zip output is not supported for this command");
     std::cerr << "error: zip output is not supported for this command\n";
     return kExitUsage;
   }
 
   if (!ValidateScenarioPath(options.scenario_path, error)) {
+    logger.Error("scenario path validation failed",
+                 {{"scenario_path", options.scenario_path}, {"error", error}});
     std::cerr << "error: " << error << '\n';
     return kExitFailure;
   }
 
   RunPlan run_plan;
   if (!LoadRunPlanFromScenario(options.scenario_path, run_plan, error)) {
+    logger.Error("failed to load run plan from scenario",
+                 {{"scenario_path", options.scenario_path}, {"error", error}});
     std::cerr << "error: " << error << '\n';
     return kExitFailure;
   }
@@ -1237,17 +1293,25 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   std::optional<artifacts::NetemCommandSuggestions> netem_suggestions;
   std::string netem_warning;
   if (!BuildNetemCommandSuggestions(options.scenario_path, run_plan, netem_suggestions, netem_warning)) {
+    logger.Error("failed to build netem command suggestions");
     std::cerr << "error: failed to build netem command suggestions\n";
     return kExitFailure;
   }
   if (!netem_warning.empty()) {
+    logger.Warn("netem suggestion warning", {{"warning", netem_warning}});
     std::cerr << "warning: " << netem_warning << '\n';
   }
 
   const auto created_at = std::chrono::system_clock::now();
   core::schema::RunInfo run_info = BuildRunInfo(options, run_plan, created_at);
+  logger.SetRunId(run_info.run_id);
   const fs::path bundle_dir =
       ResolveExecutionOutputDir(options, run_info, use_per_run_bundle_dir);
+  logger.Info("run initialized",
+              {{"scenario_id", run_info.config.scenario_id},
+               {"backend", run_info.config.backend},
+               {"bundle_dir", bundle_dir.string()},
+               {"duration_ms", std::to_string(run_plan.duration.count())}});
   if (run_result != nullptr) {
     run_result->run_id = run_info.run_id;
     run_result->bundle_dir = bundle_dir;
@@ -1255,12 +1319,16 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
 
   fs::path scenario_artifact_path;
   if (!artifacts::WriteScenarioJson(options.scenario_path, bundle_dir, scenario_artifact_path, error)) {
+    logger.Error("failed to write scenario snapshot",
+                 {{"bundle_dir", bundle_dir.string()}, {"error", error}});
     std::cerr << "error: failed to write scenario snapshot: " << error << '\n';
     return kExitFailure;
   }
+  logger.Debug("scenario snapshot written", {{"path", scenario_artifact_path.string()}});
 
   hostprobe::HostProbeSnapshot host_snapshot;
   if (!hostprobe::CollectHostProbeSnapshot(host_snapshot, error)) {
+    logger.Error("failed to collect host probe data", {{"error", error}});
     std::cerr << "error: failed to collect host probe data: " << error << '\n';
     return kExitFailure;
   }
@@ -1269,6 +1337,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   if (!hostprobe::CollectNicProbeSnapshot(nic_probe, error)) {
     // NIC probing is best-effort by design; continue with whatever host facts
     // we were able to collect and persist the probe error in raw output files.
+    logger.Warn("NIC probe collection issue", {{"warning", error}});
     std::cerr << "warning: NIC probe collection issue: " << error << '\n';
   }
   host_snapshot.nic_highlights = nic_probe.highlights;
@@ -1285,6 +1354,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
 
   fs::path hostprobe_artifact_path;
   if (!artifacts::WriteHostProbeJson(host_snapshot, bundle_dir, hostprobe_artifact_path, error)) {
+    logger.Error("failed to write host probe artifact", {{"error", error}});
     std::cerr << "error: failed to write hostprobe.json: " << error << '\n';
     return kExitFailure;
   }
@@ -1294,6 +1364,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
                                                   bundle_dir,
                                                   hostprobe_raw_artifact_paths,
                                                   error)) {
+    logger.Error("failed to write NIC raw command artifacts", {{"error", error}});
     std::cerr << "error: failed to write NIC raw command artifacts: " << error << '\n';
     return kExitFailure;
   }
@@ -1302,15 +1373,20 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
       std::make_unique<backends::sim::SimCameraBackend>();
 
   if (!backend->Connect(error)) {
+    logger.Error("backend connect failed",
+                 {{"backend", run_info.config.backend}, {"error", error}});
     std::cerr << "error: backend connect failed: " << error << '\n';
     return kExitFailure;
   }
+  logger.Info("backend connected", {{"backend", run_info.config.backend}});
 
   backends::BackendConfig applied_params;
   if (!backends::sim::ApplyScenarioConfig(*backend, run_plan.sim_config, error, &applied_params)) {
+    logger.Error("backend config apply failed", {{"error", error}});
     std::cerr << "error: backend config failed: " << error << '\n';
     return kExitFailure;
   }
+  logger.Debug("backend config applied", {{"param_count", std::to_string(applied_params.size())}});
 
   fs::path events_path;
   const auto config_applied_at = std::chrono::system_clock::now();
@@ -1320,22 +1396,28 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
                         bundle_dir,
                         events_path,
                         error)) {
+    logger.Error("failed to append CONFIG_APPLIED event", {{"error", error}});
     std::cerr << "error: failed to append CONFIG_APPLIED event: " << error << '\n';
     return kExitFailure;
   }
 
   // RAII teardown guard ensures applied netem impairment is always reverted
   // on every return path after successful apply.
-  ScopedNetemTeardown netem_teardown_guard;
+  ScopedNetemTeardown netem_teardown_guard(&logger);
   if (!ApplyNetemIfRequested(options, netem_suggestions, netem_teardown_guard, error)) {
+    logger.Error("netem apply failed", {{"error", error}});
     std::cerr << "error: " << error << '\n';
     return kExitFailure;
   }
 
   if (!backend->Start(error)) {
+    logger.Error("backend start failed", {{"error", error}});
     std::cerr << "error: backend start failed: " << error << '\n';
     return kExitFailure;
   }
+  logger.Info("stream started",
+              {{"fps", std::to_string(run_plan.sim_config.fps)},
+               {"duration_ms", std::to_string(run_plan.duration.count())}});
 
   bool stream_started = true;
   const auto started_at = std::chrono::system_clock::now();
@@ -1365,6 +1447,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
           bundle_dir,
           events_path,
           error)) {
+    logger.Error("failed to append STREAM_STARTED event", {{"error", error}});
     stop_if_started();
     std::cerr << "error: failed to append STREAM_STARTED event: " << error << '\n';
     return kExitFailure;
@@ -1372,6 +1455,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
 
   const std::vector<backends::FrameSample> frames = backend->PullFrames(run_plan.duration, error);
   if (!error.empty()) {
+    logger.Error("backend pull_frames failed", {{"error", error}});
     stop_if_started();
     std::cerr << "error: backend pull_frames failed: " << error << '\n';
     return kExitFailure;
@@ -1406,6 +1490,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
                           bundle_dir,
                           events_path,
                           error)) {
+      logger.Error("failed to append frame event", {{"error", error}});
       stop_if_started();
       std::cerr << "error: failed to append frame event: " << error << '\n';
       return kExitFailure;
@@ -1413,6 +1498,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
 
   if (!backend->Stop(error)) {
+    logger.Error("backend stop failed", {{"error", error}});
     std::cerr << "error: backend stop failed: " << error << '\n';
     return kExitFailure;
   }
@@ -1436,12 +1522,14 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
           bundle_dir,
           events_path,
           error)) {
+    logger.Error("failed to append STREAM_STOPPED event", {{"error", error}});
     std::cerr << "error: failed to append STREAM_STOPPED event: " << error << '\n';
     return kExitFailure;
   }
 
   fs::path run_artifact_path;
   if (!artifacts::WriteRunJson(run_info, bundle_dir, run_artifact_path, error)) {
+    logger.Error("failed to write run.json", {{"error", error}});
     std::cerr << "error: " << error << '\n';
     return kExitFailure;
   }
@@ -1456,18 +1544,21 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
                                  std::chrono::milliseconds(1'000),
                                  fps_report,
                                  error)) {
+    logger.Error("failed to compute metrics", {{"error", error}});
     std::cerr << "error: failed to compute fps metrics: " << error << '\n';
     return kExitFailure;
   }
 
   fs::path metrics_csv_path;
   if (!artifacts::WriteMetricsCsv(fps_report, bundle_dir, metrics_csv_path, error)) {
+    logger.Error("failed to write metrics.csv", {{"error", error}});
     std::cerr << "error: failed to write metrics.csv: " << error << '\n';
     return kExitFailure;
   }
 
   fs::path metrics_json_path;
   if (!artifacts::WriteMetricsJson(fps_report, bundle_dir, metrics_json_path, error)) {
+    logger.Error("failed to write metrics.json", {{"error", error}});
     std::cerr << "error: failed to write metrics.json: " << error << '\n';
     return kExitFailure;
   }
@@ -1494,6 +1585,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
                                           bundle_dir,
                                           summary_markdown_path,
                                           error)) {
+    logger.Error("failed to write summary.md", {{"error", error}});
     std::cerr << "error: failed to write summary.md: " << error << '\n';
     return kExitFailure;
   }
@@ -1512,6 +1604,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
                                hostprobe_raw_artifact_paths.begin(),
                                hostprobe_raw_artifact_paths.end());
   if (!artifacts::WriteBundleManifestJson(bundle_dir, bundle_artifact_paths, bundle_manifest_path, error)) {
+    logger.Error("failed to write bundle manifest", {{"error", error}});
     std::cerr << "error: failed to write bundle manifest: " << error << '\n';
     return kExitFailure;
   }
@@ -1519,12 +1612,20 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   fs::path bundle_zip_path;
   if (options.zip_bundle) {
     if (!artifacts::WriteBundleZip(bundle_dir, bundle_zip_path, error)) {
+      logger.Error("failed to write support bundle zip", {{"error", error}});
       std::cerr << "error: failed to write support bundle zip: " << error << '\n';
       return kExitFailure;
     }
   }
 
+  logger.Info("run artifacts written",
+              {{"bundle_dir", bundle_dir.string()},
+               {"events", events_path.string()},
+               {"metrics_json", metrics_json_path.string()},
+               {"summary", summary_markdown_path.string()}});
+
   std::cout << success_prefix << options.scenario_path << '\n';
+  std::cout << "run_id: " << run_info.run_id << '\n';
   std::cout << "bundle: " << bundle_dir.string() << '\n';
   std::cout << "scenario: " << scenario_artifact_path.string() << '\n';
   std::cout << "hostprobe: " << hostprobe_artifact_path.string() << '\n';
@@ -1558,12 +1659,24 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   std::cout << "frames: total=" << frames.size() << " received=" << received_count
             << " dropped=" << dropped_count << '\n';
   if (thresholds_passed) {
+    logger.Info("run completed",
+                {{"thresholds", "pass"},
+                 {"frames_total", std::to_string(frames.size())},
+                 {"frames_received", std::to_string(received_count)},
+                 {"frames_dropped", std::to_string(dropped_count)}});
     std::cout << "thresholds: pass\n";
     return kExitSuccess;
   }
 
+  logger.Warn("run completed with threshold failures",
+              {{"thresholds", "fail"},
+               {"failure_count", std::to_string(threshold_failures.size())},
+               {"frames_total", std::to_string(frames.size())},
+               {"frames_received", std::to_string(received_count)},
+               {"frames_dropped", std::to_string(dropped_count)}});
   std::cout << "thresholds: fail count=" << threshold_failures.size() << '\n';
   for (const auto& failure : threshold_failures) {
+    logger.Warn("threshold failure", {{"detail", failure}});
     std::cerr << "threshold failed: " << failure << '\n';
   }
   return kExitFailure;

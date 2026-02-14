@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/logging/logger.hpp"
+
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -17,6 +19,7 @@ struct RunOptions {
   bool apply_netem = false;
   bool apply_netem_force = false;
   std::string netem_interface;
+  core::logging::LogLevel log_level = core::logging::LogLevel::kInfo;
 };
 
 // Minimal run outputs needed by higher-level orchestrators to chain follow-up

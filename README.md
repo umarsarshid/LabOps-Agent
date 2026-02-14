@@ -50,8 +50,8 @@ scenario mutations to `out/agent_runs/`.
 - CLI commands:
   - `labops version`
   - `labops validate <scenario.json>`
-  - `labops run <scenario.json> [--out <dir>] [--zip] [--redact] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`
-  - `labops baseline capture <scenario.json> [--redact] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`
+  - `labops run <scenario.json> [--out <dir>] [--zip] [--redact] [--log-level <debug|info|warn|error>] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`
+  - `labops baseline capture <scenario.json> [--redact] [--log-level <debug|info|warn|error>] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`
   - `labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]`
 - Scenario loader + schema validation in `labops validate` with actionable
   field-level errors.
@@ -91,6 +91,10 @@ scenario mutations to `out/agent_runs/`.
   - `FRAME_RECEIVED`
   - `FRAME_DROPPED`
   - `STREAM_STOPPED`
+- Structured runtime logging:
+  - `--log-level <debug|info|warn|error>` for run/baseline capture verbosity
+  - log lines include `run_id` once run planning starts, so stderr logs can be
+    correlated directly to run bundle artifacts
 - FPS metrics pipeline:
   - computes `avg_fps` over run duration
   - computes `rolling_fps` over a fixed window

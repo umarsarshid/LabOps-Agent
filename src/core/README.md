@@ -14,6 +14,11 @@ As the system grows, many modules need common utilities (errors, clocks, structu
 - Project-wide logging interfaces.
 - Canonical schema contracts under `schema/` for cross-module run metadata.
 
+## Current contents
+
+- `schema/`: run-contract structures and JSON serialization helpers.
+- `logging/`: shared structured logger with level parsing and run-id context.
+
 ## Guardrails
 
 - Keep `core` dependency-light and policy-light.

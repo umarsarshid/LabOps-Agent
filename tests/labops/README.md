@@ -42,6 +42,9 @@ surface (argument parsing + runtime orchestration + artifact/event output).
   a `summary.md` status of `FAIL`.
 - `netem_option_contract_smoke.cpp`: verifies netem execution flags are used
   safely (`--apply-netem` requires `--netem-iface <iface>` and vice versa).
+- `logging_contract_smoke.cpp`: verifies structured run logs honor
+  `--log-level` and include the same `run_id` written to `run.json` so logs
+  correlate directly with bundle artifacts.
 
 ## Connection to the project
 

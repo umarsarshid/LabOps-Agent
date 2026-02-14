@@ -370,6 +370,18 @@ target_link_libraries(netem_option_contract_smoke PRIVATE labops_artifacts labop
 target_compile_features(netem_option_contract_smoke PRIVATE cxx_std_20)
 add_test(NAME netem_option_contract_smoke COMMAND netem_option_contract_smoke)
 
+# Integration smoke test validating structured logging behavior:
+# - `--log-level` controls emitted verbosity
+# - log lines include run_id for artifact correlation
+add_executable(logging_contract_smoke
+  tests/labops/logging_contract_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(logging_contract_smoke PRIVATE src)
+target_link_libraries(logging_contract_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(logging_contract_smoke PRIVATE cxx_std_20)
+add_test(NAME logging_contract_smoke COMMAND logging_contract_smoke)
+
 # Scenario schema validation smoke tests.
 add_executable(scenario_validation_smoke
   tests/scenarios/scenario_validation_smoke.cpp
