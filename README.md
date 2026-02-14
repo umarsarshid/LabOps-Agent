@@ -273,6 +273,62 @@ cmake --build build
 sudo ./build/labops run scenarios/trigger_roi.json --out out-netem/ --apply-netem --netem-iface eth0
 ```
 
+## Demo Commands (Internal Tooling Flow)
+
+These are practical command patterns operators use during triage.
+
+### 1) Capture a known-good baseline
+
+```bash
+./build/labops baseline capture scenarios/sim_baseline.json
+```
+
+Expected output shape:
+
+```text
+baseline captured: scenarios/sim_baseline.json
+run_id: run-<timestamp_ms>
+bundle: baselines/sim_baseline
+metrics_csv: baselines/sim_baseline/metrics.csv
+summary: baselines/sim_baseline/summary.md
+thresholds: pass
+```
+
+### 2) Run a fault-injection scenario and produce a bundle
+
+```bash
+./build/labops run scenarios/dropped_frames.json --out /tmp/labops-demo
+```
+
+Expected output shape:
+
+```text
+run queued: scenarios/dropped_frames.json
+run_id: run-<timestamp_ms>
+bundle: /tmp/labops-demo/run-<timestamp_ms>
+events: /tmp/labops-demo/run-<timestamp_ms>/events.jsonl
+metrics_json: /tmp/labops-demo/run-<timestamp_ms>/metrics.json
+summary: /tmp/labops-demo/run-<timestamp_ms>/summary.md
+thresholds: pass
+```
+
+### 3) Compare run metrics against the baseline
+
+```bash
+RUN_DIR="$(find /tmp/labops-demo -maxdepth 1 -type d -name 'run-*' | head -n 1)"
+./build/labops compare --baseline baselines/sim_baseline --run "$RUN_DIR"
+```
+
+Expected output shape:
+
+```text
+compare baseline: baselines/sim_baseline/metrics.csv
+compare run: /tmp/labops-demo/run-<timestamp_ms>/metrics.csv
+diff_json: /tmp/labops-demo/run-<timestamp_ms>/diff.json
+diff_md: /tmp/labops-demo/run-<timestamp_ms>/diff.md
+compared_metrics: 9
+```
+
 Expected bundle layout per run:
 - `<out-dir>/<run_id>/scenario.json`
 - `<out-dir>/<run_id>/hostprobe.json`
