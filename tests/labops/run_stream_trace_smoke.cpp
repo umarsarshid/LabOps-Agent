@@ -96,14 +96,33 @@ int main() {
                           std::chrono::system_clock::now().time_since_epoch())
                           .count();
   const fs::path temp_root = fs::temp_directory_path() / ("labops-run-trace-" + std::to_string(now_ms));
+  const fs::path tools_dir = temp_root / "tools" / "netem_profiles";
   const fs::path scenario_path = temp_root / "scenario.json";
   const fs::path out_dir = temp_root / "out";
 
   std::error_code ec;
   fs::remove_all(temp_root, ec);
   fs::create_directories(temp_root, ec);
+  fs::create_directories(tools_dir, ec);
   if (ec) {
     Fail("failed to create temp root");
+  }
+
+  // Create a local netem profile so scenario references resolve from temp
+  // paths in this isolated integration smoke test.
+  {
+    std::ofstream profile_file(tools_dir / "jitter_light.json", std::ios::binary);
+    profile_file << "{\n"
+                 << "  \"schema_version\": \"1.0\",\n"
+                 << "  \"profile_id\": \"jitter_light\",\n"
+                 << "  \"netem\": {\n"
+                 << "    \"delay_ms\": 3.5,\n"
+                 << "    \"jitter_ms\": 1.2,\n"
+                 << "    \"loss_percent\": 0.5,\n"
+                 << "    \"reorder_percent\": 0.2,\n"
+                 << "    \"correlation_percent\": 10.0\n"
+                 << "  }\n"
+                 << "}\n";
   }
 
   // Scenario knobs intentionally include deterministic drop/reorder behavior so
@@ -112,6 +131,7 @@ int main() {
     std::ofstream scenario_file(scenario_path, std::ios::binary);
     scenario_file << "{\n"
                   << "  \"name\": \"trace\",\n"
+                  << "  \"netem_profile\": \"jitter_light\",\n"
                   << "  \"duration_ms\": 500,\n"
                   << "  \"fps\": 30,\n"
                   << "  \"jitter_us\": 500,\n"
@@ -265,6 +285,10 @@ int main() {
   AssertContains(summary_content, "# Run Summary");
   AssertContains(summary_content, "## Key Metrics");
   AssertContains(summary_content, "## Top Anomalies");
+  AssertContains(summary_content, "## Netem Commands (Manual)");
+  AssertContains(summary_content, "sudo tc qdisc replace dev <iface> root netem");
+  AssertContains(summary_content, "tc qdisc show dev <iface>");
+  AssertContains(summary_content, "sudo tc qdisc del dev <iface> root");
   AssertContains(summary_content, "**PASS**");
 
   std::ifstream manifest_input(bundle_manifest_json, std::ios::binary);

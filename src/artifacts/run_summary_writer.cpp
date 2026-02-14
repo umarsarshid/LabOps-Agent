@@ -89,12 +89,31 @@ void WriteAnomaliesSection(std::ofstream& out_file, const std::vector<std::strin
   out_file << '\n';
 }
 
+void WriteNetemCommandSection(std::ofstream& out_file,
+                              const std::optional<NetemCommandSuggestions>& netem_suggestions) {
+  if (!netem_suggestions.has_value()) {
+    return;
+  }
+
+  const NetemCommandSuggestions& netem = netem_suggestions.value();
+  out_file << "## Netem Commands (Manual)\n\n";
+  out_file << "- profile_id: `" << netem.profile_id << "`\n";
+  out_file << "- profile_path: `" << netem.profile_path.string() << "`\n";
+  out_file << "- note: " << netem.safety_note << "\n\n";
+  out_file << "```bash\n";
+  out_file << netem.apply_command << '\n';
+  out_file << netem.show_command << '\n';
+  out_file << netem.teardown_command << '\n';
+  out_file << "```\n\n";
+}
+
 } // namespace
 
 bool WriteRunSummaryMarkdown(const core::schema::RunInfo& run_info, const metrics::FpsReport& report,
                              const std::uint32_t configured_fps, const bool thresholds_passed,
                              const std::vector<std::string>& threshold_failures,
                              const std::vector<std::string>& top_anomalies,
+                             const std::optional<NetemCommandSuggestions>& netem_suggestions,
                              const fs::path& output_dir, fs::path& written_path, std::string& error) {
   if (!EnsureOutputDir(output_dir, error)) {
     return false;
@@ -137,6 +156,7 @@ bool WriteRunSummaryMarkdown(const core::schema::RunInfo& run_info, const metric
 
   WriteThresholdSection(out_file, thresholds_passed, threshold_failures);
   WriteAnomaliesSection(out_file, top_anomalies);
+  WriteNetemCommandSection(out_file, netem_suggestions);
 
   if (!out_file) {
     error = "failed while writing output file '" + written_path.string() + "'";

@@ -44,7 +44,9 @@ The project promise is a clean, reproducible evidence packet. This module ensure
   - `diff.json` for machine parsing
   - `diff.md` for human triage review
 - `run_summary_writer.hpp/.cpp`: writes one-page `summary.md` with run
-  pass/fail, key metrics, and top anomalies for fast engineer handoff.
+  pass/fail, key metrics, and top anomalies for fast engineer handoff, plus
+  optional manual netem command suggestions when a scenario references
+  `netem_profile`.
 
 ## Design principle
 

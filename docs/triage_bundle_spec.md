@@ -276,6 +276,8 @@ Current sections:
 - `Key Metrics` table
 - `Threshold Checks`
 - `Top Anomalies`
+- optional `Netem Commands (Manual)` when scenario references a valid
+  `netem_profile`
 
 ### `bundle_manifest.json`
 

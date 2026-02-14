@@ -95,6 +95,8 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
   - writes `<out>/<run_id>/summary.md`
   - includes run status (`PASS`/`FAIL`), key metrics, threshold findings, and
     top anomalies
+  - adds optional manual Linux netem apply/show/teardown suggestions when
+    `netem_profile` is set and a profile definition is available
 - Host probe pipeline:
   - writes `<out>/<run_id>/hostprobe.json`
   - includes OS/CPU/RAM/uptime/load snapshot and parsed NIC highlights
@@ -299,6 +301,8 @@ If you want to author new scenarios, follow `docs/scenario_schema.md`.
   - key identity fields (`run_id`, `scenario_id`, backend, seed, timestamps)
   - key metrics table (FPS/drop/timing highlights)
   - threshold findings and top anomalies
+  - optional `Netem Commands (Manual)` section when scenario uses
+    `netem_profile`
 - Stored at `<out>/<run_id>/summary.md`.
 
 ### run.json

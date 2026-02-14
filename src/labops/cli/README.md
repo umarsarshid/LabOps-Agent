@@ -24,7 +24,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Compute and write run metrics (`metrics.csv` + `metrics.json`) for FPS,
   drop, and timing/jitter reporting.
 - Generate one-page `summary.md` per run with pass/fail, key metrics, and top
-  anomalies for quick human triage.
+  anomalies for quick human triage, including optional manual netem
+  apply/show/teardown suggestions when `netem_profile` is configured.
 - Evaluate scenario thresholds (FPS/drop/timing) against computed metrics and
   return non-zero when thresholds fail.
 - Emit standardized per-run bundles under `<out>/<run_id>/` including

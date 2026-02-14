@@ -25,12 +25,14 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -154,6 +156,7 @@ struct RunOptions {
 struct RunPlan {
   backends::sim::SimScenarioConfig sim_config;
   std::chrono::milliseconds duration{1'000};
+  std::optional<std::string> netem_profile;
   struct Thresholds {
     std::optional<double> min_avg_fps;
     std::optional<double> max_drop_rate_percent;
@@ -480,7 +483,209 @@ std::optional<double> FindNumberJsonField(const std::string& text, std::string_v
   return parsed;
 }
 
+// Lightweight string extraction for top-level milestone wiring.
+// Supports common JSON string escapes used in scenario/profile metadata.
+std::optional<std::string> FindStringJsonField(const std::string& text, std::string_view key) {
+  const std::string needle = "\"" + std::string(key) + "\"";
+  const std::size_t key_pos = text.find(needle);
+  if (key_pos == std::string::npos) {
+    return std::nullopt;
+  }
+
+  const std::size_t colon_pos = text.find(':', key_pos + needle.size());
+  if (colon_pos == std::string::npos) {
+    return std::nullopt;
+  }
+
+  std::size_t value_pos = colon_pos + 1;
+  while (value_pos < text.size() &&
+         std::isspace(static_cast<unsigned char>(text[value_pos])) != 0) {
+    ++value_pos;
+  }
+  if (value_pos >= text.size() || text[value_pos] != '"') {
+    return std::nullopt;
+  }
+  ++value_pos;
+
+  std::string parsed;
+  while (value_pos < text.size()) {
+    const char c = text[value_pos++];
+    if (c == '"') {
+      return parsed;
+    }
+    if (c == '\\') {
+      if (value_pos >= text.size()) {
+        return std::nullopt;
+      }
+      const char esc = text[value_pos++];
+      switch (esc) {
+      case '"':
+      case '\\':
+      case '/':
+        parsed.push_back(esc);
+        break;
+      case 'b':
+        parsed.push_back('\b');
+        break;
+      case 'f':
+        parsed.push_back('\f');
+        break;
+      case 'n':
+        parsed.push_back('\n');
+        break;
+      case 'r':
+        parsed.push_back('\r');
+        break;
+      case 't':
+        parsed.push_back('\t');
+        break;
+      default:
+        return std::nullopt;
+      }
+      continue;
+    }
+    parsed.push_back(c);
+  }
+
+  return std::nullopt;
+}
+
+bool IsValidSlug(std::string_view value) {
+  if (value.empty()) {
+    return false;
+  }
+  for (const char c : value) {
+    const bool allowed =
+        (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
+    if (!allowed) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool ResolveNetemProfilePath(const fs::path& scenario_path, std::string_view profile_id,
+                             fs::path& resolved_path) {
+  resolved_path.clear();
+  if (scenario_path.empty() || profile_id.empty()) {
+    return false;
+  }
+
+  std::error_code ec;
+  const fs::path scenario_absolute = fs::absolute(scenario_path, ec);
+  if (ec) {
+    return false;
+  }
+
+  fs::path cursor = scenario_absolute.parent_path();
+  while (!cursor.empty()) {
+    const fs::path candidate =
+        cursor / "tools" / "netem_profiles" / (std::string(profile_id) + ".json");
+    std::error_code exists_ec;
+    if (fs::exists(candidate, exists_ec) && !exists_ec &&
+        fs::is_regular_file(candidate, exists_ec) && !exists_ec) {
+      resolved_path = candidate;
+      return true;
+    }
+
+    const fs::path parent = cursor.parent_path();
+    if (parent.empty() || parent == cursor) {
+      break;
+    }
+    cursor = parent;
+  }
+
+  return false;
+}
+
+std::string FormatShellDouble(double value) {
+  std::ostringstream out;
+  out << std::fixed << std::setprecision(3) << value;
+  return out.str();
+}
+
+struct NetemProfileDefinition {
+  double delay_ms = 0.0;
+  double jitter_ms = 0.0;
+  double loss_percent = 0.0;
+  double reorder_percent = 0.0;
+  double correlation_percent = 0.0;
+};
+
+bool LoadNetemProfileDefinition(const fs::path& profile_path, NetemProfileDefinition& definition,
+                                std::string& error) {
+  definition = NetemProfileDefinition{};
+  std::string profile_text;
+  if (!ReadTextFile(profile_path.string(), profile_text, error)) {
+    return false;
+  }
+
+  auto read_non_negative_number = [&](std::string_view key, double& target) {
+    const auto value = FindNumberJsonField(profile_text, key);
+    if (!value.has_value()) {
+      return true;
+    }
+    if (!std::isfinite(value.value()) || value.value() < 0.0) {
+      error = "netem profile field must be a non-negative number for key: " + std::string(key);
+      return false;
+    }
+    target = value.value();
+    return true;
+  };
+
+  if (!read_non_negative_number("delay_ms", definition.delay_ms) ||
+      !read_non_negative_number("jitter_ms", definition.jitter_ms) ||
+      !read_non_negative_number("loss_percent", definition.loss_percent) ||
+      !read_non_negative_number("reorder_percent", definition.reorder_percent) ||
+      !read_non_negative_number("correlation_percent", definition.correlation_percent)) {
+    return false;
+  }
+
+  return true;
+}
+
+bool BuildNetemCommandSuggestions(const std::string& scenario_path, const RunPlan& run_plan,
+                                  std::optional<artifacts::NetemCommandSuggestions>& suggestions,
+                                  std::string& warning) {
+  suggestions.reset();
+  warning.clear();
+  if (!run_plan.netem_profile.has_value()) {
+    return true;
+  }
+
+  fs::path profile_path;
+  if (!ResolveNetemProfilePath(fs::path(scenario_path), run_plan.netem_profile.value(), profile_path)) {
+    warning = "netem profile '" + run_plan.netem_profile.value() +
+              "' was referenced but no profile file was found under tools/netem_profiles";
+    return true;
+  }
+
+  NetemProfileDefinition definition;
+  std::string error;
+  if (!LoadNetemProfileDefinition(profile_path, definition, error)) {
+    warning = "unable to load netem profile '" + run_plan.netem_profile.value() + "': " + error;
+    return true;
+  }
+
+  artifacts::NetemCommandSuggestions netem;
+  netem.profile_id = run_plan.netem_profile.value();
+  netem.profile_path = profile_path;
+  netem.apply_command =
+      "sudo tc qdisc replace dev <iface> root netem delay " + FormatShellDouble(definition.delay_ms) +
+      "ms " + FormatShellDouble(definition.jitter_ms) + "ms loss " +
+      FormatShellDouble(definition.loss_percent) + "% reorder " +
+      FormatShellDouble(definition.reorder_percent) + "% " +
+      FormatShellDouble(definition.correlation_percent) + "%";
+  netem.show_command = "tc qdisc show dev <iface>";
+  netem.teardown_command = "sudo tc qdisc del dev <iface> root";
+  netem.safety_note =
+      "Run manually on Linux and replace <iface> with your test NIC.";
+  suggestions = std::move(netem);
+  return true;
+}
+
 bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, std::string& error) {
+  plan = RunPlan{};
   std::string scenario_text;
   if (!ReadTextFile(scenario_path, scenario_text, error)) {
     return false;
@@ -611,6 +816,19 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
   if (!assign_non_negative_integer_threshold("max_disconnect_count",
                                              plan.thresholds.max_disconnect_count)) {
     return false;
+  }
+
+  if (const auto netem_profile = FindStringJsonField(scenario_text, "netem_profile");
+      netem_profile.has_value()) {
+    if (netem_profile->empty()) {
+      error = "scenario netem_profile must not be empty";
+      return false;
+    }
+    if (!IsValidSlug(netem_profile.value())) {
+      error = "scenario netem_profile must use lowercase slug format [a-z0-9_-]+";
+      return false;
+    }
+    plan.netem_profile = netem_profile.value();
   }
 
   return true;
@@ -1033,6 +1251,16 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
   const std::vector<std::string> top_anomalies =
       BuildTopAnomalies(fps_report, run_plan.sim_config.fps, threshold_failures);
 
+  std::optional<artifacts::NetemCommandSuggestions> netem_suggestions;
+  std::string netem_warning;
+  if (!BuildNetemCommandSuggestions(options.scenario_path, run_plan, netem_suggestions, netem_warning)) {
+    std::cerr << "error: failed to build netem command suggestions\n";
+    return kExitFailure;
+  }
+  if (!netem_warning.empty()) {
+    std::cerr << "warning: " << netem_warning << '\n';
+  }
+
   fs::path summary_markdown_path;
   if (!artifacts::WriteRunSummaryMarkdown(run_info,
                                           fps_report,
@@ -1040,6 +1268,7 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
                                           thresholds_passed,
                                           threshold_failures,
                                           top_anomalies,
+                                          netem_suggestions,
                                           bundle_dir,
                                           summary_markdown_path,
                                           error)) {

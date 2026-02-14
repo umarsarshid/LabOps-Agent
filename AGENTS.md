@@ -16,6 +16,8 @@ This file helps the next coding agent continue work without re-discovery.
 - optional identifier redaction in host evidence via `--redact`
 - scenario-level `netem_profile` references validated against
   `tools/netem_profiles/*.json` presets (definition-only stage)
+- optional manual netem apply/show/teardown command suggestions in
+  `summary.md` when `netem_profile` is configured
 - bundle manifest generation (`bundle_manifest.json`)
 - optional support bundle zip (`--zip`)
 
@@ -109,6 +111,7 @@ Commands still run; it is a shell startup warning, not a LabOps failure.
 Use the user's explicit next commit request first. If no explicit task is
 provided, likely follow-on work is:
 - scenario-aware redaction expansion (if future security/privacy requirements add more fields)
+- netem execution harness (apply/teardown orchestration instead of manual-only suggestions)
 - agent experiment planner/runner (OAAT isolation loop)
 - engineer packet generation
 - hardware SDK backend implementation behind `ICameraBackend`
