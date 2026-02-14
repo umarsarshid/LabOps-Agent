@@ -135,6 +135,7 @@ int main() {
   const fs::path events_jsonl = bundle_dir / "events.jsonl";
   const fs::path metrics_csv = bundle_dir / "metrics.csv";
   const fs::path metrics_json = bundle_dir / "metrics.json";
+  const fs::path summary_markdown = bundle_dir / "summary.md";
   if (!fs::exists(run_json)) {
     Fail("run.json was not produced");
   }
@@ -152,6 +153,9 @@ int main() {
   }
   if (!fs::exists(metrics_json)) {
     Fail("metrics.json was not produced");
+  }
+  if (!fs::exists(summary_markdown)) {
+    Fail("summary.md was not produced");
   }
 
   const auto lines = ReadNonEmptyLines(events_jsonl);
@@ -214,6 +218,17 @@ int main() {
   AssertContains(metrics_json_content, "\"drop_rate_percent\":");
   AssertContains(metrics_json_content, "\"rolling_fps\":[");
 
+  std::ifstream summary_input(summary_markdown, std::ios::binary);
+  if (!summary_input) {
+    Fail("failed to open summary.md");
+  }
+  const std::string summary_content((std::istreambuf_iterator<char>(summary_input)),
+                                    std::istreambuf_iterator<char>());
+  AssertContains(summary_content, "# Run Summary");
+  AssertContains(summary_content, "## Key Metrics");
+  AssertContains(summary_content, "## Top Anomalies");
+  AssertContains(summary_content, "**PASS**");
+
   std::ifstream manifest_input(bundle_manifest_json, std::ios::binary);
   if (!manifest_input) {
     Fail("failed to open bundle_manifest.json");
@@ -226,6 +241,7 @@ int main() {
   AssertContains(manifest_content, "\"path\":\"events.jsonl\"");
   AssertContains(manifest_content, "\"path\":\"metrics.csv\"");
   AssertContains(manifest_content, "\"path\":\"metrics.json\"");
+  AssertContains(manifest_content, "\"path\":\"summary.md\"");
 
   fs::remove_all(temp_root, ec);
   std::cout << "run_stream_trace_smoke: ok\n";

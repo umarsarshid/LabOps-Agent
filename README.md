@@ -12,7 +12,7 @@ Simple flow:
 - You run a scenario.
 - LabOps executes the backend with deterministic controls.
 - It records a per-run bundle with `scenario.json`, `run.json`,
-  `events.jsonl`, `metrics.csv`, and `metrics.json`.
+  `events.jsonl`, `metrics.csv`, `metrics.json`, and `summary.md`.
 - Tests verify contracts and determinism so behavior stays reproducible.
 
 ## Current Status
@@ -21,7 +21,8 @@ The repo currently has a working CLI, deterministic sim backend, scenario pack,
 artifact/event/metrics output pipeline, and CI-validated integration tests.
 Bundle packaging is implemented (manifest + optional zip), and triage bundle
 contracts are documented as an internal tooling spec in
-`docs/triage_bundle_spec.md`. Agent diagnosis/planning is still upcoming.
+`docs/triage_bundle_spec.md`. Runs now also emit a one-page `summary.md`
+artifact for quick human triage. Agent diagnosis/planning is still upcoming.
 
 ## Milestone Progress
 
@@ -32,6 +33,7 @@ contracts are documented as an internal tooling spec in
 - Milestone 4: done (scenario schema, validation, scenario application in run)
 - Milestone 5: done (bundle layout, manifest, optional support zip, bundle docs)
 - Milestone 6: done (baseline capture + compare diff outputs + threshold pass/fail)
+- Milestone 7: in progress (`summary.md` run report contract started)
 
 ## Implemented So Far
 
@@ -56,12 +58,13 @@ contracts are documented as an internal tooling spec in
   - `<out>/<run_id>/events.jsonl`
   - `<out>/<run_id>/metrics.csv`
   - `<out>/<run_id>/metrics.json`
+  - `<out>/<run_id>/summary.md`
   - `<out>/<run_id>/bundle_manifest.json`
   - optional `<out>/<run_id>.zip` support bundle when `--zip` is requested
 - Baseline capture command:
   - `labops baseline capture <scenario.json>`
   - writes baseline artifacts directly under `baselines/<scenario_id>/`
-  - baseline directory includes `metrics.csv` and `metrics.json`
+  - baseline directory includes `metrics.csv`, `metrics.json`, and `summary.md`
 - Compare command:
   - `labops compare --baseline ... --run ...`
   - compares summary metrics and writes `diff.json` + `diff.md`
@@ -82,6 +85,10 @@ contracts are documented as an internal tooling spec in
   - computes inter-frame interval stats (`min/avg/p95-ish`)
   - computes inter-frame jitter stats (`min/avg/p95-ish`)
   - writes `<out>/<run_id>/metrics.csv` and `<out>/<run_id>/metrics.json`
+- One-page run summary pipeline:
+  - writes `<out>/<run_id>/summary.md`
+  - includes run status (`PASS`/`FAIL`), key metrics, threshold findings, and
+    top anomalies
 - Backend contract (`ICameraBackend`) plus deterministic sim backend.
 - Sim features:
   - Configurable FPS, jitter, seed, frame size.
@@ -102,6 +109,7 @@ contracts are documented as an internal tooling spec in
 - Baseline capture smoke test validating `baselines/<scenario_id>/` output contract.
 - Compare diff smoke test validating `diff.json` + `diff.md` delta generation.
 - Threshold failure smoke test validating non-zero `labops run` exit on violations.
+- Run summary smoke coverage validating `summary.md` presence/readability.
 - Catch2 core unit tests for schema/event JSON serialization (when available).
 - Internal triage bundle spec in `docs/triage_bundle_spec.md` covering:
   - bundle lifecycle and directory contract
@@ -174,6 +182,7 @@ Expected bundle layout per run:
 - `<out-dir>/<run_id>/events.jsonl`
 - `<out-dir>/<run_id>/metrics.csv`
 - `<out-dir>/<run_id>/metrics.json`
+- `<out-dir>/<run_id>/summary.md`
 - `<out-dir>/<run_id>/bundle_manifest.json`
 - optional `<out-dir>/<run_id>.zip` when `--zip` is used
 
@@ -199,7 +208,7 @@ If you want to author new scenarios, follow `docs/scenario_schema.md`.
   - `baselines/<scenario_id>/`
 - This folder is the stable baseline target for future regression comparison.
 - Baseline capture currently emits the same core evidence set as run mode,
-  including `metrics.csv` and `metrics.json`.
+  including `metrics.csv`, `metrics.json`, and `summary.md`.
 
 ### Compare Diff Output
 
@@ -232,6 +241,16 @@ If you want to author new scenarios, follow `docs/scenario_schema.md`.
 - Lists bundle artifacts with relative file paths, `size_bytes`, and hash values.
 - Current hash algorithm: `fnv1a_64`.
 - Stored at `<out>/<run_id>/bundle_manifest.json`.
+
+### summary.md
+
+- One-page human-readable run report written by `labops run`.
+- Includes:
+  - run status (`PASS`/`FAIL`)
+  - key identity fields (`run_id`, `scenario_id`, backend, seed, timestamps)
+  - key metrics table (FPS/drop/timing highlights)
+  - threshold findings and top anomalies
+- Stored at `<out>/<run_id>/summary.md`.
 
 ### run.json
 

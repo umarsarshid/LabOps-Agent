@@ -21,11 +21,13 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Execute sim backend run lifecycle and emit stream trace events.
 - Compute and write run metrics (`metrics.csv` + `metrics.json`) for FPS,
   drop, and timing/jitter reporting.
+- Generate one-page `summary.md` per run with pass/fail, key metrics, and top
+  anomalies for quick human triage.
 - Evaluate scenario thresholds (FPS/drop/timing) against computed metrics and
   return non-zero when thresholds fail.
 - Emit standardized per-run bundles under `<out>/<run_id>/` including
-  `scenario.json`, `run.json`, `events.jsonl`, metrics artifacts, and
-  `bundle_manifest.json` (artifact list + hashes).
+  `scenario.json`, `run.json`, `events.jsonl`, metrics artifacts,
+  `summary.md`, and `bundle_manifest.json` (artifact list + hashes).
 - Optionally emit support bundle zip archives via `--zip` at
   `<out>/<run_id>.zip`.
 - Emit scenario baseline captures under `baselines/<scenario_id>/` with

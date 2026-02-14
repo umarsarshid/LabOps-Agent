@@ -9,6 +9,7 @@ This file helps the next coding agent continue work without re-discovery.
 - deterministic sim streaming with fault injection
 - run artifact generation (`scenario.json`, `run.json`, `events.jsonl`)
 - metrics generation (`metrics.csv`, `metrics.json`)
+- one-page run summary generation (`summary.md`)
 - bundle manifest generation (`bundle_manifest.json`)
 - optional support bundle zip (`--zip`)
 
@@ -16,9 +17,9 @@ Long-term goal:
 - autonomous triage loop that changes one variable at a time and ships an
   engineer packet with repro steps, evidence, likely cause, and next actions.
 
-## Current Snapshot (as of February 13, 2026)
+## Current Snapshot (as of February 14, 2026)
 
-- Latest commit: `92dabae` (`docs(bundle): expand triage bundle internal spec`)
+- Latest commit: `55937c5` (`feat(thresholds): enforce scenario pass/fail in run`)
 - Milestones completed:
   - Milestone 0: repo/build/style/CI foundation
   - Milestone 1: CLI skeleton + output contracts
@@ -26,7 +27,10 @@ Long-term goal:
   - Milestone 3: metrics (fps/drop/jitter) + metrics artifacts
   - Milestone 4: scenario schema, loader/validator, scenario->backend apply
   - Milestone 5: bundle layout, manifest, optional zip, bundle docs
-- Latest known test status: baseline integration and smoke tests passing in CI.
+  - Milestone 6: baseline capture + compare diff outputs + threshold pass/fail
+- Milestone 7 status:
+  - `0033` in progress: per-run `summary.md` one-page report
+- Latest known test status: baseline/compare/threshold/run smoke suite passing.
 
 ## Confirmed Working Commands
 
@@ -47,6 +51,7 @@ Expected run outputs:
 - `<out>/<run_id>/events.jsonl`
 - `<out>/<run_id>/metrics.csv`
 - `<out>/<run_id>/metrics.json`
+- `<out>/<run_id>/summary.md`
 - `<out>/<run_id>/bundle_manifest.json`
 - optional `<out>/<run_id>.zip`
 
@@ -93,7 +98,7 @@ Commands still run; it is a shell startup warning, not a LabOps failure.
 
 Use the user's explicit next commit request first. If no explicit task is
 provided, likely follow-on work is:
-- baseline comparison/diff artifacts
+- finish and commit `0033` (`summary.md` writer + docs/tests)
 - agent experiment planner/runner (OAAT isolation loop)
 - engineer packet generation
 - hardware SDK backend implementation behind `ICameraBackend`

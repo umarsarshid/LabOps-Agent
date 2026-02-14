@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -16,6 +17,14 @@ namespace {
 void Fail(std::string_view message) {
   std::cerr << message << '\n';
   std::abort();
+}
+
+void AssertContains(std::string_view text, std::string_view needle) {
+  if (text.find(needle) == std::string_view::npos) {
+    std::cerr << "expected to find: " << needle << '\n';
+    std::cerr << "actual text: " << text << '\n';
+    std::abort();
+  }
 }
 
 fs::path ResolveSingleBundleDir(const fs::path& out_root) {
@@ -116,6 +125,21 @@ int main() {
   if (!fs::exists(bundle_dir / "metrics.json")) {
     Fail("metrics.json missing for threshold-fail run");
   }
+  const fs::path summary_markdown = bundle_dir / "summary.md";
+  if (!fs::exists(summary_markdown)) {
+    Fail("summary.md missing for threshold-fail run");
+  }
+
+  std::ifstream summary_input(summary_markdown, std::ios::binary);
+  if (!summary_input) {
+    Fail("failed to open summary.md for threshold-fail run");
+  }
+  const std::string summary_content((std::istreambuf_iterator<char>(summary_input)),
+                                    std::istreambuf_iterator<char>());
+  AssertContains(summary_content, "## Status");
+  AssertContains(summary_content, "**FAIL**");
+  AssertContains(summary_content, "## Threshold Checks");
+  AssertContains(summary_content, "Threshold violation:");
 
   fs::remove_all(temp_root, ec);
   std::cout << "run_threshold_failure_smoke: ok\n";

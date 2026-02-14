@@ -121,6 +121,7 @@ void RunScenarioE2E(const std::string& scenario_name, std::uint64_t run_suffix) 
   const fs::path events_jsonl = bundle_dir / "events.jsonl";
   const fs::path metrics_csv = bundle_dir / "metrics.csv";
   const fs::path metrics_json = bundle_dir / "metrics.json";
+  const fs::path summary_markdown = bundle_dir / "summary.md";
   if (!fs::exists(run_json)) {
     Fail("run.json missing for scenario: " + scenario_name);
   }
@@ -138,6 +139,9 @@ void RunScenarioE2E(const std::string& scenario_name, std::uint64_t run_suffix) 
   }
   if (!fs::exists(metrics_json)) {
     Fail("metrics.json missing for scenario: " + scenario_name);
+  }
+  if (!fs::exists(summary_markdown)) {
+    Fail("summary.md missing for scenario: " + scenario_name);
   }
 
   const std::vector<std::string> lines = ReadNonEmptyLines(events_jsonl);

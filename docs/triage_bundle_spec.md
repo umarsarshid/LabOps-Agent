@@ -45,8 +45,9 @@ Current high-level write sequence:
 2. `events.jsonl` starts receiving lifecycle and frame events.
 3. `run.json` is written after stream completion.
 4. `metrics.csv` and `metrics.json` are written.
-5. `bundle_manifest.json` is generated from required artifacts.
-6. optional `.zip` archive is created as a sibling of bundle directory.
+5. `summary.md` is written as a one-page human triage report.
+6. `bundle_manifest.json` is generated from required artifacts.
+7. optional `.zip` archive is created as a sibling of bundle directory.
 
 ## Directory Layout Contract
 
@@ -60,6 +61,7 @@ Required bundle structure:
     events.jsonl
     metrics.csv
     metrics.json
+    summary.md
     bundle_manifest.json
 ```
 
@@ -81,6 +83,7 @@ Optional output:
 | `events.jsonl` | yes | event writer | Timeline-level evidence for stream behavior and failures. |
 | `metrics.csv` | yes | metrics writer | Human-readable metrics for spreadsheets and quick plotting. |
 | `metrics.json` | yes | metrics writer | Machine-readable metrics for automation and agent parsing. |
+| `summary.md` | yes | summary writer | One-page human summary with pass/fail, key metrics, and top anomalies. |
 | `bundle_manifest.json` | yes | manifest writer | Integrity and inventory contract for triage handoff. |
 | `<run_id>.zip` | optional | zip writer | Portable support bundle for sharing outside raw workspace. |
 
@@ -192,6 +195,21 @@ Top-level contract:
 - `rolling_fps` array:
   - `window_end_ms`, `frames_in_window`, `fps`
 
+### `summary.md`
+
+Purpose:
+
+- give engineers a quick one-page run verdict before deep-diving raw artifacts
+- keep pass/fail, metric highlights, and anomaly hints in one readable file
+
+Current sections:
+
+- `Status` (`PASS` or `FAIL`)
+- `Run Identity` (run_id, scenario_id, backend, seed, timestamps)
+- `Key Metrics` table
+- `Threshold Checks`
+- `Top Anomalies`
+
 ### `bundle_manifest.json`
 
 Purpose:
@@ -222,6 +240,7 @@ Current manifest file inclusion list:
 - `events.jsonl`
 - `metrics.csv`
 - `metrics.json`
+- `summary.md`
 
 Inclusion behavior:
 

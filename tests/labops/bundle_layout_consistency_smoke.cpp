@@ -83,6 +83,7 @@ void AssertBundleHasRequiredFiles(const fs::path& bundle_dir) {
   const fs::path events_jsonl = bundle_dir / "events.jsonl";
   const fs::path metrics_csv = bundle_dir / "metrics.csv";
   const fs::path metrics_json = bundle_dir / "metrics.json";
+  const fs::path summary_markdown = bundle_dir / "summary.md";
 
   if (!fs::exists(run_json)) {
     Fail("bundle missing run.json");
@@ -101,6 +102,9 @@ void AssertBundleHasRequiredFiles(const fs::path& bundle_dir) {
   }
   if (!fs::exists(metrics_json)) {
     Fail("bundle missing metrics.json");
+  }
+  if (!fs::exists(summary_markdown)) {
+    Fail("bundle missing summary.md");
   }
 }
 

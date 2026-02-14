@@ -11,8 +11,9 @@ surface (argument parsing + runtime orchestration + artifact/event output).
 
 - `run_stream_trace_smoke.cpp`: drives `labops run` via CLI dispatch and
   verifies `events.jsonl` contains config-audit plus realistic stream lifecycle events and
-  `metrics.csv`/`metrics.json` are emitted with expected metric fields, and
-  `bundle_manifest.json` includes the core artifact entries and hash metadata.
+  `metrics.csv`/`metrics.json` are emitted with expected metric fields,
+  `summary.md` is readable, and `bundle_manifest.json` includes the core
+  artifact entries and hash metadata.
 - `validate_actionable_smoke.cpp`: drives `labops validate` and verifies
   invalid schema output includes actionable field-level error paths.
 - `sim_determinism_golden_smoke.cpp`: runs the same seeded scenario twice and
@@ -34,7 +35,8 @@ surface (argument parsing + runtime orchestration + artifact/event output).
   generates `diff.json` + `diff.md` and reports non-zero deltas for a
   fault-injected run against baseline.
 - `run_threshold_failure_smoke.cpp`: verifies a threshold-violating scenario
-  returns non-zero from `labops run` while still producing core artifacts.
+  returns non-zero from `labops run` while still producing core artifacts and
+  a `summary.md` status of `FAIL`.
 
 ## Connection to the project
 

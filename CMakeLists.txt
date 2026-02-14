@@ -61,6 +61,7 @@ add_library(labops_artifacts
   src/artifacts/bundle_zip_writer.cpp
   src/artifacts/metrics_diff_writer.cpp
   src/artifacts/metrics_writer.cpp
+  src/artifacts/run_summary_writer.cpp
   src/artifacts/scenario_writer.cpp
   src/artifacts/run_writer.cpp
 )

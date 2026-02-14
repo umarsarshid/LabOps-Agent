@@ -3,6 +3,7 @@
 #include "artifacts/bundle_manifest_writer.hpp"
 #include "artifacts/metrics_writer.hpp"
 #include "artifacts/metrics_diff_writer.hpp"
+#include "artifacts/run_summary_writer.hpp"
 #include "artifacts/run_writer.hpp"
 #include "artifacts/scenario_writer.hpp"
 #include "artifacts/bundle_zip_writer.hpp"
@@ -712,6 +713,64 @@ bool EvaluateRunThresholds(const RunPlan::Thresholds& thresholds,
   return failures.empty();
 }
 
+// Produces a short, human-readable anomaly list for run-level summary output.
+// This keeps triage focused by highlighting the most actionable metric signals.
+std::vector<std::string> BuildTopAnomalies(const metrics::FpsReport& report,
+                                           std::uint32_t configured_fps,
+                                           const std::vector<std::string>& threshold_failures) {
+  std::vector<std::string> anomalies;
+
+  for (const auto& failure : threshold_failures) {
+    anomalies.push_back("Threshold violation: " + failure);
+  }
+
+  if (report.received_frames_total == 0U) {
+    anomalies.push_back("No frames were received during the run.");
+  }
+
+  if (report.dropped_frames_total > 0U) {
+    anomalies.push_back("Dropped " + std::to_string(report.dropped_frames_total) + " of " +
+                        std::to_string(report.frames_total) + " frames (" +
+                        std::to_string(report.drop_rate_percent) + "%).");
+  }
+
+  if (configured_fps > 0U) {
+    const double expected_interval_us = 1'000'000.0 / static_cast<double>(configured_fps);
+    const double avg_fps_floor = static_cast<double>(configured_fps) * 0.90;
+    if (report.avg_fps + 1e-9 < avg_fps_floor) {
+      anomalies.push_back("Average FPS " + std::to_string(report.avg_fps) +
+                          " is below 90% of configured FPS " +
+                          std::to_string(configured_fps) + ".");
+    }
+
+    if (report.inter_frame_interval_us.sample_count > 0U &&
+        report.inter_frame_interval_us.p95_us > expected_interval_us * 1.50) {
+      anomalies.push_back("Inter-frame interval p95 " +
+                          std::to_string(report.inter_frame_interval_us.p95_us) +
+                          "us is >150% of expected " +
+                          std::to_string(expected_interval_us) + "us.");
+    }
+
+    if (report.inter_frame_jitter_us.sample_count > 0U &&
+        report.inter_frame_jitter_us.p95_us > expected_interval_us * 0.50) {
+      anomalies.push_back("Inter-frame jitter p95 " +
+                          std::to_string(report.inter_frame_jitter_us.p95_us) +
+                          "us is high relative to expected cadence " +
+                          std::to_string(expected_interval_us) + "us.");
+    }
+  }
+
+  if (anomalies.empty()) {
+    anomalies.push_back("No notable anomalies detected by current heuristics.");
+  }
+
+  if (anomalies.size() > 3U) {
+    anomalies.resize(3U);
+  }
+
+  return anomalies;
+}
+
 // Centralized run execution keeps `run` and `baseline capture` behavior aligned
 // so artifact contracts and metrics math never diverge between modes.
 int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
@@ -906,6 +965,25 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
     return kExitFailure;
   }
 
+  std::vector<std::string> threshold_failures;
+  const bool thresholds_passed = EvaluateRunThresholds(run_plan.thresholds, fps_report, threshold_failures);
+  const std::vector<std::string> top_anomalies =
+      BuildTopAnomalies(fps_report, run_plan.sim_config.fps, threshold_failures);
+
+  fs::path summary_markdown_path;
+  if (!artifacts::WriteRunSummaryMarkdown(run_info,
+                                          fps_report,
+                                          run_plan.sim_config.fps,
+                                          thresholds_passed,
+                                          threshold_failures,
+                                          top_anomalies,
+                                          bundle_dir,
+                                          summary_markdown_path,
+                                          error)) {
+    std::cerr << "error: failed to write summary.md: " << error << '\n';
+    return kExitFailure;
+  }
+
   fs::path bundle_manifest_path;
   const std::vector<fs::path> bundle_artifact_paths = {
       scenario_artifact_path,
@@ -913,6 +991,7 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
       events_path,
       metrics_csv_path,
       metrics_json_path,
+      summary_markdown_path,
   };
   if (!artifacts::WriteBundleManifestJson(bundle_dir, bundle_artifact_paths, bundle_manifest_path, error)) {
     std::cerr << "error: failed to write bundle manifest: " << error << '\n';
@@ -934,6 +1013,7 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
   std::cout << "events: " << events_path.string() << '\n';
   std::cout << "metrics_csv: " << metrics_csv_path.string() << '\n';
   std::cout << "metrics_json: " << metrics_json_path.string() << '\n';
+  std::cout << "summary: " << summary_markdown_path.string() << '\n';
   std::cout << "manifest: " << bundle_manifest_path.string() << '\n';
   if (options.zip_bundle) {
     std::cout << "bundle_zip: " << bundle_zip_path.string() << '\n';
@@ -948,9 +1028,6 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
             << " jitter_p95=" << fps_report.inter_frame_jitter_us.p95_us << '\n';
   std::cout << "frames: total=" << frames.size() << " received=" << received_count
             << " dropped=" << dropped_count << '\n';
-
-  std::vector<std::string> threshold_failures;
-  const bool thresholds_passed = EvaluateRunThresholds(run_plan.thresholds, fps_report, threshold_failures);
   if (thresholds_passed) {
     std::cout << "thresholds: pass\n";
     return kExitSuccess;

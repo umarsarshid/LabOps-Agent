@@ -13,6 +13,7 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 - `events.jsonl` append-only run timeline.
 - `metrics.csv` for plotting and spreadsheet workflows.
 - `metrics.json` for machine parsing by agent logic.
+- `summary.md` one-page human triage summary per run.
 - `bundle_manifest.json` listing artifact files, sizes, and hashes.
 - optional `<run_id>.zip` support bundle archive.
 - Diff/report files against baseline.
@@ -36,6 +37,8 @@ The project promise is a clean, reproducible evidence packet. This module ensure
   rows and writes:
   - `diff.json` for machine parsing
   - `diff.md` for human triage review
+- `run_summary_writer.hpp/.cpp`: writes one-page `summary.md` with run
+  pass/fail, key metrics, and top anomalies for fast engineer handoff.
 
 ## Design principle
 
