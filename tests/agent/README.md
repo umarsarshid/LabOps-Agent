@@ -30,3 +30,11 @@ artifact consumers.
   - Generates one-knob scenario variants from a base scenario.
   - Verifies default output location is `out/agent_runs`.
   - Verifies all dropped-frame playbook knobs produce persisted variant files.
+- `stop_conditions_smoke.cpp`
+  - Verifies deterministic stop evaluation.
+  - Verifies each stop reason path:
+    - max runs
+    - single-variable flip
+    - confidence threshold
+    - stable repro rate
+  - Verifies human-readable explanation text is emitted.

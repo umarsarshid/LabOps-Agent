@@ -29,6 +29,14 @@ triage.
   - Takes a base scenario + symptom playbook and emits one scenario file per
     knob mutation.
   - Default output contract: `out/agent_runs/` with `variants_manifest.json`.
+- `stop_conditions.hpp` / `stop_conditions.cpp`
+  - Deterministic stop-condition evaluator for experiment loops.
+  - Stop priority is fixed:
+    1. max runs
+    2. single-variable flip
+    3. confidence threshold
+    4. stable repro rate
+  - Returns both machine reason and human-readable explanation text.
 - `experiment_state.hpp` / `experiment_state.cpp`
   - Canonical `ExperimentState` model.
   - Structured lists for:
@@ -55,6 +63,9 @@ triage.
 
 The variant generator turns that ordered plan into concrete scenario files that
 can be executed immediately, while preserving the one-knob-change discipline.
+
+Stop conditions complete the minimal loop control contract so the agent can end
+runs deterministically and explain exactly why it stopped.
 
 ## How it connects to the project
 

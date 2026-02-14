@@ -24,6 +24,7 @@ This file helps the next coding agent continue work without re-discovery.
 - in-process `ExperimentRunner` foundation for baseline + one-variant flow
 - symptom-driven playbook framework for ordered knob selection
 - one-variable-at-a-time scenario variant generator (`out/agent_runs`)
+- deterministic stop-condition evaluator (reason + explanation)
 - bundle manifest generation (`bundle_manifest.json`)
 - optional support bundle zip (`--zip`)
 
@@ -33,7 +34,7 @@ Long-term goal:
 
 ## Current Snapshot (as of February 14, 2026)
 
-- Latest commit before current work: `4da2619` (`feat(agent): add symptom-driven playbook framework`)
+- Latest commit before current work: `1370f34` (`feat(agent): add one-variable scenario variant generator`)
 - Milestones completed:
   - Milestone 0: repo/build/style/CI foundation
   - Milestone 1: CLI skeleton + output contracts
@@ -46,7 +47,7 @@ Long-term goal:
   - Milestone 8: done (netem profiles, suggestions, guarded execution)
   - Milestone 9: in progress (agent-mode foundations)
 - Latest known test status:
-  - full smoke suite passing after `0044` plus failure-path smoke
+  - full smoke suite passing after `0045` plus failure-path smoke
 
 ## Confirmed Working Commands
 
@@ -123,6 +124,6 @@ provided, likely follow-on work is:
 - richer netem status evidence in artifacts/events (applied/teardown outcomes)
 - agent experiment planner/runner (OAAT isolation loop) on top of
   `ExperimentState` + `agent_state.json` + `ExperimentRunner` + symptom playbooks
-  + generated OAAT variants
+  + generated OAAT variants + deterministic stop conditions
 - engineer packet generation
 - hardware SDK backend implementation behind `ICameraBackend`

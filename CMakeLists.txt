@@ -61,6 +61,7 @@ add_library(labops_agent
   src/agent/experiment_state.cpp
   src/agent/playbook.cpp
   src/agent/state_writer.cpp
+  src/agent/stop_conditions.cpp
   src/agent/variant_generator.cpp
 )
 target_include_directories(labops_agent PUBLIC src)
@@ -162,6 +163,14 @@ add_executable(oaat_variant_generator_smoke
 target_link_libraries(oaat_variant_generator_smoke PRIVATE labops_agent)
 target_compile_features(oaat_variant_generator_smoke PRIVATE cxx_std_20)
 add_test(NAME oaat_variant_generator_smoke COMMAND oaat_variant_generator_smoke)
+
+# Smoke test for deterministic stop-condition evaluation and explanation.
+add_executable(stop_conditions_smoke
+  tests/agent/stop_conditions_smoke.cpp
+)
+target_link_libraries(stop_conditions_smoke PRIVATE labops_agent)
+target_compile_features(stop_conditions_smoke PRIVATE cxx_std_20)
+add_test(NAME stop_conditions_smoke COMMAND stop_conditions_smoke)
 
 # Smoke test for scenario snapshot writer contract.
 add_executable(scenario_writer_smoke

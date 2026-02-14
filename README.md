@@ -127,6 +127,13 @@ scenario mutations to `out/agent_runs/`.
     files
   - default output location: `out/agent_runs/`
   - emits `variants_manifest.json` with knob/path/value deltas
+- Agent stop-condition framework:
+  - deterministic stop reasons with fixed priority:
+    - max runs
+    - single-variable flip
+    - confidence threshold
+    - stable repro rate
+  - returns explicit human-readable explanation for why execution stopped
 - Host probe pipeline:
   - writes `<out>/<run_id>/hostprobe.json`
   - includes OS/CPU/RAM/uptime/load snapshot and parsed NIC highlights
