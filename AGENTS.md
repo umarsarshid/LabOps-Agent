@@ -18,6 +18,8 @@ This file helps the next coding agent continue work without re-discovery.
   `tools/netem_profiles/*.json` presets (definition-only stage)
 - optional manual netem apply/show/teardown command suggestions in
   `summary.md` when `netem_profile` is configured
+- optional Linux netem execution path (`--apply-netem --netem-iface <iface>`)
+  with guaranteed teardown attempt on exit after successful apply
 - bundle manifest generation (`bundle_manifest.json`)
 - optional support bundle zip (`--zip`)
 
@@ -112,6 +114,7 @@ Use the user's explicit next commit request first. If no explicit task is
 provided, likely follow-on work is:
 - scenario-aware redaction expansion (if future security/privacy requirements add more fields)
 - netem execution harness (apply/teardown orchestration instead of manual-only suggestions)
+- richer netem status evidence in artifacts/events (applied/teardown outcomes)
 - agent experiment planner/runner (OAAT isolation loop)
 - engineer packet generation
 - hardware SDK backend implementation behind `ICameraBackend`

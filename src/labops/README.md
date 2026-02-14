@@ -17,16 +17,17 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
 - `labops version`: prints tool version.
 - `labops validate <scenario.json>`: validates scenario schema and prints
   actionable field-level errors when invalid.
-- `labops run <scenario.json> --out <dir> [--zip] [--redact]`: emits a per-run bundle under
+- `labops run <scenario.json> --out <dir> [--zip] [--redact] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: emits a per-run bundle under
   `<dir>/<run_id>/` containing `scenario.json`, `run.json`, `events.jsonl`,
   `metrics.csv`, `metrics.json`, `summary.md`, `hostprobe.json`, and
   platform NIC raw command outputs (`nic_*.txt`),
   `bundle_manifest.json`; optionally emits `<dir>/<run_id>.zip` when `--zip`
   is set; optionally redacts obvious host/user identifiers in hostprobe outputs
-  when `--redact` is set; runs sim backend lifecycle;
+  when `--redact` is set; optionally applies Linux netem impairment when
+  explicitly requested; runs sim backend lifecycle;
   evaluates configured scenario thresholds against computed metrics; returns
   non-zero when thresholds fail; and reports output paths.
-- `labops baseline capture <scenario.json> [--redact]`: captures a scenario baseline into
+- `labops baseline capture <scenario.json> [--redact] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: captures a scenario baseline into
   `baselines/<scenario_id>/` using the same run pipeline and metrics writers as
   `labops run`, so release/regression comparisons use identical evidence math
   and optional identifier redaction behavior.

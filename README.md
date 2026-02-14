@@ -43,8 +43,8 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
 - CLI commands:
   - `labops version`
   - `labops validate <scenario.json>`
-  - `labops run <scenario.json> [--out <dir>] [--zip] [--redact]`
-  - `labops baseline capture <scenario.json> [--redact]`
+  - `labops run <scenario.json> [--out <dir>] [--zip] [--redact] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`
+  - `labops baseline capture <scenario.json> [--redact] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`
   - `labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]`
 - Scenario loader + schema validation in `labops validate` with actionable
   field-level errors.
@@ -97,6 +97,10 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
     top anomalies
   - adds optional manual Linux netem apply/show/teardown suggestions when
     `netem_profile` is set and a profile definition is available
+- Optional netem execution pipeline (Linux only):
+  - executes only when `--apply-netem` is provided with `--netem-iface`
+  - requires root unless `--apply-netem-force` is explicitly used
+  - always attempts teardown on exit via scope-guard safety
 - Host probe pipeline:
   - writes `<out>/<run_id>/hostprobe.json`
   - includes OS/CPU/RAM/uptime/load snapshot and parsed NIC highlights
@@ -127,6 +131,8 @@ artifact for quick human triage. Agent diagnosis/planning is still upcoming.
 - Threshold failure smoke test validating non-zero `labops run` exit on violations.
 - Hostprobe redaction smoke test validating host/user identifiers are stripped
   from hostprobe JSON + NIC raw text outputs.
+- Netem option contract smoke test validating safe flag pairing for
+  `--apply-netem` and `--netem-iface`.
 - Run summary smoke coverage validating `summary.md` presence/readability.
 - Catch2 core unit tests for schema/event JSON serialization (when available).
 - Internal triage bundle spec in `docs/triage_bundle_spec.md` covering:
@@ -200,6 +206,12 @@ cmake --build build
 ./build/labops compare --baseline baselines/sim_baseline --run out/<run_id>
 ```
 
+### 10) Apply netem during run (Linux, explicit, optional)
+
+```bash
+sudo ./build/labops run scenarios/trigger_roi.json --out out-netem/ --apply-netem --netem-iface eth0
+```
+
 Expected bundle layout per run:
 - `<out-dir>/<run_id>/scenario.json`
 - `<out-dir>/<run_id>/hostprobe.json`
@@ -235,6 +247,15 @@ If you want to author new scenarios, follow `docs/scenario_schema.md`.
 - `labops baseline capture ... --redact` uses the same redaction behavior.
 - Current replacements target obvious hostname/username tokens and replace them
   with `<redacted_host>` / `<redacted_user>`.
+
+### Netem Execution
+
+- `labops run ... --apply-netem --netem-iface <iface>` attempts to apply netem
+  impairment on Linux before stream start.
+- By default this requires root; use `--apply-netem-force` only when you
+  explicitly want a non-root attempt.
+- `labops` always attempts teardown on exit after successful apply to avoid
+  leaving host network impairment behind.
 
 ### Baseline Capture
 

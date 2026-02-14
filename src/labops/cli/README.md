@@ -12,8 +12,10 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Enforce usage errors consistently.
 - Preserve stable exit-code semantics for automation.
 - Print deterministic command outputs.
-- Parse run artifact options (`--out <dir>`, `--zip`, `--redact`).
-- Parse baseline capture command contracts (`baseline capture <scenario.json> [--redact]`).
+- Parse run artifact options (`--out <dir>`, `--zip`, `--redact`,
+  `--apply-netem`, `--netem-iface`, `--apply-netem-force`).
+- Parse baseline capture command contracts (`baseline capture <scenario.json>
+  [--redact] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`).
 - Parse compare command contracts (`compare --baseline ... --run ... [--out ...]`).
 - Route scenario validation through schema loader with actionable errors.
 - Validate optional `netem_profile` references against
@@ -26,6 +28,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Generate one-page `summary.md` per run with pass/fail, key metrics, and top
   anomalies for quick human triage, including optional manual netem
   apply/show/teardown suggestions when `netem_profile` is configured.
+- Optionally apply Linux netem profile impairments when explicitly requested
+  (`--apply-netem`) and always teardown via scope guard on exit.
 - Evaluate scenario thresholds (FPS/drop/timing) against computed metrics and
   return non-zero when thresholds fail.
 - Emit standardized per-run bundles under `<out>/<run_id>/` including

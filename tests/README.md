@@ -19,6 +19,7 @@ LabOps must be predictable. Tests verify command contracts, scenario validation,
   subfolders, including backend interface conformance checks.
 - Artifact-specific writer contract tests under `tests/artifacts/`.
 - CLI integration smoke tests under `tests/labops/` for end-to-end run traces.
+- CLI netem option contract smoke coverage for safe flag pairing.
 - Bundle layout consistency smoke coverage for `<out>/<run_id>/...` contracts.
 - Optional support-zip smoke coverage for `--zip` bundle packaging.
 - Seeded determinism smoke coverage to prevent non-repeatable sim behavior.

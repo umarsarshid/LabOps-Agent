@@ -37,6 +37,14 @@
 #include <string_view>
 #include <vector>
 
+#if !defined(_WIN32)
+#include <sys/wait.h>
+#endif
+
+#if defined(__linux__) || defined(__APPLE__)
+#include <unistd.h>
+#endif
+
 namespace fs = std::filesystem;
 
 namespace labops::cli {
@@ -52,8 +60,10 @@ constexpr int kExitUsage = 2;
 // One usage text source avoids divergence between help and error paths.
 void PrintUsage(std::ostream& out) {
   out << "usage:\n"
-      << "  labops run <scenario.json> [--out <dir>] [--zip] [--redact]\n"
-      << "  labops baseline capture <scenario.json> [--redact]\n"
+      << "  labops run <scenario.json> [--out <dir>] [--zip] [--redact] "
+         "[--apply-netem --netem-iface <iface> [--apply-netem-force]]\n"
+      << "  labops baseline capture <scenario.json> [--redact] "
+         "[--apply-netem --netem-iface <iface> [--apply-netem-force]]\n"
       << "  labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]\n"
       << "  labops validate <scenario.json>\n"
       << "  labops version\n";
@@ -62,7 +72,8 @@ void PrintUsage(std::ostream& out) {
 // Keep nested baseline command help local so usage errors stay actionable.
 void PrintBaselineUsage(std::ostream& out) {
   out << "usage:\n"
-      << "  labops baseline capture <scenario.json> [--redact]\n";
+      << "  labops baseline capture <scenario.json> [--redact] "
+         "[--apply-netem --netem-iface <iface> [--apply-netem-force]]\n";
 }
 
 // Filesystem preflight checks run before schema validation. This keeps path and
@@ -151,6 +162,9 @@ struct RunOptions {
   fs::path output_dir = "out";
   bool zip_bundle = false;
   bool redact_identifiers = false;
+  bool apply_netem = false;
+  bool apply_netem_force = false;
+  std::string netem_interface;
 };
 
 struct RunPlan {
@@ -189,6 +203,24 @@ bool ParseRunOptions(const std::vector<std::string_view>& args, RunOptions& opti
       options.redact_identifiers = true;
       continue;
     }
+    if (token == "--apply-netem") {
+      options.apply_netem = true;
+      continue;
+    }
+    if (token == "--apply-netem-force") {
+      options.apply_netem = true;
+      options.apply_netem_force = true;
+      continue;
+    }
+    if (token == "--netem-iface") {
+      if (i + 1 >= args.size()) {
+        error = "missing value for --netem-iface";
+        return false;
+      }
+      options.netem_interface = std::string(args[i + 1]);
+      ++i;
+      continue;
+    }
     if (token == "--out") {
       if (i + 1 >= args.size()) {
         error = "missing value for --out";
@@ -216,6 +248,14 @@ bool ParseRunOptions(const std::vector<std::string_view>& args, RunOptions& opti
     error = "run requires exactly 1 argument: <scenario.json>";
     return false;
   }
+  if (options.apply_netem && options.netem_interface.empty()) {
+    error = "--apply-netem requires --netem-iface <iface>";
+    return false;
+  }
+  if (!options.apply_netem && !options.netem_interface.empty()) {
+    error = "--netem-iface requires --apply-netem";
+    return false;
+  }
 
   return true;
 }
@@ -225,9 +265,28 @@ bool ParseRunOptions(const std::vector<std::string_view>& args, RunOptions& opti
 // - baseline target is deterministic: `baselines/<scenario_id>/`
 bool ParseBaselineCaptureOptions(const std::vector<std::string_view>& args, RunOptions& options,
                                  std::string& error) {
-  for (const std::string_view token : args) {
+  for (std::size_t i = 0; i < args.size(); ++i) {
+    const std::string_view token = args[i];
     if (token == "--redact") {
       options.redact_identifiers = true;
+      continue;
+    }
+    if (token == "--apply-netem") {
+      options.apply_netem = true;
+      continue;
+    }
+    if (token == "--apply-netem-force") {
+      options.apply_netem = true;
+      options.apply_netem_force = true;
+      continue;
+    }
+    if (token == "--netem-iface") {
+      if (i + 1 >= args.size()) {
+        error = "missing value for --netem-iface";
+        return false;
+      }
+      options.netem_interface = std::string(args[i + 1]);
+      ++i;
       continue;
     }
 
@@ -245,6 +304,14 @@ bool ParseBaselineCaptureOptions(const std::vector<std::string_view>& args, RunO
 
   if (options.scenario_path.empty()) {
     error = "baseline capture requires exactly 1 argument: <scenario.json>";
+    return false;
+  }
+  if (options.apply_netem && options.netem_interface.empty()) {
+    error = "--apply-netem requires --netem-iface <iface>";
+    return false;
+  }
+  if (!options.apply_netem && !options.netem_interface.empty()) {
+    error = "--netem-iface requires --apply-netem";
     return false;
   }
 
@@ -684,6 +751,144 @@ bool BuildNetemCommandSuggestions(const std::string& scenario_path, const RunPla
   return true;
 }
 
+bool IsSafeNetemInterfaceName(std::string_view name) {
+  if (name.empty()) {
+    return false;
+  }
+  for (const char c : name) {
+    const bool allowed = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                         (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.' ||
+                         c == ':';
+    if (!allowed) {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::string ReplaceIfacePlaceholder(std::string template_command, std::string_view iface) {
+  const std::string needle = "<iface>";
+  std::size_t pos = 0;
+  while ((pos = template_command.find(needle, pos)) != std::string::npos) {
+    template_command.replace(pos, needle.size(), iface);
+    pos += iface.size();
+  }
+  return template_command;
+}
+
+bool RunShellCommandNoCapture(const std::string& command, int& exit_code, std::string& error) {
+  error.clear();
+  exit_code = -1;
+  const int raw_status = std::system(command.c_str());
+  if (raw_status == -1) {
+    error = "failed to execute shell command";
+    return false;
+  }
+
+#if defined(_WIN32)
+  exit_code = raw_status;
+#else
+  if (WIFEXITED(raw_status)) {
+    exit_code = WEXITSTATUS(raw_status);
+  } else {
+    exit_code = raw_status;
+  }
+#endif
+  return true;
+}
+
+bool IsLinuxHost() {
+#if defined(__linux__)
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool IsRunningAsRoot() {
+#if defined(__linux__) || defined(__APPLE__)
+  return geteuid() == 0;
+#else
+  return false;
+#endif
+}
+
+class ScopedNetemTeardown {
+public:
+  ScopedNetemTeardown() = default;
+  ~ScopedNetemTeardown() {
+    if (!armed_) {
+      return;
+    }
+
+    int exit_code = -1;
+    std::string error;
+    if (!RunShellCommandNoCapture(teardown_command_, exit_code, error)) {
+      std::cerr << "warning: netem teardown failed to execute: " << error << '\n';
+      return;
+    }
+    if (exit_code != 0) {
+      std::cerr << "warning: netem teardown returned non-zero exit code: " << exit_code << '\n';
+    }
+  }
+
+  void Arm(std::string teardown_command) {
+    teardown_command_ = std::move(teardown_command);
+    armed_ = true;
+  }
+
+  ScopedNetemTeardown(const ScopedNetemTeardown&) = delete;
+  ScopedNetemTeardown& operator=(const ScopedNetemTeardown&) = delete;
+
+private:
+  bool armed_ = false;
+  std::string teardown_command_;
+};
+
+bool ApplyNetemIfRequested(const RunOptions& options,
+                           const std::optional<artifacts::NetemCommandSuggestions>& suggestions,
+                           ScopedNetemTeardown& teardown_guard,
+                           std::string& error) {
+  error.clear();
+  if (!options.apply_netem) {
+    return true;
+  }
+  if (!suggestions.has_value()) {
+    error = "--apply-netem requires a valid scenario netem_profile";
+    return false;
+  }
+  if (!IsLinuxHost()) {
+    error = "--apply-netem is only supported on Linux hosts";
+    return false;
+  }
+  if (!IsSafeNetemInterfaceName(options.netem_interface)) {
+    error = "netem interface contains unsupported characters: " + options.netem_interface;
+    return false;
+  }
+  if (!options.apply_netem_force && !IsRunningAsRoot()) {
+    error = "--apply-netem requires root (run as root or use --apply-netem-force)";
+    return false;
+  }
+
+  const std::string apply_command =
+      ReplaceIfacePlaceholder(suggestions->apply_command, options.netem_interface);
+  const std::string teardown_command =
+      ReplaceIfacePlaceholder(suggestions->teardown_command, options.netem_interface);
+
+  int apply_exit_code = -1;
+  if (!RunShellCommandNoCapture(apply_command, apply_exit_code, error)) {
+    error = "netem apply command failed: " + error;
+    return false;
+  }
+  if (apply_exit_code != 0) {
+    error = "netem apply command returned non-zero exit code: " + std::to_string(apply_exit_code);
+    return false;
+  }
+
+  teardown_guard.Arm(teardown_command);
+  return true;
+}
+
 bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, std::string& error) {
   plan = RunPlan{};
   std::string scenario_text;
@@ -1034,6 +1239,16 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
     return kExitFailure;
   }
 
+  std::optional<artifacts::NetemCommandSuggestions> netem_suggestions;
+  std::string netem_warning;
+  if (!BuildNetemCommandSuggestions(options.scenario_path, run_plan, netem_suggestions, netem_warning)) {
+    std::cerr << "error: failed to build netem command suggestions\n";
+    return kExitFailure;
+  }
+  if (!netem_warning.empty()) {
+    std::cerr << "warning: " << netem_warning << '\n';
+  }
+
   const auto created_at = std::chrono::system_clock::now();
   core::schema::RunInfo run_info = BuildRunInfo(options, run_plan, created_at);
   const fs::path bundle_dir =
@@ -1107,6 +1322,14 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
                         events_path,
                         error)) {
     std::cerr << "error: failed to append CONFIG_APPLIED event: " << error << '\n';
+    return kExitFailure;
+  }
+
+  // RAII teardown guard ensures applied netem impairment is always reverted
+  // on every return path after successful apply.
+  ScopedNetemTeardown netem_teardown_guard;
+  if (!ApplyNetemIfRequested(options, netem_suggestions, netem_teardown_guard, error)) {
+    std::cerr << "error: " << error << '\n';
     return kExitFailure;
   }
 
@@ -1251,16 +1474,6 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
   const std::vector<std::string> top_anomalies =
       BuildTopAnomalies(fps_report, run_plan.sim_config.fps, threshold_failures);
 
-  std::optional<artifacts::NetemCommandSuggestions> netem_suggestions;
-  std::string netem_warning;
-  if (!BuildNetemCommandSuggestions(options.scenario_path, run_plan, netem_suggestions, netem_warning)) {
-    std::cerr << "error: failed to build netem command suggestions\n";
-    return kExitFailure;
-  }
-  if (!netem_warning.empty()) {
-    std::cerr << "warning: " << netem_warning << '\n';
-  }
-
   fs::path summary_markdown_path;
   if (!artifacts::WriteRunSummaryMarkdown(run_info,
                                           fps_report,
@@ -1308,6 +1521,14 @@ int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
   std::cout << "hostprobe: " << hostprobe_artifact_path.string() << '\n';
   std::cout << "hostprobe_raw_count: " << hostprobe_raw_artifact_paths.size() << '\n';
   std::cout << "redaction: " << (options.redact_identifiers ? "enabled" : "disabled") << '\n';
+  std::cout << "netem_apply: " << (options.apply_netem ? "enabled" : "disabled");
+  if (options.apply_netem) {
+    std::cout << " iface=" << options.netem_interface;
+    if (options.apply_netem_force) {
+      std::cout << " force=true";
+    }
+  }
+  std::cout << '\n';
   std::cout << "artifact: " << run_artifact_path.string() << '\n';
   std::cout << "events: " << events_path.string() << '\n';
   std::cout << "metrics_csv: " << metrics_csv_path.string() << '\n';

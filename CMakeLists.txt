@@ -260,6 +260,19 @@ target_link_libraries(run_threshold_failure_smoke PRIVATE labops_artifacts labop
 target_compile_features(run_threshold_failure_smoke PRIVATE cxx_std_20)
 add_test(NAME run_threshold_failure_smoke COMMAND run_threshold_failure_smoke)
 
+# Integration smoke test for netem CLI option contracts.
+# Ensures netem execution flags require explicit pairing:
+# - `--apply-netem` requires `--netem-iface <iface>`
+# - `--netem-iface` requires `--apply-netem`
+add_executable(netem_option_contract_smoke
+  tests/labops/netem_option_contract_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(netem_option_contract_smoke PRIVATE src)
+target_link_libraries(netem_option_contract_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(netem_option_contract_smoke PRIVATE cxx_std_20)
+add_test(NAME netem_option_contract_smoke COMMAND netem_option_contract_smoke)
+
 # Scenario schema validation smoke tests.
 add_executable(scenario_validation_smoke
   tests/scenarios/scenario_validation_smoke.cpp

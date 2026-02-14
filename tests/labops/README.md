@@ -40,6 +40,8 @@ surface (argument parsing + runtime orchestration + artifact/event output).
 - `run_threshold_failure_smoke.cpp`: verifies a threshold-violating scenario
   returns non-zero from `labops run` while still producing core artifacts and
   a `summary.md` status of `FAIL`.
+- `netem_option_contract_smoke.cpp`: verifies netem execution flags are used
+  safely (`--apply-netem` requires `--netem-iface <iface>` and vice versa).
 
 ## Connection to the project
 

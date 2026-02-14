@@ -46,7 +46,7 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 - `run_summary_writer.hpp/.cpp`: writes one-page `summary.md` with run
   pass/fail, key metrics, and top anomalies for fast engineer handoff, plus
   optional manual netem command suggestions when a scenario references
-  `netem_profile`.
+  `netem_profile`. (Execution, when requested, is orchestrated in CLI flow.)
 
 ## Design principle
 
