@@ -195,6 +195,18 @@ target_link_libraries(engineer_packet_writer_smoke PRIVATE labops_agent)
 target_compile_features(engineer_packet_writer_smoke PRIVATE cxx_std_20)
 add_test(NAME engineer_packet_writer_smoke COMMAND engineer_packet_writer_smoke)
 
+# Integration smoke test for seeded agent triage on a simulated failure path.
+# Exercises OAAT generation -> run/compare evidence -> stop decision ->
+# engineer packet emission in one deterministic flow.
+add_executable(agent_triage_integration_smoke
+  tests/agent/agent_triage_integration_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(agent_triage_integration_smoke PRIVATE src)
+target_link_libraries(agent_triage_integration_smoke PRIVATE labops_agent labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(agent_triage_integration_smoke PRIVATE cxx_std_20)
+add_test(NAME agent_triage_integration_smoke COMMAND agent_triage_integration_smoke)
+
 # Smoke test for scenario snapshot writer contract.
 add_executable(scenario_writer_smoke
   tests/artifacts/scenario_writer_smoke.cpp
