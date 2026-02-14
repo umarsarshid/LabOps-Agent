@@ -3,6 +3,7 @@
 #include "backends/camera_backend.hpp"
 
 #include <string>
+#include <string_view>
 
 namespace labops::backends::sdk_stub {
 
@@ -11,6 +12,17 @@ namespace labops::backends::sdk_stub {
 // Important: this does not mean proprietary SDK adapters are present. In this
 // repo, the adapter remains a stub even when enabled.
 bool IsRealBackendEnabledAtBuild();
+
+// Returns true when build configuration requested real-backend support.
+// This may still evaluate to disabled if SDK discovery failed at configure time.
+bool WasRealBackendRequestedAtBuild();
+
+// Human-readable status string for CLI visibility.
+// Values today:
+// - "enabled"
+// - "disabled (SDK not found)"
+// - "disabled (build option OFF)"
+std::string_view RealBackendAvailabilityStatusText();
 
 // Non-proprietary placeholder backend for future SDK integration.
 //

@@ -15,6 +15,8 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
 ## Current command contract
 
 - `labops version`: prints tool version.
+- `labops list-backends`: prints backend availability at a glance (for example
+  `sim` enabled and whether `real` is enabled or disabled with reason).
 - `labops validate <scenario.json>`: validates scenario schema and prints
   actionable field-level errors when invalid.
 - `labops run <scenario.json> --out <dir> [--zip] [--redact] [--soak --checkpoint-interval-ms <ms> [--soak-stop-file <path>] [--resume <checkpoint.json>]] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: emits a per-run bundle under

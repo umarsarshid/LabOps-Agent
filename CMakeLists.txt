@@ -77,6 +77,11 @@ add_library(labops_backends
 )
 target_include_directories(labops_backends PUBLIC src)
 target_compile_features(labops_backends PUBLIC cxx_std_20)
+if(LABOPS_ENABLE_REAL_BACKEND)
+  target_compile_definitions(labops_backends PUBLIC LABOPS_REAL_BACKEND_REQUESTED=1)
+else()
+  target_compile_definitions(labops_backends PUBLIC LABOPS_REAL_BACKEND_REQUESTED=0)
+endif()
 if(LABOPS_REAL_BACKEND_EFFECTIVE)
   target_compile_definitions(labops_backends PUBLIC LABOPS_ENABLE_REAL_BACKEND=1)
   target_include_directories(labops_backends PUBLIC "${VendorSDK_INCLUDE_DIR}")
@@ -437,6 +442,16 @@ target_include_directories(logging_contract_smoke PRIVATE src)
 target_link_libraries(logging_contract_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
 target_compile_features(logging_contract_smoke PRIVATE cxx_std_20)
 add_test(NAME logging_contract_smoke COMMAND logging_contract_smoke)
+
+# Integration smoke test for backend availability listing contract.
+add_executable(list_backends_smoke
+  tests/labops/list_backends_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(list_backends_smoke PRIVATE src)
+target_link_libraries(list_backends_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(list_backends_smoke PRIVATE cxx_std_20)
+add_test(NAME list_backends_smoke COMMAND list_backends_smoke)
 
 # Integration smoke test for KB draft generation from a run folder.
 add_executable(kb_draft_from_run_folder_smoke

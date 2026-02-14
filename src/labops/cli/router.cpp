@@ -84,6 +84,7 @@ void PrintUsage(std::ostream& out) {
          "[--apply-netem --netem-iface <iface> [--apply-netem-force]]\n"
       << "  labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]\n"
       << "  labops kb draft --run <run_folder> [--out <kb_draft.md>]\n"
+      << "  labops list-backends\n"
       << "  labops validate <scenario.json>\n"
       << "  labops version\n";
 }
@@ -172,6 +173,21 @@ int CommandVersion(const std::vector<std::string_view>& args) {
   }
 
   std::cout << "labops 0.1.0\n";
+  return kExitSuccess;
+}
+
+int CommandListBackends(const std::vector<std::string_view>& args) {
+  if (!args.empty()) {
+    std::cerr << "error: list-backends does not accept arguments\n";
+    return kExitUsage;
+  }
+
+  std::cout << "sim ✅ enabled\n";
+  if (backends::sdk_stub::IsRealBackendEnabledAtBuild()) {
+    std::cout << "real ✅ enabled\n";
+  } else {
+    std::cout << "real ⚠️ " << backends::sdk_stub::RealBackendAvailabilityStatusText() << '\n';
+  }
   return kExitSuccess;
 }
 
@@ -2722,6 +2738,10 @@ int Dispatch(int argc, char** argv) {
   // command count is still small.
   if (command == "version") {
     return CommandVersion(args);
+  }
+
+  if (command == "list-backends") {
+    return CommandListBackends(args);
   }
 
   if (command == "validate") {

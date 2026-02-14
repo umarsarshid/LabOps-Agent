@@ -16,7 +16,8 @@ We need a clear boundary where vendor-specific camera integration will live, wit
 
 - `real_camera_backend_stub.hpp`:
   - declares `RealCameraBackendStub` implementing `ICameraBackend`
-  - exposes `IsRealBackendEnabledAtBuild()` so callers can log build policy
+  - exposes build-status helpers so CLI can report backend availability and
+    reason (`enabled`, `disabled (SDK not found)`, etc.)
 - `real_camera_backend_stub.cpp`:
   - intentionally avoids vendor headers/binaries
   - returns actionable "not implemented" errors instead of fake streaming

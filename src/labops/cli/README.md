@@ -21,6 +21,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
   --netem-iface <iface> [--apply-netem-force]]`).
 - Parse compare command contracts (`compare --baseline ... --run ... [--out ...]`).
 - Parse KB drafting contracts (`kb draft --run <run_folder> [--out <kb_draft.md>]`).
+- Surface backend availability contracts (`list-backends`) with human-readable
+  status reasons.
 - Route scenario validation through schema loader with actionable errors.
 - Validate optional `netem_profile` references against
   `tools/netem_profiles/<profile>.json`.

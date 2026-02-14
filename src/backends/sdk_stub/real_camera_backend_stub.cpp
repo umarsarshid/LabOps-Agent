@@ -6,6 +6,10 @@
 #define LABOPS_ENABLE_REAL_BACKEND 0
 #endif
 
+#ifndef LABOPS_REAL_BACKEND_REQUESTED
+#define LABOPS_REAL_BACKEND_REQUESTED 0
+#endif
+
 namespace labops::backends::sdk_stub {
 
 namespace {
@@ -32,6 +36,24 @@ bool IsRealBackendEnabledAtBuild() {
   return true;
 #else
   return false;
+#endif
+}
+
+bool WasRealBackendRequestedAtBuild() {
+#if LABOPS_REAL_BACKEND_REQUESTED
+  return true;
+#else
+  return false;
+#endif
+}
+
+std::string_view RealBackendAvailabilityStatusText() {
+#if LABOPS_ENABLE_REAL_BACKEND
+  return "enabled";
+#elif LABOPS_REAL_BACKEND_REQUESTED
+  return "disabled (SDK not found)";
+#else
+  return "disabled (build option OFF)";
 #endif
 }
 
