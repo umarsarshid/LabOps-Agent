@@ -15,6 +15,14 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(LABOPS_ENABLE_CATCH2_TESTS "Enable Catch2-based unit tests" ON)
 option(LABOPS_FETCH_CATCH2 "Fetch Catch2 when not available locally" OFF)
 
+# Real backend integration path toggle.
+# Default stays OFF so Linux/macOS/Windows builds do not require any
+# proprietary vendor SDK in local dev or CI.
+option(LABOPS_ENABLE_REAL_BACKEND
+  "Enable real camera backend integration path (sdk_stub only in this repository)"
+  OFF
+)
+
 # Shared schema library for run contracts. Keeping this in a standalone target
 # makes it easy for CLI, tests, and future modules to reuse the same contract
 # and serialization behavior.
@@ -35,11 +43,17 @@ target_compile_features(labops_events PUBLIC cxx_std_20)
 # Camera backend contracts plus sim implementation used for hardware-free
 # development and CI.
 add_library(labops_backends
+  src/backends/sdk_stub/real_camera_backend_stub.cpp
   src/backends/sim/scenario_config.cpp
   src/backends/sim/sim_camera_backend.cpp
 )
 target_include_directories(labops_backends PUBLIC src)
 target_compile_features(labops_backends PUBLIC cxx_std_20)
+if(LABOPS_ENABLE_REAL_BACKEND)
+  target_compile_definitions(labops_backends PUBLIC LABOPS_ENABLE_REAL_BACKEND=1)
+else()
+  target_compile_definitions(labops_backends PUBLIC LABOPS_ENABLE_REAL_BACKEND=0)
+endif()
 
 # Scenario loader/validation module.
 add_library(labops_scenarios
@@ -220,6 +234,15 @@ add_executable(sim_backend_interface_smoke
 target_link_libraries(sim_backend_interface_smoke PRIVATE labops_backends)
 target_compile_features(sim_backend_interface_smoke PRIVATE cxx_std_20)
 add_test(NAME sim_backend_interface_smoke COMMAND sim_backend_interface_smoke)
+
+# Smoke test validating sdk_stub compiles without proprietary SDK dependencies
+# and reports actionable "not implemented" behavior.
+add_executable(sdk_stub_backend_smoke
+  tests/backends/sdk_stub_backend_smoke.cpp
+)
+target_link_libraries(sdk_stub_backend_smoke PRIVATE labops_backends)
+target_compile_features(sdk_stub_backend_smoke PRIVATE cxx_std_20)
+add_test(NAME sdk_stub_backend_smoke COMMAND sdk_stub_backend_smoke)
 
 # Smoke test for deterministic frame generation and timing envelope.
 add_executable(sim_frame_generator_smoke

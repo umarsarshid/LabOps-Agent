@@ -16,6 +16,9 @@ stable interface regardless of real hardware availability.
   fields and timing behavior (~N/FPS seconds).
 - `sim_fault_injection_smoke.cpp`: validates scenario-controlled fault
   injection knobs and same-seed reproducibility for drop/reorder patterns.
+- `sdk_stub_backend_smoke.cpp`: validates that the real-backend stub compiles
+  without proprietary SDK dependencies and returns actionable non-implemented
+  errors.
 
 ## Connection to the project
 

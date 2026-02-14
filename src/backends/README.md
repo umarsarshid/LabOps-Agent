@@ -20,12 +20,14 @@ The project needs one consistent workflow that can run on different camera stack
     optional `dropped`.
 - `sim/`: deterministic in-repo implementation of the contract with
   scenario-controlled fault knobs.
-- `sdk_stub/`: placeholder integration boundary for vendor SDK adapters.
+- `sdk_stub/`: non-proprietary real-backend integration boundary.
+  - includes `RealCameraBackendStub` so builds can compile without vendor SDKs.
+  - controlled by `LABOPS_ENABLE_REAL_BACKEND` build flag (default `OFF`).
 
 ## Current and planned backends
 
 - `sim/`: deterministic simulator for development and CI.
-- `sdk_stub/`: integration interface skeleton for proprietary camera SDKs.
+- `sdk_stub/`: integration-ready stub path for proprietary camera SDKs.
 
 ## Connection to the project
 
