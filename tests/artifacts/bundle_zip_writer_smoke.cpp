@@ -88,7 +88,8 @@ int main() {
 
   zip_in.clear();
   zip_in.seekg(0, std::ios::beg);
-  const std::string zip_text((std::istreambuf_iterator<char>(zip_in)), std::istreambuf_iterator<char>());
+  const std::string zip_text((std::istreambuf_iterator<char>(zip_in)),
+                             std::istreambuf_iterator<char>());
   AssertContains(zip_text, "run-zip-smoke/scenario.json");
   AssertContains(zip_text, "run-zip-smoke/run.json");
   AssertContains(zip_text, "run-zip-smoke/events.jsonl");

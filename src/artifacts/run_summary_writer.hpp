@@ -31,14 +31,12 @@ struct NetemCommandSuggestions {
 // - includes optional netem manual commands when provided.
 // - returns false and sets `error` on failure.
 bool WriteRunSummaryMarkdown(const core::schema::RunInfo& run_info,
-                             const metrics::FpsReport& report,
-                             std::uint32_t configured_fps,
+                             const metrics::FpsReport& report, std::uint32_t configured_fps,
                              bool thresholds_passed,
                              const std::vector<std::string>& threshold_failures,
                              const std::vector<std::string>& top_anomalies,
                              const std::optional<NetemCommandSuggestions>& netem_suggestions,
                              const std::filesystem::path& output_dir,
-                             std::filesystem::path& written_path,
-                             std::string& error);
+                             std::filesystem::path& written_path, std::string& error);
 
 } // namespace labops::artifacts

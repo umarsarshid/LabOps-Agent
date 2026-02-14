@@ -98,8 +98,9 @@ bool ComputeFileFnv1a64(const fs::path& file_path, std::string& hash_hex, std::s
 
 } // namespace
 
-bool WriteBundleManifestJson(const fs::path& bundle_dir, const std::vector<fs::path>& artifact_paths,
-                             fs::path& written_path, std::string& error) {
+bool WriteBundleManifestJson(const fs::path& bundle_dir,
+                             const std::vector<fs::path>& artifact_paths, fs::path& written_path,
+                             std::string& error) {
   if (bundle_dir.empty()) {
     error = "bundle directory cannot be empty";
     return false;

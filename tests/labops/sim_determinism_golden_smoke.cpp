@@ -104,11 +104,7 @@ std::string NormalizeDynamicFields(const std::string& line) {
 
 std::vector<std::string> RunScenario(const fs::path& scenario_path, const fs::path& out_dir) {
   std::vector<std::string> argv_storage = {
-      "labops",
-      "run",
-      scenario_path.string(),
-      "--out",
-      out_dir.string(),
+      "labops", "run", scenario_path.string(), "--out", out_dir.string(),
   };
   std::vector<char*> argv;
   argv.reserve(argv_storage.size());

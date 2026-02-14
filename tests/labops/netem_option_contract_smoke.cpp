@@ -48,7 +48,8 @@ int main() {
   const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                           std::chrono::system_clock::now().time_since_epoch())
                           .count();
-  const fs::path temp_root = fs::temp_directory_path() / ("labops-netem-option-smoke-" + std::to_string(now_ms));
+  const fs::path temp_root =
+      fs::temp_directory_path() / ("labops-netem-option-smoke-" + std::to_string(now_ms));
   const fs::path scenario_path = temp_root / "scenario.json";
 
   std::error_code ec;

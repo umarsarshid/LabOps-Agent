@@ -1,13 +1,13 @@
 #include "labops/cli/router.hpp"
 
 #include "artifacts/bundle_manifest_writer.hpp"
-#include "artifacts/metrics_writer.hpp"
-#include "artifacts/metrics_diff_writer.hpp"
+#include "artifacts/bundle_zip_writer.hpp"
 #include "artifacts/hostprobe_writer.hpp"
+#include "artifacts/metrics_diff_writer.hpp"
+#include "artifacts/metrics_writer.hpp"
 #include "artifacts/run_summary_writer.hpp"
 #include "artifacts/run_writer.hpp"
 #include "artifacts/scenario_writer.hpp"
-#include "artifacts/bundle_zip_writer.hpp"
 #include "backends/camera_backend.hpp"
 #include "backends/sdk_stub/real_camera_backend_stub.hpp"
 #include "backends/sim/scenario_config.hpp"
@@ -16,9 +16,9 @@
 #include "core/schema/run_contract.hpp"
 #include "events/event_model.hpp"
 #include "events/jsonl_writer.hpp"
+#include "hostprobe/system_probe.hpp"
 #include "metrics/fps.hpp"
 #include "scenarios/validator.hpp"
-#include "hostprobe/system_probe.hpp"
 
 #include <cctype>
 #include <charconv>
@@ -651,8 +651,7 @@ bool IsValidSlug(std::string_view value) {
     return false;
   }
   for (const char c : value) {
-    const bool allowed =
-        (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
+    const bool allowed = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
     if (!allowed) {
       return false;
     }
@@ -750,7 +749,8 @@ bool BuildNetemCommandSuggestions(const std::string& scenario_path, const RunPla
   }
 
   fs::path profile_path;
-  if (!ResolveNetemProfilePath(fs::path(scenario_path), run_plan.netem_profile.value(), profile_path)) {
+  if (!ResolveNetemProfilePath(fs::path(scenario_path), run_plan.netem_profile.value(),
+                               profile_path)) {
     warning = "netem profile '" + run_plan.netem_profile.value() +
               "' was referenced but no profile file was found under tools/netem_profiles";
     return true;
@@ -766,16 +766,15 @@ bool BuildNetemCommandSuggestions(const std::string& scenario_path, const RunPla
   artifacts::NetemCommandSuggestions netem;
   netem.profile_id = run_plan.netem_profile.value();
   netem.profile_path = profile_path;
-  netem.apply_command =
-      "sudo tc qdisc replace dev <iface> root netem delay " + FormatShellDouble(definition.delay_ms) +
-      "ms " + FormatShellDouble(definition.jitter_ms) + "ms loss " +
-      FormatShellDouble(definition.loss_percent) + "% reorder " +
-      FormatShellDouble(definition.reorder_percent) + "% " +
-      FormatShellDouble(definition.correlation_percent) + "%";
+  netem.apply_command = "sudo tc qdisc replace dev <iface> root netem delay " +
+                        FormatShellDouble(definition.delay_ms) + "ms " +
+                        FormatShellDouble(definition.jitter_ms) + "ms loss " +
+                        FormatShellDouble(definition.loss_percent) + "% reorder " +
+                        FormatShellDouble(definition.reorder_percent) + "% " +
+                        FormatShellDouble(definition.correlation_percent) + "%";
   netem.show_command = "tc qdisc show dev <iface>";
   netem.teardown_command = "sudo tc qdisc del dev <iface> root";
-  netem.safety_note =
-      "Run manually on Linux and replace <iface> with your test NIC.";
+  netem.safety_note = "Run manually on Linux and replace <iface> with your test NIC.";
   suggestions = std::move(netem);
   return true;
 }
@@ -786,8 +785,7 @@ bool IsSafeNetemInterfaceName(std::string_view name) {
   }
   for (const char c : name) {
     const bool allowed = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-                         (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.' ||
-                         c == ':';
+                         (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.' || c == ':';
     if (!allowed) {
       return false;
     }
@@ -864,9 +862,9 @@ public:
     }
     if (exit_code != 0) {
       if (logger_ != nullptr) {
-        logger_->Warn("netem teardown returned non-zero exit code",
-                      {{"teardown_command", teardown_command_},
-                       {"exit_code", std::to_string(exit_code)}});
+        logger_->Warn(
+            "netem teardown returned non-zero exit code",
+            {{"teardown_command", teardown_command_}, {"exit_code", std::to_string(exit_code)}});
       } else {
         std::cerr << "warning: netem teardown returned non-zero exit code: " << exit_code << '\n';
       }
@@ -889,8 +887,7 @@ private:
 
 bool ApplyNetemIfRequested(const RunOptions& options,
                            const std::optional<artifacts::NetemCommandSuggestions>& suggestions,
-                           ScopedNetemTeardown& teardown_guard,
-                           std::string& error) {
+                           ScopedNetemTeardown& teardown_guard, std::string& error) {
   error.clear();
   if (!options.apply_netem) {
     return true;
@@ -981,7 +978,8 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
     return true;
   };
 
-  auto assign_non_negative_integer_threshold = [&](std::string_view key, std::optional<std::uint64_t>& target) {
+  auto assign_non_negative_integer_threshold = [&](std::string_view key,
+                                                   std::optional<std::uint64_t>& target) {
     const auto value = FindNumberJsonField(scenario_text, key);
     if (!value.has_value()) {
       return true;
@@ -1019,8 +1017,7 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
         std::chrono::seconds(static_cast<std::int64_t>(duration_s.value())));
   }
 
-  if (const auto backend = FindStringJsonField(scenario_text, "backend");
-      backend.has_value()) {
+  if (const auto backend = FindStringJsonField(scenario_text, "backend"); backend.has_value()) {
     if (*backend != kBackendSim && *backend != kBackendRealStub) {
       error = "scenario backend must be one of: sim, real_stub";
       return false;
@@ -1056,8 +1053,7 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
   if (!assign_non_negative_double("min_avg_fps", plan.thresholds.min_avg_fps)) {
     return false;
   }
-  if (!assign_non_negative_double("max_drop_rate_percent",
-                                  plan.thresholds.max_drop_rate_percent,
+  if (!assign_non_negative_double("max_drop_rate_percent", plan.thresholds.max_drop_rate_percent,
                                   /*percent_0_to_100=*/true)) {
     return false;
   }
@@ -1151,10 +1147,8 @@ fs::path ResolveExecutionOutputDir(const RunOptions& options, const core::schema
 }
 
 bool AppendTraceEvent(events::EventType type, std::chrono::system_clock::time_point ts,
-                      std::map<std::string, std::string> payload,
-                      const fs::path& output_dir,
-                      fs::path& events_path,
-                      std::string& error) {
+                      std::map<std::string, std::string> payload, const fs::path& output_dir,
+                      fs::path& events_path, std::string& error) {
   events::Event event;
   event.ts = ts;
   event.type = type;
@@ -1183,12 +1177,12 @@ BuildConfigAppliedPayload(const core::schema::RunInfo& run_info,
 // Evaluates scenario pass/fail thresholds against computed metrics.
 // Returns true when all configured thresholds pass and appends actionable
 // failure reasons otherwise.
-bool EvaluateRunThresholds(const RunPlan::Thresholds& thresholds,
-                           const metrics::FpsReport& report,
+bool EvaluateRunThresholds(const RunPlan::Thresholds& thresholds, const metrics::FpsReport& report,
                            std::vector<std::string>& failures) {
   failures.clear();
 
-  auto check_min = [&](std::string_view label, double actual, const std::optional<double>& minimum) {
+  auto check_min = [&](std::string_view label, double actual,
+                       const std::optional<double>& minimum) {
     if (!minimum.has_value()) {
       return;
     }
@@ -1198,7 +1192,8 @@ bool EvaluateRunThresholds(const RunPlan::Thresholds& thresholds,
     }
   };
 
-  auto check_max = [&](std::string_view label, double actual, const std::optional<double>& maximum) {
+  auto check_max = [&](std::string_view label, double actual,
+                       const std::optional<double>& maximum) {
     if (!maximum.has_value()) {
       return;
     }
@@ -1210,19 +1205,17 @@ bool EvaluateRunThresholds(const RunPlan::Thresholds& thresholds,
 
   check_min("avg_fps", report.avg_fps, thresholds.min_avg_fps);
   check_max("drop_rate_percent", report.drop_rate_percent, thresholds.max_drop_rate_percent);
-  check_max("inter_frame_interval_p95_us",
-            report.inter_frame_interval_us.p95_us,
+  check_max("inter_frame_interval_p95_us", report.inter_frame_interval_us.p95_us,
             thresholds.max_inter_frame_interval_p95_us);
-  check_max("inter_frame_jitter_p95_us",
-            report.inter_frame_jitter_us.p95_us,
+  check_max("inter_frame_jitter_p95_us", report.inter_frame_jitter_us.p95_us,
             thresholds.max_inter_frame_jitter_p95_us);
 
   if (thresholds.max_disconnect_count.has_value()) {
     constexpr std::uint64_t kObservedDisconnectCount = 0;
     if (kObservedDisconnectCount > thresholds.max_disconnect_count.value()) {
-      failures.push_back("disconnect_count actual=" + std::to_string(kObservedDisconnectCount) +
-                         " exceeds maximum=" +
-                         std::to_string(thresholds.max_disconnect_count.value()));
+      failures.push_back(
+          "disconnect_count actual=" + std::to_string(kObservedDisconnectCount) +
+          " exceeds maximum=" + std::to_string(thresholds.max_disconnect_count.value()));
     }
   }
 
@@ -1255,16 +1248,15 @@ std::vector<std::string> BuildTopAnomalies(const metrics::FpsReport& report,
     const double avg_fps_floor = static_cast<double>(configured_fps) * 0.90;
     if (report.avg_fps + 1e-9 < avg_fps_floor) {
       anomalies.push_back("Average FPS " + std::to_string(report.avg_fps) +
-                          " is below 90% of configured FPS " +
-                          std::to_string(configured_fps) + ".");
+                          " is below 90% of configured FPS " + std::to_string(configured_fps) +
+                          ".");
     }
 
     if (report.inter_frame_interval_us.sample_count > 0U &&
         report.inter_frame_interval_us.p95_us > expected_interval_us * 1.50) {
-      anomalies.push_back("Inter-frame interval p95 " +
-                          std::to_string(report.inter_frame_interval_us.p95_us) +
-                          "us is >150% of expected " +
-                          std::to_string(expected_interval_us) + "us.");
+      anomalies.push_back(
+          "Inter-frame interval p95 " + std::to_string(report.inter_frame_interval_us.p95_us) +
+          "us is >150% of expected " + std::to_string(expected_interval_us) + "us.");
     }
 
     if (report.inter_frame_jitter_us.sample_count > 0U &&
@@ -1298,12 +1290,11 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     *run_result = ScenarioRunResult{};
   }
 
-  logger.Info("run execution requested",
-              {{"scenario_path", options.scenario_path},
-               {"output_root", options.output_dir.string()},
-               {"zip_bundle", options.zip_bundle ? "true" : "false"},
-               {"redact", options.redact_identifiers ? "true" : "false"},
-               {"netem_apply", options.apply_netem ? "true" : "false"}});
+  logger.Info("run execution requested", {{"scenario_path", options.scenario_path},
+                                          {"output_root", options.output_dir.string()},
+                                          {"zip_bundle", options.zip_bundle ? "true" : "false"},
+                                          {"redact", options.redact_identifiers ? "true" : "false"},
+                                          {"netem_apply", options.apply_netem ? "true" : "false"}});
 
   std::string error;
   if (options.zip_bundle && !allow_zip_bundle) {
@@ -1329,7 +1320,8 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
 
   std::optional<artifacts::NetemCommandSuggestions> netem_suggestions;
   std::string netem_warning;
-  if (!BuildNetemCommandSuggestions(options.scenario_path, run_plan, netem_suggestions, netem_warning)) {
+  if (!BuildNetemCommandSuggestions(options.scenario_path, run_plan, netem_suggestions,
+                                    netem_warning)) {
     logger.Error("failed to build netem command suggestions");
     std::cerr << "error: failed to build netem command suggestions\n";
     return kExitFailure;
@@ -1342,20 +1334,19 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   const auto created_at = std::chrono::system_clock::now();
   core::schema::RunInfo run_info = BuildRunInfo(options, run_plan, created_at);
   logger.SetRunId(run_info.run_id);
-  const fs::path bundle_dir =
-      ResolveExecutionOutputDir(options, run_info, use_per_run_bundle_dir);
-  logger.Info("run initialized",
-              {{"scenario_id", run_info.config.scenario_id},
-               {"backend", run_info.config.backend},
-               {"bundle_dir", bundle_dir.string()},
-               {"duration_ms", std::to_string(run_plan.duration.count())}});
+  const fs::path bundle_dir = ResolveExecutionOutputDir(options, run_info, use_per_run_bundle_dir);
+  logger.Info("run initialized", {{"scenario_id", run_info.config.scenario_id},
+                                  {"backend", run_info.config.backend},
+                                  {"bundle_dir", bundle_dir.string()},
+                                  {"duration_ms", std::to_string(run_plan.duration.count())}});
   if (run_result != nullptr) {
     run_result->run_id = run_info.run_id;
     run_result->bundle_dir = bundle_dir;
   }
 
   fs::path scenario_artifact_path;
-  if (!artifacts::WriteScenarioJson(options.scenario_path, bundle_dir, scenario_artifact_path, error)) {
+  if (!artifacts::WriteScenarioJson(options.scenario_path, bundle_dir, scenario_artifact_path,
+                                    error)) {
     logger.Error("failed to write scenario snapshot",
                  {{"bundle_dir", bundle_dir.string()}, {"error", error}});
     std::cerr << "error: failed to write scenario snapshot: " << error << '\n';
@@ -1397,10 +1388,8 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
 
   std::vector<fs::path> hostprobe_raw_artifact_paths;
-  if (!artifacts::WriteHostProbeRawCommandOutputs(nic_probe.raw_captures,
-                                                  bundle_dir,
-                                                  hostprobe_raw_artifact_paths,
-                                                  error)) {
+  if (!artifacts::WriteHostProbeRawCommandOutputs(nic_probe.raw_captures, bundle_dir,
+                                                  hostprobe_raw_artifact_paths, error)) {
     logger.Error("failed to write NIC raw command artifacts", {{"error", error}});
     std::cerr << "error: failed to write NIC raw command artifacts: " << error << '\n';
     return kExitFailure;
@@ -1431,12 +1420,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
 
   fs::path events_path;
   const auto config_applied_at = std::chrono::system_clock::now();
-  if (!AppendTraceEvent(events::EventType::kConfigApplied,
-                        config_applied_at,
-                        BuildConfigAppliedPayload(run_info, applied_params),
-                        bundle_dir,
-                        events_path,
-                        error)) {
+  if (!AppendTraceEvent(events::EventType::kConfigApplied, config_applied_at,
+                        BuildConfigAppliedPayload(run_info, applied_params), bundle_dir,
+                        events_path, error)) {
     logger.Error("failed to append CONFIG_APPLIED event", {{"error", error}});
     std::cerr << "error: failed to append CONFIG_APPLIED event: " << error << '\n';
     return kExitFailure;
@@ -1456,9 +1442,8 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     std::cerr << "error: backend start failed: " << error << '\n';
     return kExitFailure;
   }
-  logger.Info("stream started",
-              {{"fps", std::to_string(run_plan.sim_config.fps)},
-               {"duration_ms", std::to_string(run_plan.duration.count())}});
+  logger.Info("stream started", {{"fps", std::to_string(run_plan.sim_config.fps)},
+                                 {"duration_ms", std::to_string(run_plan.duration.count())}});
 
   bool stream_started = true;
   const auto started_at = std::chrono::system_clock::now();
@@ -1474,20 +1459,16 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     stream_started = false;
   };
 
-  if (!AppendTraceEvent(
-          events::EventType::kStreamStarted,
-          started_at,
-          {
-              {"run_id", run_info.run_id},
-              {"scenario_id", run_info.config.scenario_id},
-              {"backend", run_info.config.backend},
-              {"duration_ms", std::to_string(run_plan.duration.count())},
-              {"fps", std::to_string(run_plan.sim_config.fps)},
-              {"seed", std::to_string(run_plan.sim_config.seed)},
-          },
-          bundle_dir,
-          events_path,
-          error)) {
+  if (!AppendTraceEvent(events::EventType::kStreamStarted, started_at,
+                        {
+                            {"run_id", run_info.run_id},
+                            {"scenario_id", run_info.config.scenario_id},
+                            {"backend", run_info.config.backend},
+                            {"duration_ms", std::to_string(run_plan.duration.count())},
+                            {"fps", std::to_string(run_plan.sim_config.fps)},
+                            {"seed", std::to_string(run_plan.sim_config.seed)},
+                        },
+                        bundle_dir, events_path, error)) {
     logger.Error("failed to append STREAM_STARTED event", {{"error", error}});
     stop_if_started();
     std::cerr << "error: failed to append STREAM_STARTED event: " << error << '\n';
@@ -1525,12 +1506,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
       ++received_count;
     }
 
-    if (!AppendTraceEvent(dropped ? events::EventType::kFrameDropped : events::EventType::kFrameReceived,
-                          frame.timestamp,
-                          std::move(payload),
-                          bundle_dir,
-                          events_path,
-                          error)) {
+    if (!AppendTraceEvent(dropped ? events::EventType::kFrameDropped
+                                  : events::EventType::kFrameReceived,
+                          frame.timestamp, std::move(payload), bundle_dir, events_path, error)) {
       logger.Error("failed to append frame event", {{"error", error}});
       stop_if_started();
       std::cerr << "error: failed to append frame event: " << error << '\n';
@@ -1551,18 +1529,14 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
   run_info.timestamps.finished_at = finished_at;
 
-  if (!AppendTraceEvent(
-          events::EventType::kStreamStopped,
-          finished_at,
-          {
-              {"run_id", run_info.run_id},
-              {"frames_total", std::to_string(frames.size())},
-              {"frames_received", std::to_string(received_count)},
-              {"frames_dropped", std::to_string(dropped_count)},
-          },
-          bundle_dir,
-          events_path,
-          error)) {
+  if (!AppendTraceEvent(events::EventType::kStreamStopped, finished_at,
+                        {
+                            {"run_id", run_info.run_id},
+                            {"frames_total", std::to_string(frames.size())},
+                            {"frames_received", std::to_string(received_count)},
+                            {"frames_dropped", std::to_string(dropped_count)},
+                        },
+                        bundle_dir, events_path, error)) {
     logger.Error("failed to append STREAM_STOPPED event", {{"error", error}});
     std::cerr << "error: failed to append STREAM_STOPPED event: " << error << '\n';
     return kExitFailure;
@@ -1580,11 +1554,8 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
 
   metrics::FpsReport fps_report;
-  if (!metrics::ComputeFpsReport(frames,
-                                 run_plan.duration,
-                                 std::chrono::milliseconds(1'000),
-                                 fps_report,
-                                 error)) {
+  if (!metrics::ComputeFpsReport(frames, run_plan.duration, std::chrono::milliseconds(1'000),
+                                 fps_report, error)) {
     logger.Error("failed to compute metrics", {{"error", error}});
     std::cerr << "error: failed to compute fps metrics: " << error << '\n';
     return kExitFailure;
@@ -1608,7 +1579,8 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
 
   std::vector<std::string> threshold_failures;
-  const bool thresholds_passed = EvaluateRunThresholds(run_plan.thresholds, fps_report, threshold_failures);
+  const bool thresholds_passed =
+      EvaluateRunThresholds(run_plan.thresholds, fps_report, threshold_failures);
   if (run_result != nullptr) {
     run_result->thresholds_passed = thresholds_passed;
   }
@@ -1616,16 +1588,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
       BuildTopAnomalies(fps_report, run_plan.sim_config.fps, threshold_failures);
 
   fs::path summary_markdown_path;
-  if (!artifacts::WriteRunSummaryMarkdown(run_info,
-                                          fps_report,
-                                          run_plan.sim_config.fps,
-                                          thresholds_passed,
-                                          threshold_failures,
-                                          top_anomalies,
-                                          netem_suggestions,
-                                          bundle_dir,
-                                          summary_markdown_path,
-                                          error)) {
+  if (!artifacts::WriteRunSummaryMarkdown(
+          run_info, fps_report, run_plan.sim_config.fps, thresholds_passed, threshold_failures,
+          top_anomalies, netem_suggestions, bundle_dir, summary_markdown_path, error)) {
     logger.Error("failed to write summary.md", {{"error", error}});
     std::cerr << "error: failed to write summary.md: " << error << '\n';
     return kExitFailure;
@@ -1633,18 +1598,13 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
 
   fs::path bundle_manifest_path;
   std::vector<fs::path> bundle_artifact_paths = {
-      scenario_artifact_path,
-      hostprobe_artifact_path,
-      run_artifact_path,
-      events_path,
-      metrics_csv_path,
-      metrics_json_path,
-      summary_markdown_path,
+      scenario_artifact_path, hostprobe_artifact_path, run_artifact_path,     events_path,
+      metrics_csv_path,       metrics_json_path,       summary_markdown_path,
   };
-  bundle_artifact_paths.insert(bundle_artifact_paths.end(),
-                               hostprobe_raw_artifact_paths.begin(),
+  bundle_artifact_paths.insert(bundle_artifact_paths.end(), hostprobe_raw_artifact_paths.begin(),
                                hostprobe_raw_artifact_paths.end());
-  if (!artifacts::WriteBundleManifestJson(bundle_dir, bundle_artifact_paths, bundle_manifest_path, error)) {
+  if (!artifacts::WriteBundleManifestJson(bundle_dir, bundle_artifact_paths, bundle_manifest_path,
+                                          error)) {
     logger.Error("failed to write bundle manifest", {{"error", error}});
     std::cerr << "error: failed to write bundle manifest: " << error << '\n';
     return kExitFailure;
@@ -1659,11 +1619,10 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     }
   }
 
-  logger.Info("run artifacts written",
-              {{"bundle_dir", bundle_dir.string()},
-               {"events", events_path.string()},
-               {"metrics_json", metrics_json_path.string()},
-               {"summary", summary_markdown_path.string()}});
+  logger.Info("run artifacts written", {{"bundle_dir", bundle_dir.string()},
+                                        {"events", events_path.string()},
+                                        {"metrics_json", metrics_json_path.string()},
+                                        {"summary", summary_markdown_path.string()}});
 
   std::cout << success_prefix << options.scenario_path << '\n';
   std::cout << "run_id: " << run_info.run_id << '\n';
@@ -1700,11 +1659,10 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   std::cout << "frames: total=" << frames.size() << " received=" << received_count
             << " dropped=" << dropped_count << '\n';
   if (thresholds_passed) {
-    logger.Info("run completed",
-                {{"thresholds", "pass"},
-                 {"frames_total", std::to_string(frames.size())},
-                 {"frames_received", std::to_string(received_count)},
-                 {"frames_dropped", std::to_string(dropped_count)}});
+    logger.Info("run completed", {{"thresholds", "pass"},
+                                  {"frames_total", std::to_string(frames.size())},
+                                  {"frames_received", std::to_string(received_count)},
+                                  {"frames_dropped", std::to_string(dropped_count)}});
     std::cout << "thresholds: pass\n";
     return kExitSuccess;
   }
@@ -1733,9 +1691,7 @@ int CommandRun(const std::vector<std::string_view>& args) {
 
   return labops::cli::ExecuteScenarioRun(options,
                                          /*use_per_run_bundle_dir=*/true,
-                                         /*allow_zip_bundle=*/true,
-                                         "run queued: ",
-                                         nullptr);
+                                         /*allow_zip_bundle=*/true, "run queued: ", nullptr);
 }
 
 int CommandBaselineCapture(const std::vector<std::string_view>& args) {
@@ -1749,8 +1705,7 @@ int CommandBaselineCapture(const std::vector<std::string_view>& args) {
   return labops::cli::ExecuteScenarioRun(options,
                                          /*use_per_run_bundle_dir=*/false,
                                          /*allow_zip_bundle=*/false,
-                                         "baseline captured: ",
-                                         nullptr);
+                                         "baseline captured: ", nullptr);
 }
 
 int CommandBaseline(const std::vector<std::string_view>& args) {
@@ -1803,10 +1758,8 @@ int CommandCompare(const std::vector<std::string_view>& args) {
   }
 
   artifacts::MetricsDiffReport diff_report;
-  if (!artifacts::ComputeMetricsDiffFromCsv(baseline_metrics_csv_path,
-                                            run_metrics_csv_path,
-                                            diff_report,
-                                            error)) {
+  if (!artifacts::ComputeMetricsDiffFromCsv(baseline_metrics_csv_path, run_metrics_csv_path,
+                                            diff_report, error)) {
     std::cerr << "error: failed to compare metrics: " << error << '\n';
     return kExitFailure;
   }
@@ -1836,11 +1789,8 @@ int CommandCompare(const std::vector<std::string_view>& args) {
 int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
                        bool allow_zip_bundle, std::string_view success_prefix,
                        ScenarioRunResult* run_result) {
-  return ExecuteScenarioRunInternal(options,
-                                    use_per_run_bundle_dir,
-                                    allow_zip_bundle,
-                                    success_prefix,
-                                    run_result);
+  return ExecuteScenarioRunInternal(options, use_per_run_bundle_dir, allow_zip_bundle,
+                                    success_prefix, run_result);
 }
 
 int Dispatch(int argc, char** argv) {

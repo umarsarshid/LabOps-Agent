@@ -64,8 +64,7 @@ Playbook BuildDroppedFramesPlaybook() {
 
 } // namespace
 
-bool SelectPlaybookForSymptom(std::string_view symptom_input,
-                              Playbook& playbook,
+bool SelectPlaybookForSymptom(std::string_view symptom_input, Playbook& playbook,
                               std::string& error) {
   playbook = Playbook{};
   error.clear();
@@ -76,14 +75,13 @@ bool SelectPlaybookForSymptom(std::string_view symptom_input,
     return false;
   }
 
-  if (normalized == "dropped_frames" || normalized == "frame_drops" ||
-      normalized == "drops") {
+  if (normalized == "dropped_frames" || normalized == "frame_drops" || normalized == "drops") {
     playbook = BuildDroppedFramesPlaybook();
     return true;
   }
 
-  error = "no playbook registered for symptom '" + std::string(symptom_input) +
-          "' (normalized='" + normalized + "'). available symptoms: dropped_frames";
+  error = "no playbook registered for symptom '" + std::string(symptom_input) + "' (normalized='" +
+          normalized + "'). available symptoms: dropped_frames";
   return false;
 }
 

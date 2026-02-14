@@ -57,10 +57,7 @@ labops::metrics::FpsReport RunWithJitter(std::uint32_t jitter_us) {
   }
 
   labops::metrics::FpsReport report;
-  if (!labops::metrics::ComputeFpsReport(frames,
-                                         duration,
-                                         std::chrono::milliseconds(1000),
-                                         report,
+  if (!labops::metrics::ComputeFpsReport(frames, duration, std::chrono::milliseconds(1000), report,
                                          error)) {
     Fail("ComputeFpsReport failed: " + error);
   }
@@ -87,7 +84,8 @@ int main() {
     Fail("expected higher jitter scenario to raise avg inter-frame jitter");
   }
 
-  if (high_jitter.inter_frame_interval_us.p95_us <= low_jitter.inter_frame_interval_us.p95_us + 500.0) {
+  if (high_jitter.inter_frame_interval_us.p95_us <=
+      low_jitter.inter_frame_interval_us.p95_us + 500.0) {
     std::cerr << "low jitter p95_us: " << low_jitter.inter_frame_interval_us.p95_us << '\n';
     std::cerr << "high jitter p95_us: " << high_jitter.inter_frame_interval_us.p95_us << '\n';
     Fail("expected higher jitter scenario to raise p95 inter-frame interval");

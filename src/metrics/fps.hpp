@@ -56,8 +56,7 @@ struct FpsReport {
 // - returns false and populates `error` on invalid inputs.
 bool ComputeFpsReport(const std::vector<backends::FrameSample>& frames,
                       std::chrono::milliseconds avg_window,
-                      std::chrono::milliseconds rolling_window,
-                      FpsReport& report,
+                      std::chrono::milliseconds rolling_window, FpsReport& report,
                       std::string& error);
 
 } // namespace labops::metrics

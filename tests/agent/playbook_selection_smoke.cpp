@@ -55,14 +55,13 @@ int main() {
     Fail("unexpected normalized symptom id");
   }
 
-  AssertKnobOrder(playbook.knobs,
-                  {
-                      "packet_delay_ms",
-                      "fps",
-                      "roi_enabled",
-                      "reorder_percent",
-                      "loss_percent",
-                  });
+  AssertKnobOrder(playbook.knobs, {
+                                      "packet_delay_ms",
+                                      "fps",
+                                      "roi_enabled",
+                                      "reorder_percent",
+                                      "loss_percent",
+                                  });
 
   if (labops::agent::SelectPlaybookForSymptom("disconnects", playbook, error)) {
     Fail("unknown symptom should not resolve to a playbook");

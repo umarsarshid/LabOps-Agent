@@ -50,10 +50,7 @@ bool ApplyScenarioConfig(ICameraBackend& backend, const SimScenarioConfig& confi
                   applied_params)) {
     return false;
   }
-  if (!ApplyParam(backend,
-                  "drop_percent",
-                  std::to_string(config.faults.drop_percent),
-                  error,
+  if (!ApplyParam(backend, "drop_percent", std::to_string(config.faults.drop_percent), error,
                   applied_params)) {
     return false;
   }

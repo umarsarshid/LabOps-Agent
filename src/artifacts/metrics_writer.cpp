@@ -64,44 +64,31 @@ bool WriteMetricsCsv(const metrics::FpsReport& report, const fs::path& output_di
 
   out_file << "metric,window_end_ms,window_ms,frames,fps\n";
   out_file << std::fixed << std::setprecision(6);
-  out_file << "avg_fps,,"
-           << report.avg_window.count() << ","
-           << report.received_frames_total << ","
+  out_file << "avg_fps,," << report.avg_window.count() << "," << report.received_frames_total << ","
            << report.avg_fps << "\n";
 
-  out_file << "drops_total,,,"
-           << report.frames_total << ","
-           << report.dropped_frames_total << "\n";
-  out_file << "drop_rate_percent,,,"
-           << report.frames_total << ","
-           << report.drop_rate_percent << "\n";
+  out_file << "drops_total,,," << report.frames_total << "," << report.dropped_frames_total << "\n";
+  out_file << "drop_rate_percent,,," << report.frames_total << "," << report.drop_rate_percent
+           << "\n";
 
   for (const auto& sample : report.rolling_samples) {
-    out_file << "rolling_fps,"
-             << ToEpochMillis(sample.window_end) << ","
-             << report.rolling_window.count() << ","
-             << sample.frames_in_window << ","
-             << sample.fps << "\n";
+    out_file << "rolling_fps," << ToEpochMillis(sample.window_end) << ","
+             << report.rolling_window.count() << "," << sample.frames_in_window << "," << sample.fps
+             << "\n";
   }
 
-  out_file << "inter_frame_interval_min_us,,,"
-           << report.inter_frame_interval_us.sample_count << ","
+  out_file << "inter_frame_interval_min_us,,," << report.inter_frame_interval_us.sample_count << ","
            << report.inter_frame_interval_us.min_us << "\n";
-  out_file << "inter_frame_interval_avg_us,,,"
-           << report.inter_frame_interval_us.sample_count << ","
+  out_file << "inter_frame_interval_avg_us,,," << report.inter_frame_interval_us.sample_count << ","
            << report.inter_frame_interval_us.avg_us << "\n";
-  out_file << "inter_frame_interval_p95_us,,,"
-           << report.inter_frame_interval_us.sample_count << ","
+  out_file << "inter_frame_interval_p95_us,,," << report.inter_frame_interval_us.sample_count << ","
            << report.inter_frame_interval_us.p95_us << "\n";
 
-  out_file << "inter_frame_jitter_min_us,,,"
-           << report.inter_frame_jitter_us.sample_count << ","
+  out_file << "inter_frame_jitter_min_us,,," << report.inter_frame_jitter_us.sample_count << ","
            << report.inter_frame_jitter_us.min_us << "\n";
-  out_file << "inter_frame_jitter_avg_us,,,"
-           << report.inter_frame_jitter_us.sample_count << ","
+  out_file << "inter_frame_jitter_avg_us,,," << report.inter_frame_jitter_us.sample_count << ","
            << report.inter_frame_jitter_us.avg_us << "\n";
-  out_file << "inter_frame_jitter_p95_us,,,"
-           << report.inter_frame_jitter_us.sample_count << ","
+  out_file << "inter_frame_jitter_p95_us,,," << report.inter_frame_jitter_us.sample_count << ","
            << report.inter_frame_jitter_us.p95_us << "\n";
 
   if (!out_file) {

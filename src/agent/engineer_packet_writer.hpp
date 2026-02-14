@@ -59,7 +59,6 @@ struct EngineerPacketInput {
 // - returns false with actionable `error` on invalid input or I/O failure
 bool WriteEngineerPacketMarkdown(const EngineerPacketInput& input,
                                  const std::filesystem::path& output_dir,
-                                 std::filesystem::path& written_path,
-                                 std::string& error);
+                                 std::filesystem::path& written_path, std::string& error);
 
 } // namespace labops::agent

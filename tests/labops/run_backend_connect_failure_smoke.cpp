@@ -1,5 +1,5 @@
-#include "labops/cli/router.hpp"
 #include "core/errors/exit_codes.hpp"
+#include "labops/cli/router.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -91,11 +91,7 @@ int main() {
   }
 
   std::vector<std::string> argv_storage = {
-      "labops",
-      "run",
-      scenario_path.string(),
-      "--out",
-      out_dir.string(),
+      "labops", "run", scenario_path.string(), "--out", out_dir.string(),
   };
   std::vector<char*> argv;
   argv.reserve(argv_storage.size());
@@ -108,8 +104,8 @@ int main() {
   const int exit_code = labops::cli::Dispatch(static_cast<int>(argv.size()), argv.data());
   std::cerr.rdbuf(original_cerr);
 
-  if (exit_code != labops::core::errors::ToInt(
-                       labops::core::errors::ExitCode::kBackendConnectFailed)) {
+  if (exit_code !=
+      labops::core::errors::ToInt(labops::core::errors::ExitCode::kBackendConnectFailed)) {
     Fail("expected backend-connect-failed exit code");
   }
 

@@ -50,8 +50,8 @@ int main() {
   const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                           std::chrono::system_clock::now().time_since_epoch())
                           .count();
-  const fs::path temp_root = fs::temp_directory_path() /
-                             ("labops-engineer-packet-smoke-" + std::to_string(now_ms));
+  const fs::path temp_root =
+      fs::temp_directory_path() / ("labops-engineer-packet-smoke-" + std::to_string(now_ms));
 
   std::error_code ec;
   fs::remove_all(temp_root, ec);
@@ -158,7 +158,8 @@ int main() {
 
   fs::path written_path;
   std::string error;
-  if (!labops::agent::WriteEngineerPacketMarkdown(input, temp_root / "packet", written_path, error)) {
+  if (!labops::agent::WriteEngineerPacketMarkdown(input, temp_root / "packet", written_path,
+                                                  error)) {
     Fail("WriteEngineerPacketMarkdown failed: " + error);
   }
 

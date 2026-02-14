@@ -51,10 +51,12 @@ int main() {
       .p95_us = 400.0,
   };
 
-  const auto base_ts = std::chrono::system_clock::time_point(std::chrono::milliseconds(1'700'000'000'000));
+  const auto base_ts =
+      std::chrono::system_clock::time_point(std::chrono::milliseconds(1'700'000'000'000));
   report.rolling_samples.push_back({.window_end = base_ts, .frames_in_window = 25, .fps = 25.0});
-  report.rolling_samples.push_back(
-      {.window_end = base_ts + std::chrono::milliseconds(1000), .frames_in_window = 27, .fps = 27.0});
+  report.rolling_samples.push_back({.window_end = base_ts + std::chrono::milliseconds(1000),
+                                    .frames_in_window = 27,
+                                    .fps = 27.0});
 
   const fs::path out_dir = fs::temp_directory_path() / "labops-metrics-writers-smoke";
   std::error_code cleanup_ec;

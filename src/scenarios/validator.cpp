@@ -405,8 +405,7 @@ bool IsValidSlug(std::string_view value) {
     return false;
   }
   for (char c : value) {
-    const bool allowed =
-        (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
+    const bool allowed = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
     if (!allowed) {
       return false;
     }
@@ -534,9 +533,7 @@ void ValidateCamera(const JsonValue& root, ValidationReport& report) {
     } else {
       const std::string& mode = trigger_mode->string_value;
       if (mode != "free_run" && mode != "software" && mode != "hardware") {
-        AddIssue(report,
-                 "camera.trigger_mode",
-                 "must be one of: free_run, software, hardware");
+        AddIssue(report, "camera.trigger_mode", "must be one of: free_run, software, hardware");
       }
     }
   }
@@ -553,9 +550,7 @@ void ValidateCamera(const JsonValue& root, ValidationReport& report) {
         }
         std::uint64_t parsed = 0;
         if (!TryGetNonNegativeInteger(*value, parsed)) {
-          AddIssue(report,
-                   "camera.roi." + std::string(field),
-                   "must be a non-negative integer");
+          AddIssue(report, "camera.roi." + std::string(field), "must be a non-negative integer");
         }
       };
 
@@ -567,9 +562,7 @@ void ValidateCamera(const JsonValue& root, ValidationReport& report) {
         }
         std::uint64_t parsed = 0;
         if (!TryGetNonNegativeInteger(*value, parsed) || parsed == 0U) {
-          AddIssue(report,
-                   "camera.roi." + std::string(field),
-                   "must be a positive integer");
+          AddIssue(report, "camera.roi." + std::string(field), "must be a positive integer");
         }
       };
 
@@ -595,8 +588,7 @@ void ValidateCamera(const JsonValue& root, ValidationReport& report) {
           inter_packet_delay != nullptr) {
         std::uint64_t parsed = 0;
         if (!TryGetNonNegativeInteger(*inter_packet_delay, parsed)) {
-          AddIssue(report,
-                   "camera.network.inter_packet_delay_us",
+          AddIssue(report, "camera.network.inter_packet_delay_us",
                    "must be a non-negative integer");
         }
       }
@@ -616,9 +608,7 @@ void ValidateTags(const JsonValue& root, ValidationReport& report) {
   for (std::size_t i = 0; i < tags->array_value.size(); ++i) {
     const JsonValue& tag = tags->array_value[i];
     if (tag.type != JsonValue::Type::kString || tag.string_value.empty()) {
-      AddIssue(report,
-               "tags[" + std::to_string(i) + "]",
-               "must be a non-empty string");
+      AddIssue(report, "tags[" + std::to_string(i) + "]", "must be a non-empty string");
     }
   }
 }
@@ -640,9 +630,7 @@ void ValidateSimFaults(const JsonValue& root, ValidationReport& report) {
     }
     std::uint64_t parsed = 0;
     if (!TryGetNonNegativeInteger(*value, parsed)) {
-      AddIssue(report,
-               "sim_faults." + std::string(field),
-               "must be a non-negative integer");
+      AddIssue(report, "sim_faults." + std::string(field), "must be a non-negative integer");
     }
   };
 
@@ -712,8 +700,7 @@ void ValidateThresholds(const JsonValue& root, ValidationReport& report) {
   validate_non_negative_integer("max_disconnect_count");
 
   if (!has_known_threshold) {
-    AddIssue(report,
-             "thresholds",
+    AddIssue(report, "thresholds",
              "must include at least one threshold (e.g. max_drop_rate_percent)");
   }
 }
@@ -753,7 +740,8 @@ void ValidateOaat(const JsonValue& root, ValidationReport& report) {
   }
 
   const JsonValue* variables = GetField(*oaat, "variables");
-  if (enabled->bool_value && (variables == nullptr || !IsArray(variables) || variables->array_value.empty())) {
+  if (enabled->bool_value &&
+      (variables == nullptr || !IsArray(variables) || variables->array_value.empty())) {
     AddIssue(report, "oaat.variables", "must contain at least one variable when oaat.enabled=true");
     return;
   }
@@ -820,8 +808,7 @@ void ValidateNetemProfile(const JsonValue& root, const fs::path& scenario_path,
 
   fs::path resolved_profile_path;
   if (!ResolveNetemProfilePath(scenario_path, profile->string_value, resolved_profile_path)) {
-    AddIssue(report,
-             "netem_profile",
+    AddIssue(report, "netem_profile",
              "profile '" + profile->string_value +
                  "' was not found under tools/netem_profiles/<profile>.json");
   }
@@ -853,18 +840,15 @@ void ValidateScenarioObject(const JsonValue& root, const fs::path& scenario_path
     return;
   }
 
-  ValidateRequiredString(
-      root, "schema_version", "schema_version", "example: \"1.0\"", report);
+  ValidateRequiredString(root, "schema_version", "schema_version", "example: \"1.0\"", report);
 
-  ValidateRequiredString(
-      root, "scenario_id", "scenario_id", "example: \"stream_baseline_1080p\"", report);
+  ValidateRequiredString(root, "scenario_id", "scenario_id", "example: \"stream_baseline_1080p\"",
+                         report);
 
   if (const JsonValue* scenario_id = GetField(root, "scenario_id");
       IsString(scenario_id) && !scenario_id->string_value.empty()) {
     if (!IsValidSlug(scenario_id->string_value)) {
-      AddIssue(report,
-               "scenario_id",
-               "must use lowercase slug format [a-z0-9_-]+");
+      AddIssue(report, "scenario_id", "must use lowercase slug format [a-z0-9_-]+");
     }
   }
 
@@ -886,15 +870,15 @@ void ValidateScenarioObject(const JsonValue& root, const fs::path& scenario_path
 
 } // namespace
 
-bool ValidateScenarioText(std::string_view json_text, ValidationReport& report, std::string& error) {
+bool ValidateScenarioText(std::string_view json_text, ValidationReport& report,
+                          std::string& error) {
   report = ValidationReport{};
 
   JsonValue root;
   JsonParser parser(json_text);
   std::string parse_error;
   if (!parser.Parse(root, parse_error)) {
-    AddIssue(report,
-             "$",
+    AddIssue(report, "$",
              parse_error + " (fix JSON syntax and rerun 'labops validate <scenario.json>')");
     report.valid = false;
     return true;
@@ -927,8 +911,7 @@ bool ValidateScenarioFile(const std::string& scenario_path, ValidationReport& re
   std::string parse_error;
   if (!parser.Parse(root, parse_error)) {
     report = ValidationReport{};
-    AddIssue(report,
-             "$",
+    AddIssue(report, "$",
              parse_error + " (fix JSON syntax and rerun 'labops validate <scenario.json>')");
     report.valid = false;
     return true;

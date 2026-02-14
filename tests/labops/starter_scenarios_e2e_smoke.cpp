@@ -105,17 +105,13 @@ void RunScenarioE2E(const std::string& scenario_name, std::uint64_t run_suffix) 
     Fail("unable to resolve scenario path for: " + scenario_name);
   }
 
-  const fs::path out_dir =
-      fs::temp_directory_path() / ("labops-starter-" + scenario_name + "-" + std::to_string(run_suffix));
+  const fs::path out_dir = fs::temp_directory_path() /
+                           ("labops-starter-" + scenario_name + "-" + std::to_string(run_suffix));
   std::error_code ec;
   fs::remove_all(out_dir, ec);
 
   std::vector<std::string> argv_storage = {
-      "labops",
-      "run",
-      scenario_path.string(),
-      "--out",
-      out_dir.string(),
+      "labops", "run", scenario_path.string(), "--out", out_dir.string(),
   };
   std::vector<char*> argv;
   argv.reserve(argv_storage.size());

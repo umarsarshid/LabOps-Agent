@@ -33,8 +33,7 @@ struct ExperimentRunResult {
 // `error` with an actionable message.
 class ExperimentRunner {
 public:
-  bool RunBaselineAndVariant(const ExperimentRunRequest& request,
-                             ExperimentRunResult& result,
+  bool RunBaselineAndVariant(const ExperimentRunRequest& request, ExperimentRunResult& result,
                              std::string& error) const;
 };
 

@@ -113,12 +113,13 @@ void WriteEvidenceLinks(std::ofstream& out, const PacketRunEvidence& evidence) {
 std::vector<PacketConfigAttempt>
 SortedAttempts(const std::vector<PacketConfigAttempt>& configs_tried) {
   std::vector<PacketConfigAttempt> attempts = configs_tried;
-  std::sort(attempts.begin(), attempts.end(), [](const PacketConfigAttempt& a, const PacketConfigAttempt& b) {
-    if (a.sequence != b.sequence) {
-      return a.sequence < b.sequence;
-    }
-    return a.run_id < b.run_id;
-  });
+  std::sort(attempts.begin(), attempts.end(),
+            [](const PacketConfigAttempt& a, const PacketConfigAttempt& b) {
+              if (a.sequence != b.sequence) {
+                return a.sequence < b.sequence;
+              }
+              return a.run_id < b.run_id;
+            });
   return attempts;
 }
 
@@ -171,21 +172,20 @@ std::vector<HypothesisRank> RankHypotheses(const ExperimentState& state) {
   return ordered;
 }
 
-void WriteReproSteps(std::ofstream& out,
-                     const EngineerPacketInput& input,
+void WriteReproSteps(std::ofstream& out, const EngineerPacketInput& input,
                      const std::vector<PacketConfigAttempt>& attempts,
                      const std::map<std::string, PacketRunEvidence>& evidence) {
   out << "## Repro Steps\n\n";
-  out << "1. Validate baseline scenario: `labops validate "
-      << input.baseline_scenario_path.string() << "`\n";
-  out << "2. Run baseline scenario and capture bundle under `"
-      << input.baseline_bundle_dir.string() << "`.\n";
+  out << "1. Validate baseline scenario: `labops validate " << input.baseline_scenario_path.string()
+      << "`\n";
+  out << "2. Run baseline scenario and capture bundle under `" << input.baseline_bundle_dir.string()
+      << "`.\n";
 
   std::size_t step = 3;
   for (const auto& attempt : attempts) {
-    out << step << ". Apply knob `" << attempt.knob_name << "` (" << attempt.knob_path
-        << ": `" << attempt.before_value << "` -> `" << attempt.after_value
-        << "`) and run scenario `" << attempt.scenario_path.string() << "`.\n";
+    out << step << ". Apply knob `" << attempt.knob_name << "` (" << attempt.knob_path << ": `"
+        << attempt.before_value << "` -> `" << attempt.after_value << "`) and run scenario `"
+        << attempt.scenario_path.string() << "`.\n";
 
     const auto evidence_it = evidence.find(attempt.run_id);
     if (evidence_it != evidence.end()) {
@@ -200,8 +200,7 @@ void WriteReproSteps(std::ofstream& out,
   out << '\n';
 }
 
-void WriteConfigsTried(std::ofstream& out,
-                       const std::vector<PacketConfigAttempt>& attempts,
+void WriteConfigsTried(std::ofstream& out, const std::vector<PacketConfigAttempt>& attempts,
                        const std::map<std::string, PacketRunEvidence>& evidence) {
   out << "## Configs Tried\n\n";
   out << "| seq | run_id | knob | from | to | result | scenario_path | diff_md |\n";
@@ -213,27 +212,25 @@ void WriteConfigsTried(std::ofstream& out,
       diff_md = evidence_it->second.diff_markdown_path.string();
     }
 
-    out << "| " << attempt.sequence << " | `" << attempt.run_id << "` | `"
-        << attempt.knob_name << "` | `" << attempt.before_value << "` | `"
-        << attempt.after_value << "` | `" << ToString(attempt.result) << "` | `"
-        << attempt.scenario_path.string() << "` | `" << diff_md << "` |\n";
+    out << "| " << attempt.sequence << " | `" << attempt.run_id << "` | `" << attempt.knob_name
+        << "` | `" << attempt.before_value << "` | `" << attempt.after_value << "` | `"
+        << ToString(attempt.result) << "` | `" << attempt.scenario_path.string() << "` | `"
+        << diff_md << "` |\n";
   }
   out << '\n';
 }
 
-void WriteWhatChanged(std::ofstream& out,
-                      const std::vector<PacketConfigAttempt>& attempts) {
+void WriteWhatChanged(std::ofstream& out, const std::vector<PacketConfigAttempt>& attempts) {
   out << "## What Changed\n\n";
   for (const auto& attempt : attempts) {
     out << "- [`" << attempt.run_id << "`] changed `" << attempt.knob_path << "` from `"
-        << attempt.before_value << "` to `" << attempt.after_value
-        << "` using scenario `" << attempt.scenario_path.string() << "`.\n";
+        << attempt.before_value << "` to `" << attempt.after_value << "` using scenario `"
+        << attempt.scenario_path.string() << "`.\n";
   }
   out << '\n';
 }
 
-void WriteRuledOut(std::ofstream& out,
-                   const std::vector<PacketConfigAttempt>& attempts,
+void WriteRuledOut(std::ofstream& out, const std::vector<PacketConfigAttempt>& attempts,
                    const std::map<std::string, PacketRunEvidence>& evidence) {
   out << "## What We Ruled Out\n\n";
 
@@ -245,8 +242,8 @@ void WriteRuledOut(std::ofstream& out,
 
     wrote_any = true;
     out << "- `" << attempt.knob_name << "` (`" << attempt.before_value << "` -> `"
-        << attempt.after_value << "`) did not reproduce failure (run `"
-        << attempt.run_id << "`).\n";
+        << attempt.after_value << "`) did not reproduce failure (run `" << attempt.run_id
+        << "`).\n";
 
     const auto evidence_it = evidence.find(attempt.run_id);
     if (evidence_it != evidence.end()) {
@@ -263,8 +260,7 @@ void WriteRuledOut(std::ofstream& out,
   out << '\n';
 }
 
-void WriteRankedHypotheses(std::ofstream& out,
-                           const std::vector<HypothesisRank>& ranked,
+void WriteRankedHypotheses(std::ofstream& out, const std::vector<HypothesisRank>& ranked,
                            const std::map<std::string, PacketRunEvidence>& evidence) {
   out << "## Ranked Hypotheses + Evidence Links\n\n";
 
@@ -275,9 +271,9 @@ void WriteRankedHypotheses(std::ofstream& out,
 
   std::size_t rank_index = 1;
   for (const auto& rank : ranked) {
-    out << rank_index << ". [`" << rank.hypothesis->id << "`] score=" << rank.score
-        << " status=`" << ToString(rank.hypothesis->status) << "` variable=`"
-        << rank.hypothesis->variable_name << "`\n";
+    out << rank_index << ". [`" << rank.hypothesis->id << "`] score=" << rank.score << " status=`"
+        << ToString(rank.hypothesis->status) << "` variable=`" << rank.hypothesis->variable_name
+        << "`\n";
     out << "   - statement: " << rank.hypothesis->statement << "\n";
     out << "   - support_count: " << rank.support_count
         << ", contradiction_count: " << rank.contradiction_count << "\n";
@@ -291,8 +287,8 @@ void WriteRankedHypotheses(std::ofstream& out,
         continue;
       }
 
-      out << "   - evidence run `" << row->evidence_run_id << "` result=`"
-          << ToString(row->result) << "`\n";
+      out << "   - evidence run `" << row->evidence_run_id << "` result=`" << ToString(row->result)
+          << "`\n";
 
       const auto evidence_it = evidence.find(row->evidence_run_id);
       if (evidence_it == evidence.end()) {
@@ -311,10 +307,8 @@ void WriteRankedHypotheses(std::ofstream& out,
 
 } // namespace
 
-bool WriteEngineerPacketMarkdown(const EngineerPacketInput& input,
-                                 const fs::path& output_dir,
-                                 fs::path& written_path,
-                                 std::string& error) {
+bool WriteEngineerPacketMarkdown(const EngineerPacketInput& input, const fs::path& output_dir,
+                                 fs::path& written_path, std::string& error) {
   if (!ValidateInput(input, error)) {
     return false;
   }

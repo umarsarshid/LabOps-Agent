@@ -13,8 +13,7 @@ namespace labops::artifacts {
 // - Returns true on success and populates `written_path`.
 // - Returns false on failure and populates `error`.
 bool WriteScenarioJson(const std::filesystem::path& source_scenario_path,
-                       const std::filesystem::path& output_dir,
-                       std::filesystem::path& written_path,
+                       const std::filesystem::path& output_dir, std::filesystem::path& written_path,
                        std::string& error);
 
 } // namespace labops::artifacts

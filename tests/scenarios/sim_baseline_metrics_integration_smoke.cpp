@@ -24,8 +24,8 @@ void Fail(std::string_view message) {
 
 void AssertRange(double value, double min_inclusive, double max_inclusive, std::string_view name) {
   if (value < min_inclusive || value > max_inclusive) {
-    std::cerr << "range assertion failed for " << name << ": value=" << value
-              << " expected=[" << min_inclusive << ", " << max_inclusive << "]\n";
+    std::cerr << "range assertion failed for " << name << ": value=" << value << " expected=["
+              << min_inclusive << ", " << max_inclusive << "]\n";
     std::abort();
   }
 }
@@ -136,16 +136,13 @@ int main() {
   const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                           std::chrono::system_clock::now().time_since_epoch())
                           .count();
-  const fs::path out_dir = fs::temp_directory_path() / ("labops-baseline-metrics-" + std::to_string(now_ms));
+  const fs::path out_dir =
+      fs::temp_directory_path() / ("labops-baseline-metrics-" + std::to_string(now_ms));
   std::error_code cleanup_ec;
   fs::remove_all(out_dir, cleanup_ec);
 
   std::vector<std::string> argv_storage = {
-      "labops",
-      "run",
-      scenario_path.string(),
-      "--out",
-      out_dir.string(),
+      "labops", "run", scenario_path.string(), "--out", out_dir.string(),
   };
   std::vector<char*> argv;
   argv.reserve(argv_storage.size());

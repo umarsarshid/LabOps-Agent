@@ -10,7 +10,8 @@ namespace labops::agent {
 
 namespace {
 
-bool ValidateScenarioPath(const std::string& scenario_path, std::string_view label, std::string& error) {
+bool ValidateScenarioPath(const std::string& scenario_path, std::string_view label,
+                          std::string& error) {
   if (scenario_path.empty()) {
     error = std::string(label) + " scenario path cannot be empty";
     return false;
@@ -80,16 +81,15 @@ bool ExperimentRunner::RunBaselineAndVariant(const ExperimentRunRequest& request
   // steps can reference a deterministic path.
   labops::cli::RunOptions baseline_options;
   baseline_options.scenario_path = request.baseline_scenario_path;
-  baseline_options.output_dir = request.output_root / "baselines" /
-                                ScenarioIdFromPath(request.baseline_scenario_path);
+  baseline_options.output_dir =
+      request.output_root / "baselines" / ScenarioIdFromPath(request.baseline_scenario_path);
   baseline_options.zip_bundle = false;
   baseline_options.redact_identifiers = request.redact_identifiers;
 
-  const int baseline_exit = labops::cli::ExecuteScenarioRun(baseline_options,
-                                                            /*use_per_run_bundle_dir=*/false,
-                                                            /*allow_zip_bundle=*/false,
-                                                            "agent baseline captured: ",
-                                                            &result.baseline_run);
+  const int baseline_exit = labops::cli::ExecuteScenarioRun(
+      baseline_options,
+      /*use_per_run_bundle_dir=*/false,
+      /*allow_zip_bundle=*/false, "agent baseline captured: ", &result.baseline_run);
   if (baseline_exit != 0) {
     error = "baseline run failed with exit code " + std::to_string(baseline_exit);
     return false;
@@ -104,11 +104,10 @@ bool ExperimentRunner::RunBaselineAndVariant(const ExperimentRunRequest& request
   variant_options.zip_bundle = false;
   variant_options.redact_identifiers = request.redact_identifiers;
 
-  const int variant_exit = labops::cli::ExecuteScenarioRun(variant_options,
-                                                           /*use_per_run_bundle_dir=*/true,
-                                                           /*allow_zip_bundle=*/true,
-                                                           "agent variant queued: ",
-                                                           &result.variant_run);
+  const int variant_exit = labops::cli::ExecuteScenarioRun(
+      variant_options,
+      /*use_per_run_bundle_dir=*/true,
+      /*allow_zip_bundle=*/true, "agent variant queued: ", &result.variant_run);
   if (variant_exit != 0) {
     error = "variant run failed with exit code " + std::to_string(variant_exit);
     return false;

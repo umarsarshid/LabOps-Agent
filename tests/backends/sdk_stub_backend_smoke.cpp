@@ -53,8 +53,7 @@ int main() {
     std::cerr << "expected sdk_adapter=not_integrated in dumped config\n";
     return 1;
   }
-  if (find_or_empty("build_real_backend_enabled") !=
-      (expected_enabled ? "true" : "false")) {
+  if (find_or_empty("build_real_backend_enabled") != (expected_enabled ? "true" : "false")) {
     std::cerr << "expected build flag marker in dumped config\n";
     return 1;
   }

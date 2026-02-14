@@ -567,8 +567,7 @@ std::optional<std::int64_t> ReadIntegerAtPath(const JsonValue& root,
   return static_cast<std::int64_t>(rounded);
 }
 
-void SetIntegerAtPath(JsonValue& root,
-                      std::initializer_list<std::string_view> path,
+void SetIntegerAtPath(JsonValue& root, std::initializer_list<std::string_view> path,
                       std::int64_t value) {
   JsonValue* cursor = &root;
   auto it = path.begin();
@@ -611,10 +610,8 @@ std::string SanitizeFilenameToken(std::string_view input) {
   return out;
 }
 
-bool ApplyPacketDelayMutation(const JsonValue& base,
-                              JsonValue& variant,
-                              ScenarioVariant& scenario_variant,
-                              std::string& error) {
+bool ApplyPacketDelayMutation(const JsonValue& base, JsonValue& variant,
+                              ScenarioVariant& scenario_variant, std::string& error) {
   const std::int64_t base_us =
       ReadIntegerAtPath(base, {"camera", "network", "inter_packet_delay_us"}).value_or(0);
   const std::int64_t candidate_us = base_us + 5'000;
@@ -627,9 +624,7 @@ bool ApplyPacketDelayMutation(const JsonValue& base,
   return true;
 }
 
-bool ApplyFpsMutation(const JsonValue& base,
-                      JsonValue& variant,
-                      ScenarioVariant& scenario_variant,
+bool ApplyFpsMutation(const JsonValue& base, JsonValue& variant, ScenarioVariant& scenario_variant,
                       std::string& error) {
   const std::int64_t base_fps = ReadIntegerAtPath(base, {"camera", "fps"}).value_or(30);
   const std::int64_t candidate_fps = std::max<std::int64_t>(1, base_fps - 1);
@@ -642,10 +637,8 @@ bool ApplyFpsMutation(const JsonValue& base,
   return true;
 }
 
-bool ApplyRoiToggleMutation(const JsonValue& base,
-                            JsonValue& variant,
-                            ScenarioVariant& scenario_variant,
-                            std::string& error) {
+bool ApplyRoiToggleMutation(const JsonValue& base, JsonValue& variant,
+                            ScenarioVariant& scenario_variant, std::string& error) {
   JsonValue* camera = EnsureObjectMember(variant, "camera");
   if (camera->type != JsonValue::Type::kObject) {
     camera->type = JsonValue::Type::kObject;
@@ -653,8 +646,8 @@ bool ApplyRoiToggleMutation(const JsonValue& base,
   }
 
   const JsonValue* base_camera = FindObjectMember(base, "camera");
-  const bool has_base_roi = (base_camera != nullptr) &&
-                            (FindObjectMember(*base_camera, "roi") != nullptr);
+  const bool has_base_roi =
+      (base_camera != nullptr) && (FindObjectMember(*base_camera, "roi") != nullptr);
 
   if (has_base_roi) {
     camera->object_value.erase("roi");
@@ -665,10 +658,8 @@ bool ApplyRoiToggleMutation(const JsonValue& base,
     return true;
   }
 
-  const std::int64_t width =
-      ReadIntegerAtPath(base, {"camera", "width"}).value_or(1920);
-  const std::int64_t height =
-      ReadIntegerAtPath(base, {"camera", "height"}).value_or(1080);
+  const std::int64_t width = ReadIntegerAtPath(base, {"camera", "width"}).value_or(1920);
+  const std::int64_t height = ReadIntegerAtPath(base, {"camera", "height"}).value_or(1080);
 
   JsonValue roi;
   roi.type = JsonValue::Type::kObject;
@@ -685,10 +676,8 @@ bool ApplyRoiToggleMutation(const JsonValue& base,
   return true;
 }
 
-bool ApplyReorderMutation(const JsonValue& base,
-                          JsonValue& variant,
-                          ScenarioVariant& scenario_variant,
-                          std::string& error) {
+bool ApplyReorderMutation(const JsonValue& base, JsonValue& variant,
+                          ScenarioVariant& scenario_variant, std::string& error) {
   const std::int64_t base_reorder = ReadIntegerAtPath(base, {"sim_faults", "reorder"}).value_or(0);
   const std::int64_t candidate_reorder = ClampInt(base_reorder + 5, 0, 100);
   SetIntegerAtPath(variant, {"sim_faults", "reorder"}, candidate_reorder);
@@ -700,13 +689,11 @@ bool ApplyReorderMutation(const JsonValue& base,
   return true;
 }
 
-bool ApplyLossMutation(const JsonValue& base,
-                       JsonValue& variant,
-                       ScenarioVariant& scenario_variant,
+bool ApplyLossMutation(const JsonValue& base, JsonValue& variant, ScenarioVariant& scenario_variant,
                        std::string& error) {
-  const std::int64_t base_drop = ReadIntegerAtPath(base, {"sim_faults", "drop_percent"}).value_or(0);
-  const std::int64_t candidate_drop =
-      (base_drop >= 100) ? 90 : ClampInt(base_drop + 10, 0, 100);
+  const std::int64_t base_drop =
+      ReadIntegerAtPath(base, {"sim_faults", "drop_percent"}).value_or(0);
+  const std::int64_t candidate_drop = (base_drop >= 100) ? 90 : ClampInt(base_drop + 10, 0, 100);
   SetIntegerAtPath(variant, {"sim_faults", "drop_percent"}, candidate_drop);
 
   scenario_variant.knob_path = "sim_faults.drop_percent";
@@ -716,11 +703,8 @@ bool ApplyLossMutation(const JsonValue& base,
   return true;
 }
 
-bool ApplyKnobMutation(const JsonValue& base,
-                       JsonValue& variant,
-                       std::string_view knob_name,
-                       ScenarioVariant& scenario_variant,
-                       std::string& error) {
+bool ApplyKnobMutation(const JsonValue& base, JsonValue& variant, std::string_view knob_name,
+                       ScenarioVariant& scenario_variant, std::string& error) {
   if (knob_name == "packet_delay_ms") {
     return ApplyPacketDelayMutation(base, variant, scenario_variant, error);
   }
@@ -771,8 +755,7 @@ std::string BuildVariantManifestJson(const VariantGenerationResult& result) {
 } // namespace
 
 bool OaatVariantGenerator::Generate(const VariantGenerationRequest& request,
-                                    VariantGenerationResult& result,
-                                    std::string& error) const {
+                                    VariantGenerationResult& result, std::string& error) const {
   result = VariantGenerationResult{};
   error.clear();
 

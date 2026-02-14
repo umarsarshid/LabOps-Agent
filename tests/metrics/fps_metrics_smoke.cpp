@@ -43,7 +43,8 @@ int main() {
   using labops::backends::FrameSample;
   using labops::metrics::FpsReport;
 
-  const auto base = std::chrono::system_clock::time_point(std::chrono::milliseconds(1'700'000'000'000));
+  const auto base =
+      std::chrono::system_clock::time_point(std::chrono::milliseconds(1'700'000'000'000));
   const std::vector<FrameSample> frames = {
       {.frame_id = 0, .timestamp = base + std::chrono::milliseconds(1000), .size_bytes = 1024},
       {.frame_id = 1, .timestamp = base + std::chrono::milliseconds(1500), .size_bytes = 1024},
@@ -57,11 +58,8 @@ int main() {
 
   FpsReport report;
   std::string error;
-  if (!labops::metrics::ComputeFpsReport(frames,
-                                         std::chrono::milliseconds(2000),
-                                         std::chrono::milliseconds(1000),
-                                         report,
-                                         error)) {
+  if (!labops::metrics::ComputeFpsReport(frames, std::chrono::milliseconds(2000),
+                                         std::chrono::milliseconds(1000), report, error)) {
     Fail("ComputeFpsReport failed: " + error);
   }
 

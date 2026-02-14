@@ -38,11 +38,7 @@ fs::path ResolveBaselineScenarioPath() {
 
 void RunScenario(const fs::path& scenario_path, const fs::path& out_root) {
   std::vector<std::string> argv_storage = {
-      "labops",
-      "run",
-      scenario_path.string(),
-      "--out",
-      out_root.string(),
+      "labops", "run", scenario_path.string(), "--out", out_root.string(),
   };
   std::vector<char*> argv;
   argv.reserve(argv_storage.size());
@@ -140,7 +136,8 @@ int main() {
   const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                           std::chrono::system_clock::now().time_since_epoch())
                           .count();
-  const fs::path root = fs::temp_directory_path() / ("labops-bundle-layout-" + std::to_string(now_ms));
+  const fs::path root =
+      fs::temp_directory_path() / ("labops-bundle-layout-" + std::to_string(now_ms));
   const fs::path out_root = root / "out";
 
   std::error_code ec;

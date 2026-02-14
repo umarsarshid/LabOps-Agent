@@ -74,8 +74,7 @@ std::string ReadFile(const fs::path& path) {
     Fail("failed to open file: " + path.string());
   }
 
-  return std::string((std::istreambuf_iterator<char>(input)),
-                     std::istreambuf_iterator<char>());
+  return std::string((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
 }
 
 std::string ExtractRunIdFromRunJson(const std::string& run_json) {
@@ -100,8 +99,8 @@ int main() {
   const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                           std::chrono::system_clock::now().time_since_epoch())
                           .count();
-  const fs::path temp_root = fs::temp_directory_path() /
-                             ("labops-logging-contract-" + std::to_string(now_ms));
+  const fs::path temp_root =
+      fs::temp_directory_path() / ("labops-logging-contract-" + std::to_string(now_ms));
   const fs::path scenario_path = temp_root / "scenario.json";
   const fs::path out_dir = temp_root / "out";
 

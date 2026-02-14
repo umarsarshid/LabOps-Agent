@@ -31,8 +31,7 @@ struct MetricsDiffReport {
 // - returns false and sets `error` on parse/contract failures.
 bool ComputeMetricsDiffFromCsv(const std::filesystem::path& baseline_metrics_csv_path,
                                const std::filesystem::path& run_metrics_csv_path,
-                               MetricsDiffReport& report,
-                               std::string& error);
+                               MetricsDiffReport& report, std::string& error);
 
 // Emits `diff.json` for machine parsing.
 //
@@ -40,10 +39,8 @@ bool ComputeMetricsDiffFromCsv(const std::filesystem::path& baseline_metrics_csv
 // - creates `output_dir` when missing.
 // - writes `<output_dir>/diff.json`.
 // - returns false and sets `error` on failure.
-bool WriteMetricsDiffJson(const MetricsDiffReport& report,
-                          const std::filesystem::path& output_dir,
-                          std::filesystem::path& written_path,
-                          std::string& error);
+bool WriteMetricsDiffJson(const MetricsDiffReport& report, const std::filesystem::path& output_dir,
+                          std::filesystem::path& written_path, std::string& error);
 
 // Emits `diff.md` for human triage handoff.
 //
@@ -53,7 +50,6 @@ bool WriteMetricsDiffJson(const MetricsDiffReport& report,
 // - returns false and sets `error` on failure.
 bool WriteMetricsDiffMarkdown(const MetricsDiffReport& report,
                               const std::filesystem::path& output_dir,
-                              std::filesystem::path& written_path,
-                              std::string& error);
+                              std::filesystem::path& written_path, std::string& error);
 
 } // namespace labops::artifacts

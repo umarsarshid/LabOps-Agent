@@ -118,8 +118,7 @@ std::vector<std::string> SplitCsvLine(const std::string& line) {
 }
 
 bool LoadSummaryMetricsFromCsv(const fs::path& metrics_csv_path,
-                               std::map<std::string, double>& metric_values,
-                               std::string& error) {
+                               std::map<std::string, double>& metric_values, std::string& error) {
   std::ifstream input(metrics_csv_path, std::ios::binary);
   if (!input) {
     error = "failed to open metrics csv: " + metrics_csv_path.string();
@@ -228,8 +227,7 @@ void CountDeltaSummary(const std::vector<MetricDelta>& deltas, std::size_t& incr
 } // namespace
 
 bool ComputeMetricsDiffFromCsv(const fs::path& baseline_metrics_csv_path,
-                               const fs::path& run_metrics_csv_path,
-                               MetricsDiffReport& report,
+                               const fs::path& run_metrics_csv_path, MetricsDiffReport& report,
                                std::string& error) {
   std::map<std::string, double> baseline_values;
   if (!LoadSummaryMetricsFromCsv(baseline_metrics_csv_path, baseline_values, error)) {
@@ -317,8 +315,8 @@ bool WriteMetricsDiffJson(const MetricsDiffReport& report, const fs::path& outpu
            << "  \"schema_version\":\"1.0\",\n"
            << "  \"baseline_metrics_csv\":\""
            << EscapeJson(report.baseline_metrics_csv_path.generic_string()) << "\",\n"
-           << "  \"run_metrics_csv\":\""
-           << EscapeJson(report.run_metrics_csv_path.generic_string()) << "\",\n"
+           << "  \"run_metrics_csv\":\"" << EscapeJson(report.run_metrics_csv_path.generic_string())
+           << "\",\n"
            << "  \"compared_metrics\":[";
 
   for (std::size_t i = 0; i < report.deltas.size(); ++i) {
@@ -327,7 +325,7 @@ bool WriteMetricsDiffJson(const MetricsDiffReport& report, const fs::path& outpu
       out_file << ",";
     }
     out_file << "\n    {"
-             << "\"metric\":\"" << EscapeJson(delta.metric) << "\"," 
+             << "\"metric\":\"" << EscapeJson(delta.metric) << "\","
              << "\"baseline\":" << FormatDouble(delta.baseline) << ","
              << "\"run\":" << FormatDouble(delta.run) << ","
              << "\"delta\":" << FormatDouble(delta.delta) << ","
@@ -346,8 +344,7 @@ bool WriteMetricsDiffJson(const MetricsDiffReport& report, const fs::path& outpu
            << "  \"summary\":{"
            << "\"increased\":" << increased << ","
            << "\"decreased\":" << decreased << ","
-           << "\"unchanged\":" << unchanged
-           << "}\n"
+           << "\"unchanged\":" << unchanged << "}\n"
            << "}\n";
 
   if (!out_file) {
@@ -383,11 +380,9 @@ bool WriteMetricsDiffMarkdown(const MetricsDiffReport& report, const fs::path& o
            << "| --- | ---: | ---: | ---: | ---: |\n";
 
   for (const auto& delta : report.deltas) {
-    out_file << "| " << delta.metric
-             << " | " << FormatDouble(delta.baseline)
-             << " | " << FormatDouble(delta.run)
-             << " | " << (delta.delta >= 0.0 ? "+" : "") << FormatDouble(delta.delta)
-             << " | ";
+    out_file << "| " << delta.metric << " | " << FormatDouble(delta.baseline) << " | "
+             << FormatDouble(delta.run) << " | " << (delta.delta >= 0.0 ? "+" : "")
+             << FormatDouble(delta.delta) << " | ";
 
     if (delta.delta_percent.has_value()) {
       const double delta_percent = delta.delta_percent.value();
@@ -400,8 +395,7 @@ bool WriteMetricsDiffMarkdown(const MetricsDiffReport& report, const fs::path& o
   }
 
   out_file << "\n"
-           << "Summary: increased=" << increased
-           << ", decreased=" << decreased
+           << "Summary: increased=" << increased << ", decreased=" << decreased
            << ", unchanged=" << unchanged << "\n";
 
   if (!out_file) {

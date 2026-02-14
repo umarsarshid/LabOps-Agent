@@ -1,7 +1,7 @@
 #include "labops/cli/router.hpp"
 
-#include <cmath>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -88,7 +88,8 @@ double ExtractDeltaForMetricFromDiffJson(const std::string& diff_json,
 
   std::size_t value_pos = delta_key_pos + std::string_view("\"delta\":").size();
   while (value_pos < diff_json.size() &&
-         (diff_json[value_pos] == ' ' || diff_json[value_pos] == '\n' || diff_json[value_pos] == '\t')) {
+         (diff_json[value_pos] == ' ' || diff_json[value_pos] == '\n' ||
+          diff_json[value_pos] == '\t')) {
     ++value_pos;
   }
 
@@ -133,7 +134,8 @@ int main() {
   const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                           std::chrono::system_clock::now().time_since_epoch())
                           .count();
-  const fs::path temp_root = fs::temp_directory_path() / ("labops-compare-diff-" + std::to_string(now_ms));
+  const fs::path temp_root =
+      fs::temp_directory_path() / ("labops-compare-diff-" + std::to_string(now_ms));
   const fs::path out_dir = temp_root / "out";
 
   std::error_code ec;
@@ -166,7 +168,8 @@ int main() {
   const fs::path run_bundle_dir = ResolveSingleRunBundleDir(out_dir);
   const fs::path baseline_dir = temp_root / "baselines" / "sim_baseline";
 
-  if (DispatchArgs({"labops", "compare", "--baseline", baseline_dir.string(), "--run", run_bundle_dir.string()}) != 0) {
+  if (DispatchArgs({"labops", "compare", "--baseline", baseline_dir.string(), "--run",
+                    run_bundle_dir.string()}) != 0) {
     fs::current_path(original_cwd, ec);
     Fail("compare command failed");
   }

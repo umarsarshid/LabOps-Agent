@@ -35,8 +35,7 @@ struct VariantGenerationResult {
 // knob from the base scenario.
 class OaatVariantGenerator {
 public:
-  bool Generate(const VariantGenerationRequest& request,
-                VariantGenerationResult& result,
+  bool Generate(const VariantGenerationRequest& request, VariantGenerationResult& result,
                 std::string& error) const;
 };
 

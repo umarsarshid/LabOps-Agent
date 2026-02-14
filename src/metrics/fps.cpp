@@ -26,8 +26,8 @@ TimingStatsUs ComputeTimingStatsUs(std::vector<double> samples_us) {
   stats.avg_us = sum_us / static_cast<double>(samples_us.size());
 
   // Nearest-rank p95 approximation keeps behavior deterministic and simple.
-  const std::size_t rank = static_cast<std::size_t>(
-      std::ceil(0.95 * static_cast<double>(samples_us.size())));
+  const std::size_t rank =
+      static_cast<std::size_t>(std::ceil(0.95 * static_cast<double>(samples_us.size())));
   const std::size_t index = rank > 0U ? (rank - 1U) : 0U;
   stats.p95_us = samples_us[index];
   return stats;
@@ -37,8 +37,7 @@ TimingStatsUs ComputeTimingStatsUs(std::vector<double> samples_us) {
 
 bool ComputeFpsReport(const std::vector<backends::FrameSample>& frames,
                       const std::chrono::milliseconds avg_window,
-                      const std::chrono::milliseconds rolling_window,
-                      FpsReport& report,
+                      const std::chrono::milliseconds rolling_window, FpsReport& report,
                       std::string& error) {
   if (avg_window <= std::chrono::milliseconds::zero()) {
     error = "avg fps window must be greater than 0";
@@ -69,9 +68,8 @@ bool ComputeFpsReport(const std::vector<backends::FrameSample>& frames,
   report.received_frames_total = static_cast<std::uint64_t>(received_timestamps.size());
   report.dropped_frames_total = dropped_frames_total;
   if (report.frames_total > 0U) {
-    report.drop_rate_percent =
-        (static_cast<double>(report.dropped_frames_total) * 100.0) /
-        static_cast<double>(report.frames_total);
+    report.drop_rate_percent = (static_cast<double>(report.dropped_frames_total) * 100.0) /
+                               static_cast<double>(report.frames_total);
   }
 
   const double avg_window_seconds = static_cast<double>(avg_window.count()) / 1000.0;

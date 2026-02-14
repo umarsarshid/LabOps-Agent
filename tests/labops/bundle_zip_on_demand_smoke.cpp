@@ -42,11 +42,7 @@ fs::path ResolveSingleBundleDir(const fs::path& out_root) {
 
 bool RunScenario(const fs::path& scenario_path, const fs::path& out_root, bool with_zip) {
   std::vector<std::string> argv_storage = {
-      "labops",
-      "run",
-      scenario_path.string(),
-      "--out",
-      out_root.string(),
+      "labops", "run", scenario_path.string(), "--out", out_root.string(),
   };
   if (with_zip) {
     argv_storage.push_back("--zip");
@@ -68,7 +64,8 @@ int main() {
   const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                           std::chrono::system_clock::now().time_since_epoch())
                           .count();
-  const fs::path root = fs::temp_directory_path() / ("labops-bundle-zip-on-demand-" + std::to_string(now_ms));
+  const fs::path root =
+      fs::temp_directory_path() / ("labops-bundle-zip-on-demand-" + std::to_string(now_ms));
   const fs::path scenario_path = root / "scenario.json";
   const fs::path out_zip = root / "out-with-zip";
   const fs::path out_no_zip = root / "out-no-zip";

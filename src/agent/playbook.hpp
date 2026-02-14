@@ -28,8 +28,7 @@ struct Playbook {
 // Contract:
 // - true: `playbook` is populated, `error` is cleared.
 // - false: `playbook` is reset and `error` explains why selection failed.
-bool SelectPlaybookForSymptom(std::string_view symptom_input,
-                              Playbook& playbook,
+bool SelectPlaybookForSymptom(std::string_view symptom_input, Playbook& playbook,
                               std::string& error);
 
 } // namespace labops::agent

@@ -46,12 +46,8 @@ fs::path ResolveScenarioPath(const std::string& scenario_name) {
 
 void AssertRequiredRunArtifacts(const fs::path& bundle_dir) {
   const std::vector<fs::path> required = {
-      bundle_dir / "scenario.json",
-      bundle_dir / "run.json",
-      bundle_dir / "events.jsonl",
-      bundle_dir / "metrics.json",
-      bundle_dir / "metrics.csv",
-      bundle_dir / "summary.md",
+      bundle_dir / "scenario.json",        bundle_dir / "run.json",    bundle_dir / "events.jsonl",
+      bundle_dir / "metrics.json",         bundle_dir / "metrics.csv", bundle_dir / "summary.md",
       bundle_dir / "bundle_manifest.json",
   };
 
@@ -86,8 +82,8 @@ int main() {
   const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                           std::chrono::system_clock::now().time_since_epoch())
                           .count();
-  const fs::path temp_root = fs::temp_directory_path() /
-                             ("labops-agent-experiment-runner-" + std::to_string(now_ms));
+  const fs::path temp_root =
+      fs::temp_directory_path() / ("labops-agent-experiment-runner-" + std::to_string(now_ms));
   const fs::path output_root = temp_root / "agent-output";
 
   std::error_code ec;

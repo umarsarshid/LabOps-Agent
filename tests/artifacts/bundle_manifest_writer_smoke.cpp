@@ -76,7 +76,8 @@ int main() {
 
   fs::path written_path;
   std::string error;
-  if (!labops::artifacts::WriteBundleManifestJson(bundle_dir, artifact_paths, written_path, error)) {
+  if (!labops::artifacts::WriteBundleManifestJson(bundle_dir, artifact_paths, written_path,
+                                                  error)) {
     Fail("WriteBundleManifestJson failed: " + error);
   }
 
@@ -91,7 +92,8 @@ int main() {
   if (!in) {
     Fail("failed to open bundle manifest file");
   }
-  const std::string manifest((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  const std::string manifest((std::istreambuf_iterator<char>(in)),
+                             std::istreambuf_iterator<char>());
 
   AssertContains(manifest, "\"schema_version\":\"1.0\"");
   AssertContains(manifest, "\"hash_algorithm\":\"fnv1a_64\"");

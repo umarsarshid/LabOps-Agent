@@ -31,7 +31,8 @@ std::string BuildRawCommandText(const hostprobe::NicCommandCapture& capture) {
   text.reserve(capture.output.size() + 128U);
   text += "# command: " + capture.command + "\n";
   text += "# exit_code: " + std::to_string(capture.exit_code) + "\n";
-  text += std::string("# command_available: ") + (capture.command_available ? "true" : "false") + "\n\n";
+  text += std::string("# command_available: ") + (capture.command_available ? "true" : "false") +
+          "\n\n";
   if (capture.output.empty()) {
     text += "<no output>\n";
   } else {
@@ -60,10 +61,8 @@ bool WriteTextFile(const fs::path& path, const std::string& text, std::string& e
 
 } // namespace
 
-bool WriteHostProbeJson(const hostprobe::HostProbeSnapshot& snapshot,
-                        const fs::path& output_dir,
-                        fs::path& written_path,
-                        std::string& error) {
+bool WriteHostProbeJson(const hostprobe::HostProbeSnapshot& snapshot, const fs::path& output_dir,
+                        fs::path& written_path, std::string& error) {
   if (!EnsureOutputDir(output_dir, error)) {
     return false;
   }
@@ -87,8 +86,7 @@ bool WriteHostProbeJson(const hostprobe::HostProbeSnapshot& snapshot,
 
 bool WriteHostProbeRawCommandOutputs(const std::vector<hostprobe::NicCommandCapture>& captures,
                                      const fs::path& output_dir,
-                                     std::vector<fs::path>& written_paths,
-                                     std::string& error) {
+                                     std::vector<fs::path>& written_paths, std::string& error) {
   if (!EnsureOutputDir(output_dir, error)) {
     return false;
   }

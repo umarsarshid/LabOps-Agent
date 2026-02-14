@@ -36,8 +36,9 @@ struct ScenarioRunResult {
 // Executes one scenario run through the same internal pipeline as `labops run`.
 // This is intentionally exposed so agent-mode can orchestrate experiments
 // directly in-process rather than invoking subprocess commands.
-int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir, bool allow_zip_bundle,
-                       std::string_view success_prefix, ScenarioRunResult* run_result);
+int ExecuteScenarioRun(const RunOptions& options, bool use_per_run_bundle_dir,
+                       bool allow_zip_bundle, std::string_view success_prefix,
+                       ScenarioRunResult* run_result);
 
 // Routes `labops` subcommands and returns process exit codes with a stable
 // contract for scripts and CI:

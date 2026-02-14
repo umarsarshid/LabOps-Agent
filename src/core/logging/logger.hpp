@@ -1,11 +1,11 @@
 #pragma once
 
 #include <algorithm>
-#include <chrono>
 #include <cctype>
+#include <chrono>
 #include <ctime>
-#include <iomanip>
 #include <initializer_list>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -53,9 +53,8 @@ inline bool ParseLogLevel(std::string_view raw, LogLevel& level, std::string& er
   }
 
   std::string normalized(raw);
-  std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char c) {
-    return static_cast<char>(std::tolower(c));
-  });
+  std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
   if (normalized == "debug") {
     level = LogLevel::kDebug;
@@ -74,8 +73,8 @@ inline bool ParseLogLevel(std::string_view raw, LogLevel& level, std::string& er
     return true;
   }
 
-  error = "invalid --log-level '" + std::string(raw) +
-          "' (expected " + ExpectedLogLevelList() + ")";
+  error =
+      "invalid --log-level '" + std::string(raw) + "' (expected " + ExpectedLogLevelList() + ")";
   return false;
 }
 
@@ -104,16 +103,14 @@ public:
     return static_cast<int>(level) >= static_cast<int>(min_level_);
   }
 
-  void Log(LogLevel level,
-           std::string_view message,
+  void Log(LogLevel level, std::string_view message,
            std::initializer_list<LogFieldView> fields = {}) {
     if (!ShouldLog(level)) {
       return;
     }
 
     (*out_) << "ts_utc=" << FormatUtcTimestamp(std::chrono::system_clock::now())
-            << " level=" << ToString(level)
-            << " run_id=" << Quote(run_id_)
+            << " level=" << ToString(level) << " run_id=" << Quote(run_id_)
             << " msg=" << Quote(message);
 
     for (const auto& field : fields) {
@@ -124,23 +121,19 @@ public:
     out_->flush();
   }
 
-  void Debug(std::string_view message,
-             std::initializer_list<LogFieldView> fields = {}) {
+  void Debug(std::string_view message, std::initializer_list<LogFieldView> fields = {}) {
     Log(LogLevel::kDebug, message, fields);
   }
 
-  void Info(std::string_view message,
-            std::initializer_list<LogFieldView> fields = {}) {
+  void Info(std::string_view message, std::initializer_list<LogFieldView> fields = {}) {
     Log(LogLevel::kInfo, message, fields);
   }
 
-  void Warn(std::string_view message,
-            std::initializer_list<LogFieldView> fields = {}) {
+  void Warn(std::string_view message, std::initializer_list<LogFieldView> fields = {}) {
     Log(LogLevel::kWarn, message, fields);
   }
 
-  void Error(std::string_view message,
-             std::initializer_list<LogFieldView> fields = {}) {
+  void Error(std::string_view message, std::initializer_list<LogFieldView> fields = {}) {
     Log(LogLevel::kError, message, fields);
   }
 
@@ -148,8 +141,7 @@ private:
   static std::string FormatUtcTimestamp(std::chrono::system_clock::time_point ts) {
     const auto millis_since_epoch =
         std::chrono::duration_cast<std::chrono::milliseconds>(ts.time_since_epoch()).count();
-    const auto millis_component =
-        static_cast<int>((millis_since_epoch % 1000 + 1000) % 1000);
+    const auto millis_component = static_cast<int>((millis_since_epoch % 1000 + 1000) % 1000);
 
     const std::time_t epoch_seconds = std::chrono::system_clock::to_time_t(ts);
     std::tm utc_time{};
@@ -166,12 +158,8 @@ private:
 #endif
 
     std::ostringstream out;
-    out << std::put_time(&utc_time, "%Y-%m-%dT%H:%M:%S")
-        << '.'
-        << std::setw(3)
-        << std::setfill('0')
-        << millis_component
-        << 'Z';
+    out << std::put_time(&utc_time, "%Y-%m-%dT%H:%M:%S") << '.' << std::setw(3) << std::setfill('0')
+        << millis_component << 'Z';
     return out.str();
   }
 

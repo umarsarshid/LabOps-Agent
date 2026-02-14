@@ -84,8 +84,7 @@ void RedactHostProbeSnapshot(HostProbeSnapshot& snapshot,
                              const IdentifierRedactionContext& context);
 
 // Applies identifier redaction to raw NIC command captures.
-void RedactNicProbeSnapshot(NicProbeSnapshot& snapshot,
-                            const IdentifierRedactionContext& context);
+void RedactNicProbeSnapshot(NicProbeSnapshot& snapshot, const IdentifierRedactionContext& context);
 
 // Serializes the snapshot to stable JSON suitable for artifact emission.
 std::string ToJson(const HostProbeSnapshot& snapshot);

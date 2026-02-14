@@ -109,12 +109,14 @@ void WriteNetemCommandSection(std::ofstream& out_file,
 
 } // namespace
 
-bool WriteRunSummaryMarkdown(const core::schema::RunInfo& run_info, const metrics::FpsReport& report,
-                             const std::uint32_t configured_fps, const bool thresholds_passed,
+bool WriteRunSummaryMarkdown(const core::schema::RunInfo& run_info,
+                             const metrics::FpsReport& report, const std::uint32_t configured_fps,
+                             const bool thresholds_passed,
                              const std::vector<std::string>& threshold_failures,
                              const std::vector<std::string>& top_anomalies,
                              const std::optional<NetemCommandSuggestions>& netem_suggestions,
-                             const fs::path& output_dir, fs::path& written_path, std::string& error) {
+                             const fs::path& output_dir, fs::path& written_path,
+                             std::string& error) {
   if (!EnsureOutputDir(output_dir, error)) {
     return false;
   }
@@ -138,7 +140,8 @@ bool WriteRunSummaryMarkdown(const core::schema::RunInfo& run_info, const metric
   out_file << "- seed: `" << run_info.config.seed << "`\n";
   out_file << "- duration_ms: `" << run_info.config.duration.count() << "`\n";
   out_file << "- started_at_utc: `" << FormatUtcTimestamp(run_info.timestamps.started_at) << "`\n";
-  out_file << "- finished_at_utc: `" << FormatUtcTimestamp(run_info.timestamps.finished_at) << "`\n\n";
+  out_file << "- finished_at_utc: `" << FormatUtcTimestamp(run_info.timestamps.finished_at)
+           << "`\n\n";
 
   out_file << "## Key Metrics\n\n";
   out_file << "| Metric | Value |\n";

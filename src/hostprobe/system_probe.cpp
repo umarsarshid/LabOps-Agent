@@ -4,8 +4,8 @@
 #include <array>
 #include <cctype>
 #include <charconv>
-#include <cstdlib>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <fstream>
 #include <iomanip>
@@ -102,8 +102,8 @@ std::string FormatUtcTimestamp(std::chrono::system_clock::time_point timestamp) 
 #endif
 
   std::ostringstream out;
-  out << std::put_time(&utc_time, "%Y-%m-%dT%H:%M:%S") << '.' << std::setw(3)
-      << std::setfill('0') << millis_component << 'Z';
+  out << std::put_time(&utc_time, "%Y-%m-%dT%H:%M:%S") << '.' << std::setw(3) << std::setfill('0')
+      << millis_component << 'Z';
   return out.str();
 }
 
@@ -211,8 +211,7 @@ std::string NormalizeInterfaceName(std::string value) {
 
 std::optional<std::uint32_t> ParseFirstUnsigned(std::string_view text) {
   std::size_t start = 0;
-  while (start < text.size() &&
-         std::isdigit(static_cast<unsigned char>(text[start])) == 0) {
+  while (start < text.size() && std::isdigit(static_cast<unsigned char>(text[start])) == 0) {
     ++start;
   }
   if (start == text.size()) {
@@ -220,8 +219,7 @@ std::optional<std::uint32_t> ParseFirstUnsigned(std::string_view text) {
   }
 
   std::size_t end = start;
-  while (end < text.size() &&
-         std::isdigit(static_cast<unsigned char>(text[end])) != 0) {
+  while (end < text.size() && std::isdigit(static_cast<unsigned char>(text[end])) != 0) {
     ++end;
   }
 
@@ -266,12 +264,9 @@ std::optional<std::string> NormalizeLinkSpeedHint(std::string value) {
   }
 
   const bool has_speed_unit =
-      lower.find("mb/s") != std::string::npos ||
-      lower.find("mbps") != std::string::npos ||
-      lower.find("gb/s") != std::string::npos ||
-      lower.find("gbps") != std::string::npos ||
-      lower.find("tb/s") != std::string::npos ||
-      lower.find("tbps") != std::string::npos ||
+      lower.find("mb/s") != std::string::npos || lower.find("mbps") != std::string::npos ||
+      lower.find("gb/s") != std::string::npos || lower.find("gbps") != std::string::npos ||
+      lower.find("tb/s") != std::string::npos || lower.find("tbps") != std::string::npos ||
       lower.find("base") != std::string::npos;
   if (!has_digit || !has_speed_unit) {
     return std::nullopt;
@@ -302,30 +297,21 @@ bool HasRightBoundary(std::string_view text, std::size_t pos, std::size_t length
 bool IsLikelyGenericIdentifierToken(std::string_view token) {
   const std::string lower = ToLower(token);
   static const std::array<std::string_view, 8> kGenericTokens = {
-      "unknown",
-      "localhost",
-      "localdomain",
-      "default",
-      "none",
-      "n/a",
-      "na",
-      "user",
+      "unknown", "localhost", "localdomain", "default", "none", "n/a", "na", "user",
   };
   return std::find(kGenericTokens.begin(), kGenericTokens.end(), lower) != kGenericTokens.end();
 }
 
 std::string NormalizeIdentifierToken(std::string value) {
   value = Trim(value);
-  while (!value.empty() &&
-         (value.front() == '"' || value.front() == '\'' ||
-          value.front() == '(' || value.front() == '[' || value.front() == '{')) {
+  while (!value.empty() && (value.front() == '"' || value.front() == '\'' || value.front() == '(' ||
+                            value.front() == '[' || value.front() == '{')) {
     value.erase(value.begin());
     value = Trim(value);
   }
-  while (!value.empty() &&
-         (value.back() == '"' || value.back() == '\'' ||
-          value.back() == ')' || value.back() == ']' || value.back() == '}' ||
-          value.back() == ',' || value.back() == ';' || value.back() == ':')) {
+  while (!value.empty() && (value.back() == '"' || value.back() == '\'' || value.back() == ')' ||
+                            value.back() == ']' || value.back() == '}' || value.back() == ',' ||
+                            value.back() == ';' || value.back() == ':')) {
     value.pop_back();
     value = Trim(value);
   }
@@ -427,8 +413,7 @@ void RedactStringVector(std::vector<std::string>& values,
   }
 }
 
-void RedactNicHighlights(NicHighlights& highlights,
-                         const IdentifierRedactionContext& context) {
+void RedactNicHighlights(NicHighlights& highlights, const IdentifierRedactionContext& context) {
   RedactStringOptional(highlights.default_route_interface, context);
   for (auto& iface : highlights.interfaces) {
     RedactStringValue(iface.name, context);
@@ -642,7 +627,8 @@ void ParseLinuxIpAddressOutput(const std::string& output, NicHighlights& highlig
 
         const std::size_t second_colon = trimmed.find(':', name_start);
         if (second_colon != std::string::npos) {
-          current_iface = NormalizeInterfaceName(trimmed.substr(name_start, second_colon - name_start));
+          current_iface =
+              NormalizeInterfaceName(trimmed.substr(name_start, second_colon - name_start));
           if (!current_iface.empty()) {
             NicInterfaceHighlight& iface = GetOrCreateInterface(highlights, current_iface);
             if (const auto mtu = ExtractUnsignedAfterToken(trimmed, "mtu "); mtu.has_value()) {
@@ -872,8 +858,7 @@ void ParseWindowsIpconfigOutput(const std::string& output, NicHighlights& highli
       if (value.empty()) {
         value = trimmed;
       }
-      if (const auto speed = NormalizeLinkSpeedHint(value);
-          speed.has_value()) {
+      if (const auto speed = NormalizeLinkSpeedHint(value); speed.has_value()) {
         iface.link_speed_hint = speed.value();
       }
       continue;
@@ -961,7 +946,8 @@ void CollectMacNicProbe(NicProbeSnapshot& snapshot) {
   ParseMacNetstatRouteOutput(netstat_rn.output, snapshot.highlights);
   snapshot.raw_captures.push_back(std::move(netstat_rn));
 
-  NicCommandCapture route_default = CaptureCommand("nic_route_get_default.txt", "route -n get default");
+  NicCommandCapture route_default =
+      CaptureCommand("nic_route_get_default.txt", "route -n get default");
   ParseMacRouteGetDefaultOutput(route_default.output, snapshot.highlights);
   snapshot.raw_captures.push_back(std::move(route_default));
 
@@ -981,8 +967,7 @@ void CollectUnsupportedPlatformNicProbe(NicProbeSnapshot& snapshot) {
   unsupported.command = "unsupported_platform";
   unsupported.exit_code = 127;
   unsupported.command_available = false;
-  unsupported.output =
-      "Network probe is not implemented for this platform.\n";
+  unsupported.output = "Network probe is not implemented for this platform.\n";
   snapshot.raw_captures.push_back(std::move(unsupported));
 }
 
@@ -1000,7 +985,7 @@ std::string DetectOsName() {
 
 std::string DetectOsVersion() {
 #if defined(__linux__) || defined(__APPLE__)
-  struct utsname uts {};
+  struct utsname uts{};
   if (uname(&uts) == 0) {
     return std::string(uts.release);
   }
@@ -1031,8 +1016,7 @@ std::string ProbeCpuModel() {
 #elif defined(__APPLE__)
   char buffer[256] = {};
   std::size_t length = sizeof(buffer);
-  if (sysctlbyname("machdep.cpu.brand_string", buffer, &length, nullptr, 0) == 0 &&
-      length > 0U) {
+  if (sysctlbyname("machdep.cpu.brand_string", buffer, &length, nullptr, 0) == 0 && length > 0U) {
     return std::string(buffer);
   }
 #endif
@@ -1041,10 +1025,9 @@ std::string ProbeCpuModel() {
 
 std::uint64_t ProbeRamTotalBytes() {
 #if defined(__linux__)
-  struct sysinfo info {};
+  struct sysinfo info{};
   if (sysinfo(&info) == 0) {
-    return static_cast<std::uint64_t>(info.totalram) *
-           static_cast<std::uint64_t>(info.mem_unit);
+    return static_cast<std::uint64_t>(info.totalram) * static_cast<std::uint64_t>(info.mem_unit);
   }
 #elif defined(__APPLE__)
   std::uint64_t value = 0;
@@ -1053,7 +1036,7 @@ std::uint64_t ProbeRamTotalBytes() {
     return value;
   }
 #elif defined(_WIN32)
-  MEMORYSTATUSEX memory_status {};
+  MEMORYSTATUSEX memory_status{};
   memory_status.dwLength = sizeof(memory_status);
   if (GlobalMemoryStatusEx(&memory_status) != 0) {
     return static_cast<std::uint64_t>(memory_status.ullTotalPhys);
@@ -1064,27 +1047,26 @@ std::uint64_t ProbeRamTotalBytes() {
 
 std::uint64_t ProbeUptimeSeconds() {
 #if defined(__linux__)
-  struct sysinfo info {};
+  struct sysinfo info{};
   if (sysinfo(&info) == 0 && info.uptime >= 0) {
     return static_cast<std::uint64_t>(info.uptime);
   }
 #elif defined(__APPLE__)
   // Boot time via sysctl keeps this independent of sleep/wake counters.
-  struct timeval boot_time {};
+  struct timeval boot_time{};
   std::size_t length = sizeof(boot_time);
   int mib[2] = {CTL_KERN, KERN_BOOTTIME};
   if (sysctl(mib, 2, &boot_time, &length, nullptr, 0) == 0 && boot_time.tv_sec > 0) {
-    const auto now_seconds =
-        std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::system_clock::now().time_since_epoch())
-            .count();
+    const auto now_seconds = std::chrono::duration_cast<std::chrono::seconds>(
+                                 std::chrono::system_clock::now().time_since_epoch())
+                                 .count();
     if (now_seconds > static_cast<std::int64_t>(boot_time.tv_sec)) {
       return static_cast<std::uint64_t>(now_seconds - static_cast<std::int64_t>(boot_time.tv_sec));
     }
   }
 
   // Fallback for environments where kern.boottime is unavailable.
-  struct timespec uptime_spec {};
+  struct timespec uptime_spec{};
   if (clock_gettime(CLOCK_UPTIME_RAW, &uptime_spec) == 0 && uptime_spec.tv_sec >= 0) {
     return static_cast<std::uint64_t>(uptime_spec.tv_sec);
   }
@@ -1233,8 +1215,7 @@ void RedactHostProbeSnapshot(HostProbeSnapshot& snapshot,
   RedactNicHighlights(snapshot.nic_highlights, context);
 }
 
-void RedactNicProbeSnapshot(NicProbeSnapshot& snapshot,
-                            const IdentifierRedactionContext& context) {
+void RedactNicProbeSnapshot(NicProbeSnapshot& snapshot, const IdentifierRedactionContext& context) {
   RedactNicHighlights(snapshot.highlights, context);
   for (auto& capture : snapshot.raw_captures) {
     RedactStringValue(capture.file_name, context);
@@ -1253,8 +1234,7 @@ std::string ToJson(const HostProbeSnapshot& snapshot) {
       << "},"
       << "\"cpu\":{"
       << "\"model\":\"" << EscapeJson(snapshot.cpu_model) << "\","
-      << "\"logical_cores\":" << snapshot.cpu_logical_cores
-      << "},"
+      << "\"logical_cores\":" << snapshot.cpu_logical_cores << "},"
       << "\"ram_total_bytes\":" << snapshot.ram_total_bytes << ","
       << "\"uptime_seconds\":" << snapshot.uptime_seconds << ","
       << "\"load_avg\":{"

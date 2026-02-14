@@ -51,7 +51,8 @@ void UnsetEnvVar(const char* name) {
 
 class ScopedEnvOverride {
 public:
-  ScopedEnvOverride(const char* name, const char* value) : name_(name), previous_(ReadEnvVar(name)) {
+  ScopedEnvOverride(const char* name, const char* value)
+      : name_(name), previous_(ReadEnvVar(name)) {
     SetEnvVar(name_, value);
   }
 
@@ -105,11 +106,11 @@ int main() {
   host_snapshot.os_name = "linux-" + std::string(kHostToken);
   host_snapshot.os_version = "version-owned-by-" + std::string(kUserToken);
   host_snapshot.cpu_model = "cpu@" + std::string(kHostToken);
-  host_snapshot.nic_highlights.default_route_interface =
-      "route-via-" + std::string(kHostToken);
+  host_snapshot.nic_highlights.default_route_interface = "route-via-" + std::string(kHostToken);
   host_snapshot.nic_highlights.interfaces.push_back(labops::hostprobe::NicInterfaceHighlight{});
   host_snapshot.nic_highlights.interfaces.back().name = "iface-" + std::string(kHostToken);
-  host_snapshot.nic_highlights.interfaces.back().ipv4_addresses.push_back("owner-" + std::string(kUserToken));
+  host_snapshot.nic_highlights.interfaces.back().ipv4_addresses.push_back("owner-" +
+                                                                          std::string(kUserToken));
   host_snapshot.nic_highlights.interfaces.back().link_speed_hint =
       "speed-for-" + std::string(kHostToken);
 
@@ -118,9 +119,10 @@ int main() {
   nic_snapshot.raw_captures.push_back(labops::hostprobe::NicCommandCapture{});
   nic_snapshot.raw_captures.back().file_name = "nic_ip_a.txt";
   nic_snapshot.raw_captures.back().command = "ip a #" + std::string(kUserToken);
-  nic_snapshot.raw_captures.back().output =
-      "Host Name: " + std::string(kHostToken) + "\n"
-      "Profile Path: /Users/" + std::string(kUserToken) + "/workspace\n";
+  nic_snapshot.raw_captures.back().output = "Host Name: " + std::string(kHostToken) +
+                                            "\n"
+                                            "Profile Path: /Users/" +
+                                            std::string(kUserToken) + "/workspace\n";
 
   labops::hostprobe::RedactHostProbeSnapshot(host_snapshot, context);
   labops::hostprobe::RedactNicProbeSnapshot(nic_snapshot, context);

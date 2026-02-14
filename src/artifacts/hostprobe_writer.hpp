@@ -16,8 +16,7 @@ namespace labops::artifacts {
 // - returns false and sets `error` on failures.
 bool WriteHostProbeJson(const hostprobe::HostProbeSnapshot& snapshot,
                         const std::filesystem::path& output_dir,
-                        std::filesystem::path& written_path,
-                        std::string& error);
+                        std::filesystem::path& written_path, std::string& error);
 
 // Writes raw NIC command captures as text artifacts.
 //

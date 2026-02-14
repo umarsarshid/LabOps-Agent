@@ -142,7 +142,8 @@ bool CopyFileToStream(const fs::path& path, std::ofstream& out_file, std::string
   return true;
 }
 
-bool CollectBundleFiles(const fs::path& bundle_dir, std::vector<fs::path>& file_paths, std::string& error) {
+bool CollectBundleFiles(const fs::path& bundle_dir, std::vector<fs::path>& file_paths,
+                        std::string& error) {
   std::error_code ec;
   if (!fs::exists(bundle_dir, ec) || ec) {
     error = "bundle directory not found: " + bundle_dir.string();
@@ -256,15 +257,15 @@ bool WriteBundleZip(const fs::path& bundle_dir, fs::path& written_path, std::str
 
     WriteU32(out_file, kLocalFileHeaderSignature);
     WriteU16(out_file, kZipVersion);
-    WriteU16(out_file, 0);                      // general purpose bit flag
+    WriteU16(out_file, 0); // general purpose bit flag
     WriteU16(out_file, kCompressionMethodStore);
-    WriteU16(out_file, 0);                      // last mod file time
-    WriteU16(out_file, 0);                      // last mod file date
+    WriteU16(out_file, 0); // last mod file time
+    WriteU16(out_file, 0); // last mod file date
     WriteU32(out_file, entry.crc32);
-    WriteU32(out_file, entry.size_bytes);       // compressed size (store)
-    WriteU32(out_file, entry.size_bytes);       // uncompressed size
+    WriteU32(out_file, entry.size_bytes); // compressed size (store)
+    WriteU32(out_file, entry.size_bytes); // uncompressed size
     WriteU16(out_file, static_cast<std::uint16_t>(entry.zip_path.size()));
-    WriteU16(out_file, 0);                      // extra field length
+    WriteU16(out_file, 0); // extra field length
     out_file.write(entry.zip_path.data(), static_cast<std::streamsize>(entry.zip_path.size()));
     if (!out_file) {
       error = "failed while writing zip local file header";
@@ -287,21 +288,21 @@ bool WriteBundleZip(const fs::path& bundle_dir, fs::path& written_path, std::str
   // Central directory entries.
   for (const auto& entry : files) {
     WriteU32(out_file, kCentralDirectoryHeaderSignature);
-    WriteU16(out_file, kZipVersion);            // version made by
-    WriteU16(out_file, kZipVersion);            // version needed to extract
-    WriteU16(out_file, 0);                      // general purpose bit flag
+    WriteU16(out_file, kZipVersion); // version made by
+    WriteU16(out_file, kZipVersion); // version needed to extract
+    WriteU16(out_file, 0);           // general purpose bit flag
     WriteU16(out_file, kCompressionMethodStore);
-    WriteU16(out_file, 0);                      // last mod file time
-    WriteU16(out_file, 0);                      // last mod file date
+    WriteU16(out_file, 0); // last mod file time
+    WriteU16(out_file, 0); // last mod file date
     WriteU32(out_file, entry.crc32);
-    WriteU32(out_file, entry.size_bytes);       // compressed size
-    WriteU32(out_file, entry.size_bytes);       // uncompressed size
+    WriteU32(out_file, entry.size_bytes); // compressed size
+    WriteU32(out_file, entry.size_bytes); // uncompressed size
     WriteU16(out_file, static_cast<std::uint16_t>(entry.zip_path.size()));
-    WriteU16(out_file, 0);                      // extra field length
-    WriteU16(out_file, 0);                      // file comment length
-    WriteU16(out_file, 0);                      // disk number start
-    WriteU16(out_file, 0);                      // internal file attributes
-    WriteU32(out_file, 0);                      // external file attributes
+    WriteU16(out_file, 0); // extra field length
+    WriteU16(out_file, 0); // file comment length
+    WriteU16(out_file, 0); // disk number start
+    WriteU16(out_file, 0); // internal file attributes
+    WriteU32(out_file, 0); // external file attributes
     WriteU32(out_file, entry.local_header_offset);
     out_file.write(entry.zip_path.data(), static_cast<std::streamsize>(entry.zip_path.size()));
     if (!out_file) {
@@ -311,7 +312,8 @@ bool WriteBundleZip(const fs::path& bundle_dir, fs::path& written_path, std::str
   }
 
   const std::streamoff central_dir_end_stream = out_file.tellp();
-  if (central_dir_end_stream < 0 || static_cast<std::uint64_t>(central_dir_end_stream) > 0xFFFFFFFFULL) {
+  if (central_dir_end_stream < 0 ||
+      static_cast<std::uint64_t>(central_dir_end_stream) > 0xFFFFFFFFULL) {
     error = "zip central directory size overflow";
     return false;
   }

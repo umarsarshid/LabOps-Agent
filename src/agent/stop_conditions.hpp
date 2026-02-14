@@ -58,9 +58,7 @@ const char* ToString(StopReason reason);
 // Contract:
 // - true: decision is valid and `error` is empty.
 // - false: input/config invalid; `error` explains why.
-bool EvaluateStopConditions(const StopConfig& config,
-                            const StopInput& input,
-                            StopDecision& decision,
-                            std::string& error);
+bool EvaluateStopConditions(const StopConfig& config, const StopInput& input,
+                            StopDecision& decision, std::string& error);
 
 } // namespace labops::agent

@@ -80,10 +80,7 @@ labops::metrics::FpsReport RunWithDropEveryN(std::uint32_t drop_every_n,
   }
 
   labops::metrics::FpsReport report;
-  if (!labops::metrics::ComputeFpsReport(frames,
-                                         duration,
-                                         std::chrono::milliseconds(1000),
-                                         report,
+  if (!labops::metrics::ComputeFpsReport(frames, duration, std::chrono::milliseconds(1000), report,
                                          error)) {
     Fail("ComputeFpsReport failed: " + error);
   }

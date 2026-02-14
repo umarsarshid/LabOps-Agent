@@ -1,5 +1,5 @@
-#include "labops/cli/router.hpp"
 #include "core/errors/exit_codes.hpp"
+#include "labops/cli/router.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -70,7 +70,8 @@ int main() {
   const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                           std::chrono::system_clock::now().time_since_epoch())
                           .count();
-  const fs::path temp_root = fs::temp_directory_path() / ("labops-threshold-fail-" + std::to_string(now_ms));
+  const fs::path temp_root =
+      fs::temp_directory_path() / ("labops-threshold-fail-" + std::to_string(now_ms));
   const fs::path scenario_path = temp_root / "threshold_fail_scenario.json";
   const fs::path out_dir = temp_root / "out";
 
@@ -110,11 +111,7 @@ int main() {
   }
 
   std::vector<std::string> argv_storage = {
-      "labops",
-      "run",
-      scenario_path.string(),
-      "--out",
-      out_dir.string(),
+      "labops", "run", scenario_path.string(), "--out", out_dir.string(),
   };
   std::vector<char*> argv;
   argv.reserve(argv_storage.size());
@@ -123,8 +120,7 @@ int main() {
   }
 
   const int exit_code = labops::cli::Dispatch(static_cast<int>(argv.size()), argv.data());
-  if (exit_code != labops::core::errors::ToInt(
-                       labops::core::errors::ExitCode::kThresholdsFailed)) {
+  if (exit_code != labops::core::errors::ToInt(labops::core::errors::ExitCode::kThresholdsFailed)) {
     Fail("expected thresholds-failed exit code on threshold violation");
   }
 

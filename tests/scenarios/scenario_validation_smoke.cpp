@@ -20,8 +20,7 @@ void Fail(std::string_view message) {
 bool ContainsIssue(const labops::scenarios::ValidationReport& report, std::string_view path,
                    std::string_view message_substring) {
   for (const auto& issue : report.issues) {
-    if (issue.path == path &&
-        issue.message.find(message_substring) != std::string::npos) {
+    if (issue.path == path && issue.message.find(message_substring) != std::string::npos) {
       return true;
     }
   }
@@ -86,7 +85,8 @@ int main() {
       profile << "{\n"
               << "  \"profile_id\": \"jitter_light\",\n"
               << "  \"description\": \"smoke profile\",\n"
-              << "  \"netem\": { \"delay_ms\": 5, \"jitter_ms\": 2, \"loss_percent\": 0, \"reorder_percent\": 0 }\n"
+              << "  \"netem\": { \"delay_ms\": 5, \"jitter_ms\": 2, \"loss_percent\": 0, "
+                 "\"reorder_percent\": 0 }\n"
               << "}\n";
     }
 
@@ -129,7 +129,8 @@ int main() {
       labops::scenarios::ValidationReport report;
       std::string error;
       if (!labops::scenarios::ValidateScenarioFile(invalid_scenario_path.string(), report, error)) {
-        Fail("ValidateScenarioFile failed unexpectedly for missing netem profile scenario: " + error);
+        Fail("ValidateScenarioFile failed unexpectedly for missing netem profile scenario: " +
+             error);
       }
       if (report.valid) {
         Fail("expected scenario with missing netem profile to fail validation");

@@ -1,5 +1,5 @@
-#include "labops/cli/router.hpp"
 #include "core/errors/exit_codes.hpp"
+#include "labops/cli/router.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -34,7 +34,8 @@ int main() {
   const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                           std::chrono::system_clock::now().time_since_epoch())
                           .count();
-  const fs::path temp_root = fs::temp_directory_path() / ("labops-validate-smoke-" + std::to_string(now_ms));
+  const fs::path temp_root =
+      fs::temp_directory_path() / ("labops-validate-smoke-" + std::to_string(now_ms));
   const fs::path scenario_path = temp_root / "invalid.json";
 
   std::error_code ec;
@@ -72,8 +73,7 @@ int main() {
   const int exit_code = labops::cli::Dispatch(static_cast<int>(argv.size()), argv.data());
   std::cerr.rdbuf(original_cerr);
 
-  if (exit_code != labops::core::errors::ToInt(
-                       labops::core::errors::ExitCode::kSchemaInvalid)) {
+  if (exit_code != labops::core::errors::ToInt(labops::core::errors::ExitCode::kSchemaInvalid)) {
     Fail("validate should return schema-invalid exit code for invalid scenario");
   }
 

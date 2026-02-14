@@ -17,7 +17,6 @@ namespace labops::artifacts {
 // - Returns false on failure and populates `error`.
 bool WriteBundleManifestJson(const std::filesystem::path& bundle_dir,
                              const std::vector<std::filesystem::path>& artifact_paths,
-                             std::filesystem::path& written_path,
-                             std::string& error);
+                             std::filesystem::path& written_path, std::string& error);
 
 } // namespace labops::artifacts

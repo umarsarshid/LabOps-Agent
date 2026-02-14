@@ -19,8 +19,7 @@ void AssertContains(std::string_view text, std::string_view needle) {
   }
 }
 
-labops::agent::ResultRow MakeRow(std::string variable_name,
-                                 std::string variable_value,
+labops::agent::ResultRow MakeRow(std::string variable_name, std::string variable_value,
                                  labops::agent::ResultStatus result) {
   labops::agent::ResultRow row;
   row.variable_name = std::move(variable_name);

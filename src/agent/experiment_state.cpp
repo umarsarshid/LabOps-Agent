@@ -176,10 +176,9 @@ std::string ToJson(const ExperimentState& state) {
       << "\"updated_at_utc\":\"" << FormatUtcTimestamp(state.updated_at) << "\","
       << "\"next_action\":\"" << EscapeJson(state.next_action) << "\","
       << "\"hypotheses\":" << SerializeArray<Hypothesis>(state.hypotheses, &ToJson) << ","
-      << "\"tested_variables\":"
-      << SerializeArray<TestedVariable>(state.tested_variables, &ToJson) << ","
-      << "\"results_table\":" << SerializeArray<ResultRow>(state.results_table, &ToJson)
-      << "}";
+      << "\"tested_variables\":" << SerializeArray<TestedVariable>(state.tested_variables, &ToJson)
+      << ","
+      << "\"results_table\":" << SerializeArray<ResultRow>(state.results_table, &ToJson) << "}";
   return out.str();
 }
 
