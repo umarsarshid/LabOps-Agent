@@ -19,6 +19,11 @@ Engineers need objective numbers, not only logs. This module turns event traces 
   - drop stats (`total dropped`, `drop rate percent`)
   - inter-frame interval stats (`min/avg/p95`) in microseconds
   - inter-frame jitter stats (`min/avg/p95`) in microseconds
+- `anomalies.hpp/.cpp`: derives concise run-summary anomaly highlights from
+  metric signals, including named heuristics:
+  - `resend spike`
+  - `jitter cliff`
+  - `periodic stall`
 - Serialization of metric artifacts (`metrics.csv` and `metrics.json`) lives in
   `src/artifacts/` so output contracts stay centralized.
 

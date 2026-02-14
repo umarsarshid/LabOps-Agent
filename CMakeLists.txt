@@ -84,6 +84,7 @@ target_compile_features(labops_agent PUBLIC cxx_std_20)
 
 # Metrics formulas and writers for run performance outputs.
 add_library(labops_metrics
+  src/metrics/anomalies.cpp
   src/metrics/fps.cpp
 )
 target_include_directories(labops_metrics PUBLIC src)
@@ -465,6 +466,14 @@ add_executable(drop_injection_smoke
 target_link_libraries(drop_injection_smoke PRIVATE labops_artifacts labops_backends labops_metrics)
 target_compile_features(drop_injection_smoke PRIVATE cxx_std_20)
 add_test(NAME drop_injection_smoke COMMAND drop_injection_smoke)
+
+# Smoke test for named anomaly heuristics in run-summary highlights.
+add_executable(anomaly_detection_smoke
+  tests/metrics/anomaly_detection_smoke.cpp
+)
+target_link_libraries(anomaly_detection_smoke PRIVATE labops_metrics)
+target_compile_features(anomaly_detection_smoke PRIVATE cxx_std_20)
+add_test(NAME anomaly_detection_smoke COMMAND anomaly_detection_smoke)
 
 # Smoke test validating that host/user identifiers are redacted from host probe
 # JSON and raw NIC command outputs when redaction is applied.

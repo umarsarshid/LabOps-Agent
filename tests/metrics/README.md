@@ -16,6 +16,9 @@ formula behavior and output artifacts so regressions are caught early.
   timing metrics (`jitter avg` and `interval p95` increase with higher jitter).
 - `drop_injection_smoke.cpp`: verifies deterministic drop injection produces
   expected drop totals and drop-rate percent in computed metrics.
+- `anomaly_detection_smoke.cpp`: verifies named anomaly heuristics
+  (`resend spike`, `jitter cliff`, `periodic stall`) are detected and emitted
+  for run-summary highlights.
 
 ## Connection to the project
 

@@ -107,6 +107,8 @@ ordering, plus an OAAT variant generator that writes scenario mutations to
   - computes drop stats (`total dropped`, `drop rate percent`)
   - computes inter-frame interval stats (`min/avg/p95-ish`)
   - computes inter-frame jitter stats (`min/avg/p95-ish`)
+  - derives named anomaly heuristics for summary output:
+    `resend spike`, `jitter cliff`, `periodic stall`
   - writes `<out>/<run_id>/metrics.csv` and `<out>/<run_id>/metrics.json`
 - One-page run summary pipeline:
   - writes `<out>/<run_id>/summary.md`

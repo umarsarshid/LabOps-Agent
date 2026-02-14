@@ -28,7 +28,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Compute and write run metrics (`metrics.csv` + `metrics.json`) for FPS,
   drop, and timing/jitter reporting.
 - Generate one-page `summary.md` per run with pass/fail, key metrics, and top
-  anomalies for quick human triage, including optional manual netem
+  anomalies for quick human triage, including named heuristics (`resend spike`,
+  `jitter cliff`, `periodic stall`) plus optional manual netem
   apply/show/teardown suggestions when `netem_profile` is configured.
 - Generate static `report.html` per run for browser-based review with no JS,
   including plots-ready metric and delta tables.

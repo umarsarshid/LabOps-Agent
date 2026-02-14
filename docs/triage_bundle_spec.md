@@ -281,6 +281,10 @@ Current sections:
 - `Key Metrics` table
 - `Threshold Checks`
 - `Top Anomalies`
+  - currently surfaces named metric heuristics when detected:
+    - `Resend spike`
+    - `Jitter cliff`
+    - `Periodic stall`
 - optional `Netem Commands (Manual)` when scenario references a valid
   `netem_profile`
 
