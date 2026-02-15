@@ -119,6 +119,9 @@ int main() {
   if (!fs::exists(bundle_dir / "hostprobe.json")) {
     Fail("hostprobe.json missing for backend-connect-fail run");
   }
+  if (!fs::exists(bundle_dir / "run.json")) {
+    Fail("run.json missing for backend-connect-fail run");
+  }
 
   fs::remove_all(temp_root, ec);
   std::cout << "run_backend_connect_failure_smoke: ok\n";

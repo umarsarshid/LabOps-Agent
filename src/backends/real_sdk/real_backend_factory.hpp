@@ -18,6 +18,8 @@ struct DeviceInfo {
   std::string transport;
   std::optional<std::string> ip_address;
   std::optional<std::string> mac_address;
+  std::optional<std::string> firmware_version;
+  std::optional<std::string> sdk_version;
 };
 
 // Flexible selector contract used by CLI and scenario files.

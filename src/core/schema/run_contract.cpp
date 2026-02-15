@@ -86,11 +86,34 @@ std::string ToJson(const RunConfig& run_config) {
   return out.str();
 }
 
+std::string ToJson(const RealDeviceMetadata& real_device) {
+  std::ostringstream out;
+  out << "{"
+      << "\"model\":\"" << EscapeJson(real_device.model) << "\","
+      << "\"serial\":\"" << EscapeJson(real_device.serial) << "\","
+      << "\"transport\":\"" << EscapeJson(real_device.transport) << "\"";
+  if (real_device.user_id.has_value()) {
+    out << ",\"user_id\":\"" << EscapeJson(real_device.user_id.value()) << "\"";
+  }
+  if (real_device.firmware_version.has_value()) {
+    out << ",\"firmware_version\":\"" << EscapeJson(real_device.firmware_version.value()) << "\"";
+  }
+  if (real_device.sdk_version.has_value()) {
+    out << ",\"sdk_version\":\"" << EscapeJson(real_device.sdk_version.value()) << "\"";
+  }
+  out << "}";
+  return out.str();
+}
+
 std::string ToJson(const RunInfo& run_info) {
   std::ostringstream out;
   out << "{"
       << "\"run_id\":\"" << EscapeJson(run_info.run_id) << "\","
-      << "\"config\":" << ToJson(run_info.config) << ","
+      << "\"config\":" << ToJson(run_info.config);
+  if (run_info.real_device.has_value()) {
+    out << ",\"real_device\":" << ToJson(run_info.real_device.value());
+  }
+  out << ","
       << "\"timestamps\":{"
       << "\"created_at_utc\":\"" << FormatUtcTimestamp(run_info.timestamps.created_at) << "\","
       << "\"started_at_utc\":\"" << FormatUtcTimestamp(run_info.timestamps.started_at) << "\","

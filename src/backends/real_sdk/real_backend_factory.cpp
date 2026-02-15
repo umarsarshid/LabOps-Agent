@@ -26,6 +26,8 @@ struct SdkDeviceDescriptor {
   std::string transport;
   std::string ip_address;
   std::string mac_address;
+  std::string firmware_version;
+  std::string sdk_version;
 };
 
 std::string Trim(std::string_view input) {
@@ -109,6 +111,8 @@ bool ParseDescriptorCsvLine(const std::string& line, const std::size_t line_numb
   descriptor.transport = fields[3];
   descriptor.ip_address = fields.size() >= 5U ? fields[4] : "";
   descriptor.mac_address = fields.size() >= 6U ? fields[5] : "";
+  descriptor.firmware_version = fields.size() >= 7U ? fields[6] : "";
+  descriptor.sdk_version = fields.size() >= 8U ? fields[7] : "";
   return true;
 }
 
@@ -215,6 +219,8 @@ DeviceInfo MapDescriptorToDeviceInfo(const SdkDeviceDescriptor& descriptor) {
   info.transport = NormalizeTransport(descriptor.transport);
   info.ip_address = NormalizeOptionalField(descriptor.ip_address);
   info.mac_address = NormalizeMac(descriptor.mac_address);
+  info.firmware_version = NormalizeOptionalField(descriptor.firmware_version);
+  info.sdk_version = NormalizeOptionalField(descriptor.sdk_version);
   return info;
 }
 

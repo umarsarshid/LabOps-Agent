@@ -90,10 +90,10 @@ void WriteFixtureCsv(const fs::path& path) {
   if (!out) {
     Fail("failed to open fixture output file");
   }
-  out << "# model,serial,user_id,transport,ip,mac\n";
-  out << "model,serial,user_id,transport,ip,mac\n";
-  out << "acA1920-40gm,SN-001,LineCamA,Gig E,192.168.10.11,aa-bb-cc-dd-ee-ff\n";
-  out << "VisionPro ,, ,USB3VISION,,\n";
+  out << "# model,serial,user_id,transport,ip,mac,firmware_version,sdk_version\n";
+  out << "model,serial,user_id,transport,ip,mac,firmware_version,sdk_version\n";
+  out << "acA1920-40gm,SN-001,LineCamA,Gig E,192.168.10.11,aa-bb-cc-dd-ee-ff,3.2.1,21.1.8\n";
+  out << "VisionPro ,, ,USB3VISION,,,,\n";
 }
 
 } // namespace
@@ -143,13 +143,21 @@ int main() {
         devices[0].mac_address.value() != "AA:BB:CC:DD:EE:FF") {
       Fail("expected normalized first device MAC address");
     }
+    if (!devices[0].firmware_version.has_value() ||
+        devices[0].firmware_version.value() != "3.2.1") {
+      Fail("expected first device firmware version");
+    }
+    if (!devices[0].sdk_version.has_value() || devices[0].sdk_version.value() != "21.1.8") {
+      Fail("expected first device sdk version");
+    }
 
     if (devices[1].model != "VisionPro" || devices[1].serial != "unknown_serial" ||
         devices[1].transport != "usb") {
       Fail("unexpected normalized fields for second device");
     }
-    if (devices[1].ip_address.has_value() || devices[1].mac_address.has_value()) {
-      Fail("expected empty optional network fields for second device");
+    if (devices[1].ip_address.has_value() || devices[1].mac_address.has_value() ||
+        devices[1].firmware_version.has_value() || devices[1].sdk_version.has_value()) {
+      Fail("expected empty optional fields for second device");
     }
   } else {
     if (ok) {

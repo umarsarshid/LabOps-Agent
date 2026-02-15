@@ -107,9 +107,9 @@ fs::path MakeFixtureFile() {
     Fail("failed to open fixture file");
   }
 
-  out << "model,serial,user_id,transport,ip,mac\n";
-  out << "SprintCam,SN-1001,Primary,GigE,10.0.0.21,aa-bb-cc-dd-ee-01\n";
-  out << "SprintCam,SN-1002,,USB3VISION,,\n";
+  out << "model,serial,user_id,transport,ip,mac,firmware_version,sdk_version\n";
+  out << "SprintCam,SN-1001,Primary,GigE,10.0.0.21,aa-bb-cc-dd-ee-01,3.2.1,21.1.8\n";
+  out << "SprintCam,SN-1002,,USB3VISION,,,,\n";
   return fixture_path;
 }
 
@@ -158,6 +158,8 @@ int main() {
     AssertContains(stdout_text, "device[0].serial: SN-1001");
     AssertContains(stdout_text, "device[0].user_id: Primary");
     AssertContains(stdout_text, "device[0].transport: gige");
+    AssertContains(stdout_text, "device[0].firmware_version: 3.2.1");
+    AssertContains(stdout_text, "device[0].sdk_version: 21.1.8");
     AssertContains(stdout_text, "device[0].ip: 10.0.0.21");
     AssertContains(stdout_text, "device[0].mac: AA:BB:CC:DD:EE:01");
     AssertContains(stdout_text, "device[1].serial: SN-1002");

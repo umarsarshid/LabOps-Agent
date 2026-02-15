@@ -48,7 +48,8 @@ Current high-level write sequence:
 5. optional netem impairment is applied when `--apply-netem` is requested.
 6. `events.jsonl` receives lifecycle and frame events.
 7. netem teardown is attempted on run exit when apply succeeded.
-8. `run.json` is written after stream completion.
+8. `run.json` is written after stream completion (or earlier on certain
+   backend initialization failures so run metadata is still preserved).
 9. `metrics.csv` and `metrics.json` are written.
 10. `summary.md` is written as a one-page human triage report.
 11. `report.html` is written as a static browser triage report (no JS).
@@ -90,7 +91,7 @@ Optional output:
 | `scenario.json` | yes | scenario writer | Preserves exact scenario input used for run reproducibility. |
 | `hostprobe.json` | yes | host probe writer | Captures host OS/CPU/RAM/uptime/load context and parsed NIC highlights (including MTU/link hints when available). |
 | `nic_*.txt` | yes | host probe writer | Raw NIC command outputs (platform-specific command set). |
-| `run.json` | yes | run writer | Captures run identity, immutable config, and run timestamps. |
+| `run.json` | yes | run writer | Captures run identity, immutable config, optional real-device identity/version metadata, and run timestamps. |
 | `events.jsonl` | yes | event writer | Timeline-level evidence for stream behavior and failures. |
 | `metrics.csv` | yes | metrics writer | Human-readable metrics for spreadsheets and quick plotting. |
 | `metrics.json` | yes | metrics writer | Machine-readable metrics for automation and agent parsing. |
@@ -116,9 +117,17 @@ Canonical structure:
   "run_id": "run-1771018464116",
   "config": {
     "scenario_id": "labops-scenario",
-    "backend": "sim",
+    "backend": "real_stub",
     "seed": 777,
     "duration_ms": 1200
+  },
+  "real_device": {
+    "model": "SprintCam",
+    "serial": "SN-2000",
+    "transport": "usb",
+    "user_id": "Secondary",
+    "firmware_version": "4.0.0",
+    "sdk_version": "21.1.8"
   },
   "timestamps": {
     "created_at_utc": "2026-02-13T21:34:24.116Z",
@@ -132,6 +141,10 @@ Field notes:
 
 - `scenario_id`: currently derived from scenario filename stem
 - `backend`: currently `sim` in default flow
+- `real_device`: optional; present when run resolved a concrete real camera
+  - `model`, `serial`, `transport` are required when `real_device` exists
+  - `firmware_version` is included when the SDK/discovery source exposes it
+  - `sdk_version` is always captured for real-device runs (`unknown` fallback)
 - `timestamps.*`: UTC with millisecond precision (`YYYY-MM-DDTHH:MM:SS.mmmZ`)
 
 ### `hostprobe.json`

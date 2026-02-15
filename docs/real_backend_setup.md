@@ -47,9 +47,9 @@ provide a descriptor fixture:
 
 ```bash
 cat > tmp/devices.csv <<'CSV'
-model,serial,user_id,transport,ip,mac
-SprintCam,SN-1001,Primary,GigE,10.0.0.21,aa-bb-cc-dd-ee-01
-SprintCam,SN-1002,,USB3VISION,,
+model,serial,user_id,transport,ip,mac,firmware_version,sdk_version
+SprintCam,SN-1001,Primary,GigE,10.0.0.21,aa-bb-cc-dd-ee-01,3.2.1,21.1.8
+SprintCam,SN-1002,,USB3VISION,,,4.0.0,21.1.8
 CSV
 
 export LABOPS_REAL_DEVICE_FIXTURE="$(pwd)/tmp/devices.csv"
@@ -59,6 +59,10 @@ export LABOPS_REAL_DEVICE_FIXTURE="$(pwd)/tmp/devices.csv"
 ./tmp/build-real/labops run <scenario_with_backend_real_stub.json> --out tmp/runs --device serial:SN-1001
 ./tmp/build-real/labops baseline capture <scenario_with_backend_real_stub.json> --device user_id:Primary,index:0
 ```
+
+When selector resolution succeeds, `run.json` will include real-device identity
+metadata (`model`, `serial`, `transport`) and version fields
+(`firmware_version` when exposed, `sdk_version` with `unknown` fallback).
 
 Selector format supported by `--device` and scenario `device_selector`:
 

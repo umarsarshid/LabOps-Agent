@@ -44,7 +44,8 @@ surface (argument parsing + runtime orchestration + artifact/event output).
   `FAIL`.
 - `run_backend_connect_failure_smoke.cpp`: verifies `backend: real_stub`
   triggers a deterministic backend connection failure and returns the
-  backend-connect-failed exit code.
+  backend-connect-failed exit code while still emitting early evidence
+  (`scenario.json`, `hostprobe.json`, `run.json`).
 - `netem_option_contract_smoke.cpp`: verifies netem execution flags are used
   safely (`--apply-netem` requires `--netem-iface <iface>` and vice versa).
 - `logging_contract_smoke.cpp`: verifies structured run logs honor
@@ -55,12 +56,14 @@ surface (argument parsing + runtime orchestration + artifact/event output).
 - `list_devices_real_backend_smoke.cpp`: verifies
   `labops list-devices --backend real` returns device-list output when real
   backend is enabled (including normalized model/serial/user_id/transport and
-  optional IP/MAC fields from descriptor fixture data) and friendly
+  optional IP/MAC plus optional firmware/SDK version fields from descriptor
+  fixture data) and friendly
   `BACKEND_NOT_AVAILABLE` messaging when disabled.
 - `run_device_selector_resolution_smoke.cpp`: verifies
   `labops run ... --device <selector>` resolves the requested real device
-  deterministically, logs selected identity fields, and follows expected
-  exit-code behavior for both real-enabled and real-disabled builds.
+  deterministically, logs selected identity/version fields, writes `run.json`
+  with `real_device` metadata, and follows expected exit-code behavior for both
+  real-enabled and real-disabled builds.
 - `kb_draft_from_run_folder_smoke.cpp`: verifies `labops kb draft --run <dir>`
   generates `kb_draft.md` from `engineer_packet.md` with populated run-context,
   repro, hypothesis, and evidence-link sections.

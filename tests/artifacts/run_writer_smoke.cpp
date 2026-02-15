@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <optional>
 #include <string_view>
 
 namespace fs = std::filesystem;
@@ -41,6 +42,14 @@ int main() {
   run_info.config.backend = "sim";
   run_info.config.seed = 7;
   run_info.config.duration = std::chrono::minutes(10);
+  run_info.real_device = labops::core::schema::RealDeviceMetadata{
+      .model = "SprintCam",
+      .serial = "SN-001",
+      .transport = "gige",
+      .user_id = std::optional<std::string>("LineCamA"),
+      .firmware_version = std::optional<std::string>("4.5.6"),
+      .sdk_version = std::optional<std::string>("21.1.8"),
+  };
   run_info.timestamps.created_at = now;
   run_info.timestamps.started_at = now;
   run_info.timestamps.finished_at = now;
@@ -74,6 +83,11 @@ int main() {
   AssertContains(content, "\"backend\":\"sim\"");
   AssertContains(content, "\"seed\":7");
   AssertContains(content, "\"duration_ms\":600000");
+  AssertContains(content, "\"real_device\":");
+  AssertContains(content, "\"model\":\"SprintCam\"");
+  AssertContains(content, "\"serial\":\"SN-001\"");
+  AssertContains(content, "\"firmware_version\":\"4.5.6\"");
+  AssertContains(content, "\"sdk_version\":\"21.1.8\"");
   AssertContains(content, "\"timestamps\":");
 
   fs::remove_all(out_dir, cleanup_ec);

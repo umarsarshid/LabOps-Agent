@@ -21,7 +21,7 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
   available; returns friendly `BACKEND_NOT_AVAILABLE` messaging when the real
   backend is disabled in current build/runtime configuration; when enabled,
   prints per-device identity fields (`model`, `serial`, `user_id`, `transport`,
-  optional `ip`/`mac`).
+  optional `ip`/`mac`, optional `firmware_version`/`sdk_version`).
 - `labops validate <scenario.json>`: validates scenario schema and prints
   actionable field-level errors when invalid.
 - `labops run <scenario.json> --out <dir> [--device <selector>] [--zip] [--redact] [--soak --checkpoint-interval-ms <ms> [--soak-stop-file <path>] [--resume <checkpoint.json>]] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: emits a per-run bundle under
@@ -38,7 +38,9 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
   stop/resume; runs sim backend lifecycle;
   when backend is `real_stub`, optional `--device` resolves one connected
   device by `serial:<value>` or `user_id:<value>` and optional `index:<n>`
-  before connect so run selection is deterministic;
+  before connect so run selection is deterministic; writes `run.json` early on
+  backend-connect failure so selected device metadata is still preserved in
+  evidence;
   evaluates configured scenario thresholds against computed metrics; returns
   non-zero when thresholds fail; and reports output paths.
 - `labops baseline capture <scenario.json> [--redact] [--device <selector>] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: captures a scenario baseline into

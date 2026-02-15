@@ -10,7 +10,8 @@ validate that core contracts remain serializable and preserve required fields.
 ## Current contents
 
 - `run_contract_json_smoke.cpp`: checks `RunConfig` and `RunInfo` JSON output
-  includes required keys and timestamp fields.
+  includes required keys, optional real-device metadata fields, and timestamp
+  fields.
 
 ## Connection to the project
 

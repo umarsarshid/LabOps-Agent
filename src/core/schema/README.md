@@ -18,6 +18,12 @@ Keeping canonical schema types here gives every module one source of truth.
 
 - `RunConfig` captures immutable run inputs (scenario/backend/seed/duration).
 - `RunInfo` captures run identity plus lifecycle timestamps.
+- `RunInfo.real_device` (optional) captures resolved physical-camera identity
+  and version evidence for real runs:
+  - `model`, `serial`, `transport`
+  - optional `user_id`
+  - optional `firmware_version` (when source exposes it)
+  - `sdk_version` for real-device runs (`unknown` fallback when unavailable)
 - JSON serialization is canonical and deterministic for stable snapshots and
   artifact diffs.
 

@@ -17,7 +17,8 @@ Then you can compare that run to a known-good run (baseline) to see what changed
 
 For each run, you get a folder with files like:
 
-- `run.json`: run settings and metadata
+- `run.json`: run settings and metadata (and for real runs: resolved camera
+  model/serial/transport plus firmware/SDK version evidence when available)
 - `events.jsonl`: timeline of stream events
 - `metrics.csv` and `metrics.json`: FPS, drops, timing numbers
 - `summary.md`: quick human-readable summary
@@ -52,9 +53,9 @@ open-source repo, provide a descriptor CSV:
 
 ```bash
 cat > tmp/devices.csv <<'CSV'
-model,serial,user_id,transport,ip,mac
-SprintCam,SN-1001,Primary,GigE,10.0.0.21,aa-bb-cc-dd-ee-01
-SprintCam,SN-1002,,USB3VISION,,
+model,serial,user_id,transport,ip,mac,firmware_version,sdk_version
+SprintCam,SN-1001,Primary,GigE,10.0.0.21,aa-bb-cc-dd-ee-01,3.2.1,21.1.8
+SprintCam,SN-1002,,USB3VISION,,,4.0.0,21.1.8
 CSV
 LABOPS_REAL_DEVICE_FIXTURE="$(pwd)/tmp/devices.csv" ./tmp/build/labops list-devices --backend real
 ```

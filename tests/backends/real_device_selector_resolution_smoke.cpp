@@ -90,10 +90,10 @@ void WriteFixtureCsv(const fs::path& path) {
   if (!out) {
     Fail("failed to open fixture output file");
   }
-  out << "model,serial,user_id,transport,ip,mac\n";
-  out << "SprintCam,SN-1001,Primary,GigE,10.0.0.21,aa-bb-cc-dd-ee-01\n";
-  out << "SprintCam,SN-1001,Primary,GigE,10.0.0.22,aa-bb-cc-dd-ee-02\n";
-  out << "SprintCam,SN-2000,Secondary,USB3VISION,,\n";
+  out << "model,serial,user_id,transport,ip,mac,firmware_version,sdk_version\n";
+  out << "SprintCam,SN-1001,Primary,GigE,10.0.0.21,aa-bb-cc-dd-ee-01,1.0.0,21.1.8\n";
+  out << "SprintCam,SN-1001,Primary,GigE,10.0.0.22,aa-bb-cc-dd-ee-02,1.0.1,21.1.8\n";
+  out << "SprintCam,SN-2000,Secondary,USB3VISION,,,2.4.0,21.1.8\n";
 }
 
 } // namespace
@@ -114,6 +114,8 @@ int main() {
           .transport = "gige",
           .ip_address = std::optional<std::string>("10.0.0.21"),
           .mac_address = std::optional<std::string>("AA:BB:CC:DD:EE:01"),
+          .firmware_version = std::optional<std::string>("1.0.0"),
+          .sdk_version = std::optional<std::string>("21.1.8"),
       },
       {
           .model = "SprintCam",
@@ -122,12 +124,16 @@ int main() {
           .transport = "gige",
           .ip_address = std::optional<std::string>("10.0.0.22"),
           .mac_address = std::optional<std::string>("AA:BB:CC:DD:EE:02"),
+          .firmware_version = std::optional<std::string>("1.0.1"),
+          .sdk_version = std::optional<std::string>("21.1.8"),
       },
       {
           .model = "SprintCam",
           .serial = "SN-2000",
           .user_id = "Secondary",
           .transport = "usb",
+          .firmware_version = std::optional<std::string>("2.4.0"),
+          .sdk_version = std::optional<std::string>("21.1.8"),
       },
   };
 
@@ -225,7 +231,9 @@ int main() {
       }
       if (selected_index != 1U || selected.serial != "SN-1001" ||
           !selected.mac_address.has_value() ||
-          selected.mac_address.value() != "AA:BB:CC:DD:EE:02") {
+          selected.mac_address.value() != "AA:BB:CC:DD:EE:02" ||
+          !selected.firmware_version.has_value() || selected.firmware_version.value() != "1.0.1" ||
+          !selected.sdk_version.has_value() || selected.sdk_version.value() != "21.1.8") {
         Fail("unexpected ResolveConnectedDevice result");
       }
     } else {

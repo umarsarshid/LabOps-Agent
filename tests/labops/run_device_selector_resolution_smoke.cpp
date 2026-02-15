@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -93,9 +94,39 @@ void WriteFixtureCsv(const fs::path& path) {
   if (!out) {
     Fail("failed to open fixture output file");
   }
-  out << "model,serial,user_id,transport,ip,mac\n";
-  out << "SprintCam,SN-1001,Primary,GigE,10.0.0.21,aa-bb-cc-dd-ee-01\n";
-  out << "SprintCam,SN-2000,Secondary,USB3VISION,,\n";
+  out << "model,serial,user_id,transport,ip,mac,firmware_version,sdk_version\n";
+  out << "SprintCam,SN-1001,Primary,GigE,10.0.0.21,aa-bb-cc-dd-ee-01,3.2.1,21.1.8\n";
+  out << "SprintCam,SN-2000,Secondary,USB3VISION,,,4.0.0,21.1.8\n";
+}
+
+fs::path ResolveSingleBundleDir(const fs::path& out_root) {
+  if (!fs::exists(out_root)) {
+    Fail("output root does not exist");
+  }
+
+  std::vector<fs::path> bundle_dirs;
+  for (const auto& entry : fs::directory_iterator(out_root)) {
+    if (!entry.is_directory()) {
+      continue;
+    }
+    const std::string name = entry.path().filename().string();
+    if (name.rfind("run-", 0) == 0U) {
+      bundle_dirs.push_back(entry.path());
+    }
+  }
+
+  if (bundle_dirs.size() != 1U) {
+    Fail("expected exactly one run bundle directory");
+  }
+  return bundle_dirs.front();
+}
+
+std::string ReadFile(const fs::path& path) {
+  std::ifstream input(path, std::ios::binary);
+  if (!input) {
+    Fail("failed to open file");
+  }
+  return std::string((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
 }
 
 int DispatchWithCapturedStderr(std::vector<std::string> argv_storage, std::string& stderr_text) {
@@ -174,6 +205,21 @@ int main() {
     AssertContains(stderr_output, "msg=\"device selector resolved\"");
     AssertContains(stderr_output, "selector=\"serial:SN-2000\"");
     AssertContains(stderr_output, "selected_serial=\"SN-2000\"");
+    AssertContains(stderr_output, "selected_firmware_version=\"4.0.0\"");
+    AssertContains(stderr_output, "selected_sdk_version=\"21.1.8\"");
+
+    const fs::path bundle_dir = ResolveSingleBundleDir(out_dir);
+    const fs::path run_json_path = bundle_dir / "run.json";
+    if (!fs::exists(run_json_path)) {
+      Fail("expected run.json to be written on backend connect failure");
+    }
+    const std::string run_json = ReadFile(run_json_path);
+    AssertContains(run_json, "\"real_device\":");
+    AssertContains(run_json, "\"model\":\"SprintCam\"");
+    AssertContains(run_json, "\"serial\":\"SN-2000\"");
+    AssertContains(run_json, "\"transport\":\"usb\"");
+    AssertContains(run_json, "\"firmware_version\":\"4.0.0\"");
+    AssertContains(run_json, "\"sdk_version\":\"21.1.8\"");
   } else {
     if (exit_code != labops::core::errors::ToInt(labops::core::errors::ExitCode::kFailure)) {
       Fail("expected generic failure exit code when real backend is disabled");

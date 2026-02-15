@@ -11,7 +11,8 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 - `scenario.json` snapshot of the exact scenario that was run.
 - `hostprobe.json` host system snapshot captured for run context.
 - `nic_*.txt` raw NIC command outputs captured best-effort per platform.
-- `run.json` for run metadata.
+- `run.json` for run metadata, including optional resolved real-device identity
+  and version fields.
 - `events.jsonl` append-only run timeline.
 - `metrics.csv` for plotting and spreadsheet workflows.
 - `metrics.json` for machine parsing by agent logic.

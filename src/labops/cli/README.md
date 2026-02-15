@@ -28,18 +28,23 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
   including friendly `BACKEND_NOT_AVAILABLE` messaging when real backend is not
   active.
   - when enabled, prints normalized per-device identity fields
-    (`model`, `serial`, `user_id`, `transport`, optional `ip`/`mac`) from
-    real-backend descriptor mapping.
+    (`model`, `serial`, `user_id`, `transport`, optional `ip`/`mac`,
+    optional `firmware_version`/`sdk_version`) from real-backend descriptor
+    mapping.
 - Route scenario validation through schema loader with actionable errors.
 - Parse and validate scenario-level `device_selector` plus CLI `--device`
   overrides; resolve selectors deterministically (serial/user_id with optional
   index tie-break) before backend connect so repeated runs target the same
   camera identity.
+  - attach resolved identity/version metadata to `run.json` (`real_device`)
+    so triage bundles capture exact hardware provenance.
 - Validate optional `netem_profile` references against
   `tools/netem_profiles/<profile>.json`.
 - Apply scenario settings to backend params and emit `CONFIG_APPLIED` audit
   events.
 - Execute sim backend run lifecycle and emit stream trace events.
+- On backend connect failures, still emit `run.json` (when bundle dir is
+  already initialized) so early-failure runs preserve run metadata evidence.
 - Compute and write run metrics (`metrics.csv` + `metrics.json`) for FPS,
   drop, and timing/jitter reporting.
 - Generate one-page `summary.md` per run with pass/fail, key metrics, and top

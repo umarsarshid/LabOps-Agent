@@ -1395,6 +1395,27 @@ struct ResolvedDeviceSelection {
   std::size_t discovered_index = 0;
 };
 
+void AttachResolvedDeviceMetadataToRunInfo(
+    const std::optional<ResolvedDeviceSelection>& resolved_device_selection,
+    core::schema::RunInfo& run_info) {
+  run_info.real_device.reset();
+  if (!resolved_device_selection.has_value()) {
+    return;
+  }
+
+  const ResolvedDeviceSelection& selected = resolved_device_selection.value();
+  core::schema::RealDeviceMetadata real_device;
+  real_device.model = selected.device.model;
+  real_device.serial = selected.device.serial;
+  real_device.transport = selected.device.transport;
+  if (!selected.device.user_id.empty()) {
+    real_device.user_id = selected.device.user_id;
+  }
+  real_device.firmware_version = selected.device.firmware_version;
+  real_device.sdk_version = selected.device.sdk_version.value_or("unknown");
+  run_info.real_device = std::move(real_device);
+}
+
 bool ResolveDeviceSelectionForRun(const RunPlan& run_plan, const RunOptions& options,
                                   std::optional<ResolvedDeviceSelection>& resolved,
                                   std::string& error) {
@@ -1458,6 +1479,14 @@ bool ApplyDeviceSelectionToBackend(backends::ICameraBackend& backend,
   }
   if (selection.device.mac_address.has_value() &&
       !apply("device.mac", selection.device.mac_address.value())) {
+    return false;
+  }
+  if (selection.device.firmware_version.has_value() &&
+      !apply("device.firmware_version", selection.device.firmware_version.value())) {
+    return false;
+  }
+  if (selection.device.sdk_version.has_value() &&
+      !apply("device.sdk_version", selection.device.sdk_version.value())) {
     return false;
   }
 
@@ -2065,6 +2094,14 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
          {"selected_serial", selected.device.serial},
          {"selected_user_id", selected.device.user_id.empty() ? "(none)" : selected.device.user_id},
          {"selected_transport", selected.device.transport}});
+    if (selected.device.firmware_version.has_value()) {
+      logger.Info("device selector firmware detected",
+                  {{"selected_firmware_version", selected.device.firmware_version.value()}});
+    }
+    if (selected.device.sdk_version.has_value()) {
+      logger.Info("device selector sdk version detected",
+                  {{"selected_sdk_version", selected.device.sdk_version.value()}});
+    }
   }
 
   std::optional<artifacts::NetemCommandSuggestions> netem_suggestions;
@@ -2087,6 +2124,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
 
   const auto created_at = std::chrono::system_clock::now();
   core::schema::RunInfo run_info = BuildRunInfo(options, run_plan, created_at);
+  AttachResolvedDeviceMetadataToRunInfo(resolved_device_selection, run_info);
   fs::path bundle_dir = ResolveExecutionOutputDir(options, run_info, use_per_run_bundle_dir);
   fs::path soak_frame_cache_path;
   fs::path soak_checkpoint_latest_path;
@@ -2236,6 +2274,17 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   if (!backend->Connect(error)) {
     logger.Error("backend connect failed",
                  {{"backend", run_info.config.backend}, {"error", error}});
+    run_info.timestamps.finished_at = std::chrono::system_clock::now();
+    fs::path run_artifact_path;
+    std::string run_write_error;
+    if (!artifacts::WriteRunJson(run_info, bundle_dir, run_artifact_path, run_write_error)) {
+      logger.Error("failed to write run.json after backend connect failure",
+                   {{"error", run_write_error}});
+      std::cerr << "warning: failed to write run.json after backend connect failure: "
+                << run_write_error << '\n';
+    } else if (run_result != nullptr) {
+      run_result->run_json_path = run_artifact_path;
+    }
     std::cerr << "error: backend connect failed: " << error << '\n';
     return kExitBackendConnectFailed;
   }
@@ -2871,6 +2920,13 @@ int CommandListDevices(const std::vector<std::string_view>& args) {
     std::cout << "device[" << i
               << "].user_id: " << (device.user_id.empty() ? "(none)" : device.user_id) << '\n';
     std::cout << "device[" << i << "].transport: " << device.transport << '\n';
+    if (device.firmware_version.has_value()) {
+      std::cout << "device[" << i << "].firmware_version: " << device.firmware_version.value()
+                << '\n';
+    }
+    if (device.sdk_version.has_value()) {
+      std::cout << "device[" << i << "].sdk_version: " << device.sdk_version.value() << '\n';
+    }
     if (device.ip_address.has_value()) {
       std::cout << "device[" << i << "].ip: " << device.ip_address.value() << '\n';
     }

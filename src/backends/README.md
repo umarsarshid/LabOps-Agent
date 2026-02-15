@@ -25,7 +25,9 @@ The project needs one consistent workflow that can run on different camera stack
     startup/teardown are safe across repeated runs and tests.
   - `DeviceInfo` + discovery mapping normalize SDK camera descriptors into
     stable fields (`model`, `serial`, `user_id`, `transport`, `ip`, `mac`) for
-    CLI visibility and downstream evidence capture.
+    CLI visibility and downstream evidence capture, including optional version
+    fields (`firmware_version`, `sdk_version`) when discovery sources expose
+    them.
   - device selector parsing/resolution supports deterministic camera choice by
     `serial`, `user_id`, and optional `index` tie-breaks so repeated runs pick
     the same physical device.

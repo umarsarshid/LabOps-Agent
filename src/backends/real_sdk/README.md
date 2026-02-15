@@ -23,16 +23,18 @@ This folder is that bridge.
   - centralizes build-status helpers for CLI (`enabled`, `SDK missing`, etc.)
   - defines normalized `DeviceInfo` used by `labops list-devices`
   - maps SDK-style device descriptors into `DeviceInfo` fields
-    (`model/serial/user_id/transport/ip/mac`)
+    (`model/serial/user_id/transport/ip/mac`) plus optional version fields
+    (`firmware_version`, `sdk_version`) when discovery sources expose them
   - supports local OSS discovery fixture via `LABOPS_REAL_DEVICE_FIXTURE` CSV
     so discovery behavior is testable without vendor SDK binaries
+    (optional extra columns: `firmware_version`, `sdk_version`)
   - parses and resolves deterministic selectors used by CLI/scenarios:
     - `serial:<value>`
     - `user_id:<value>`
     - optional `index:<n>` (0-based) to disambiguate multi-match cases
   - exposes one-shot `ResolveConnectedDevice(...)` helper used by run/baseline
     command paths before backend connect so selected camera identity is
-    captured in run evidence
+    captured in run evidence (`run.json` real-device metadata)
   - creates the effective backend object for real runs:
     - real backend enabled -> `RealBackend`
     - real backend disabled -> `sdk_stub::RealCameraBackendStub`

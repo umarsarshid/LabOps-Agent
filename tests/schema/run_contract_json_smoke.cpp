@@ -3,6 +3,7 @@
 #include <cassert>
 #include <chrono>
 #include <iostream>
+#include <optional>
 #include <string_view>
 
 namespace {
@@ -37,6 +38,14 @@ int main() {
   RunInfo info;
   info.run_id = "run-000001";
   info.config = config;
+  info.real_device = labops::core::schema::RealDeviceMetadata{
+      .model = "SprintCam",
+      .serial = "SN-2000",
+      .transport = "usb",
+      .user_id = std::optional<std::string>("LineA"),
+      .firmware_version = std::optional<std::string>("1.2.3"),
+      .sdk_version = std::optional<std::string>("21.1.8"),
+  };
 
   // Use deterministic timestamps so the smoke test is stable.
   const auto created_at = std::chrono::system_clock::time_point(std::chrono::milliseconds(1000));
@@ -50,6 +59,12 @@ int main() {
   const std::string run_info_json = ToJson(info);
   AssertContains(run_info_json, "\"run_id\":\"run-000001\"");
   AssertContains(run_info_json, "\"config\":");
+  AssertContains(run_info_json, "\"real_device\":");
+  AssertContains(run_info_json, "\"model\":\"SprintCam\"");
+  AssertContains(run_info_json, "\"serial\":\"SN-2000\"");
+  AssertContains(run_info_json, "\"transport\":\"usb\"");
+  AssertContains(run_info_json, "\"firmware_version\":\"1.2.3\"");
+  AssertContains(run_info_json, "\"sdk_version\":\"21.1.8\"");
   AssertContains(run_info_json, "\"timestamps\":");
   AssertContains(run_info_json, "\"created_at_utc\":\"1970-01-01T00:00:01.000Z\"");
   AssertContains(run_info_json, "\"started_at_utc\":\"1970-01-01T00:00:02.500Z\"");
