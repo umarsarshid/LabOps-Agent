@@ -57,6 +57,10 @@ surface (argument parsing + runtime orchestration + artifact/event output).
   backend is enabled (including normalized model/serial/user_id/transport and
   optional IP/MAC fields from descriptor fixture data) and friendly
   `BACKEND_NOT_AVAILABLE` messaging when disabled.
+- `run_device_selector_resolution_smoke.cpp`: verifies
+  `labops run ... --device <selector>` resolves the requested real device
+  deterministically, logs selected identity fields, and follows expected
+  exit-code behavior for both real-enabled and real-disabled builds.
 - `kb_draft_from_run_folder_smoke.cpp`: verifies `labops kb draft --run <dir>`
   generates `kb_draft.md` from `engineer_packet.md` with populated run-context,
   repro, hypothesis, and evidence-link sections.

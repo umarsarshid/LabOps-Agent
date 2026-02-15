@@ -25,6 +25,7 @@ A scenario JSON document is an object with these top-level sections:
 - `tags`
 - `duration`
 - `backend`
+- `device_selector`
 - `netem_profile`
 - `camera`
 - `sim_faults`
@@ -72,6 +73,26 @@ A scenario JSON document is an object with these top-level sections:
   - `"sim"` (default when field is omitted)
   - `"real_stub"` (deterministic non-SDK stub path useful for integration
     contract testing)
+
+### `device_selector` (optional)
+
+- Type: string
+- Purpose: deterministic camera selection for real-backend runs.
+- Allowed keys:
+  - `serial:<value>`
+  - `user_id:<value>`
+  - optional `index:<n>` (0-based) for tie-breaks
+- Clause format: comma-separated `key:value` pairs, for example:
+  - `"serial:SN-1001"`
+  - `"user_id:Primary,index:0"`
+- Constraints:
+  - cannot include both `serial` and `user_id` in one selector
+  - key names must be one of `serial`, `user_id`, `index`
+  - index must be a non-negative integer
+  - currently requires `backend: "real_stub"`
+- CLI override:
+  - `labops run ... --device <selector>` overrides scenario `device_selector`
+  - same override also applies to `labops baseline capture ... --device ...`
 
 ### `netem_profile` (optional)
 
@@ -162,6 +183,8 @@ At least one threshold should be present.
 {
   "schema_version": "1.0",
   "scenario_id": "baseline_smoke",
+  "backend": "real_stub",
+  "device_selector": "serial:SN-1001,index:0",
   "netem_profile": "jitter_light",
   "duration": {
     "duration_ms": 10000

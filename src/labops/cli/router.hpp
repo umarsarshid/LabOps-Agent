@@ -24,6 +24,7 @@ struct RunOptions {
   bool apply_netem = false;
   bool apply_netem_force = false;
   std::string netem_interface;
+  std::string device_selector;
   core::logging::LogLevel log_level = core::logging::LogLevel::kInfo;
 };
 

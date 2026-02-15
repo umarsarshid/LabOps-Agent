@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -60,6 +61,37 @@ std::vector<std::string> SplitCsvSimple(const std::string& line) {
   }
   fields.push_back(Trim(current));
   return fields;
+}
+
+std::vector<std::string> SplitSelectorClauses(std::string_view raw) {
+  std::vector<std::string> clauses;
+  std::string current;
+  current.reserve(raw.size());
+  for (const char c : raw) {
+    if (c == ',') {
+      clauses.push_back(Trim(current));
+      current.clear();
+      continue;
+    }
+    current.push_back(c);
+  }
+  clauses.push_back(Trim(current));
+  return clauses;
+}
+
+bool ParseNonNegativeIndex(std::string_view raw, std::size_t& parsed_index) {
+  if (raw.empty()) {
+    return false;
+  }
+  std::size_t parsed = 0;
+  const char* begin = raw.data();
+  const char* end = begin + raw.size();
+  const auto [ptr, ec] = std::from_chars(begin, end, parsed);
+  if (ec != std::errc() || ptr != end) {
+    return false;
+  }
+  parsed_index = parsed;
+  return true;
 }
 
 bool ParseDescriptorCsvLine(const std::string& line, const std::size_t line_number,
@@ -233,6 +265,157 @@ bool EnumerateConnectedDevices(std::vector<DeviceInfo>& devices, std::string& er
     devices.push_back(MapDescriptorToDeviceInfo(descriptor));
   }
   return true;
+}
+
+bool ParseDeviceSelector(std::string_view selector_text, DeviceSelector& selector,
+                         std::string& error) {
+  selector = DeviceSelector{};
+  error.clear();
+
+  const std::string trimmed = Trim(selector_text);
+  if (trimmed.empty()) {
+    error = "selector cannot be empty";
+    return false;
+  }
+
+  const std::vector<std::string> clauses = SplitSelectorClauses(trimmed);
+  for (const std::string& clause : clauses) {
+    if (clause.empty()) {
+      error = "selector contains an empty clause";
+      return false;
+    }
+
+    const std::size_t colon = clause.find(':');
+    if (colon == std::string::npos) {
+      error = "selector clause '" + clause + "' must use key:value format";
+      return false;
+    }
+
+    const std::string key = ToLower(Trim(clause.substr(0, colon)));
+    const std::string value = Trim(clause.substr(colon + 1));
+    if (value.empty()) {
+      error = "selector clause '" + clause + "' is missing a value";
+      return false;
+    }
+
+    if (key == "serial") {
+      if (selector.serial.has_value()) {
+        error = "selector contains duplicate serial key";
+        return false;
+      }
+      selector.serial = value;
+      continue;
+    }
+
+    if (key == "user_id") {
+      if (selector.user_id.has_value()) {
+        error = "selector contains duplicate user_id key";
+        return false;
+      }
+      selector.user_id = value;
+      continue;
+    }
+
+    if (key == "index") {
+      if (selector.index.has_value()) {
+        error = "selector contains duplicate index key";
+        return false;
+      }
+      std::size_t parsed_index = 0;
+      if (!ParseNonNegativeIndex(value, parsed_index)) {
+        error = "selector index must be a non-negative integer";
+        return false;
+      }
+      selector.index = parsed_index;
+      continue;
+    }
+
+    error = "selector key '" + key + "' is not supported (allowed: serial, user_id, index)";
+    return false;
+  }
+
+  if (selector.serial.has_value() && selector.user_id.has_value()) {
+    error = "selector cannot include both serial and user_id";
+    return false;
+  }
+
+  if (!selector.serial.has_value() && !selector.user_id.has_value() &&
+      !selector.index.has_value()) {
+    error = "selector must include serial:<value>, user_id:<value>, or index:<n>";
+    return false;
+  }
+
+  return true;
+}
+
+bool ResolveDeviceSelector(const std::vector<DeviceInfo>& devices, const DeviceSelector& selector,
+                           DeviceInfo& selected, std::size_t& selected_index, std::string& error) {
+  error.clear();
+  if (devices.empty()) {
+    error = "no connected cameras were discovered";
+    return false;
+  }
+
+  std::vector<std::size_t> candidate_indices;
+  candidate_indices.reserve(devices.size());
+  for (std::size_t i = 0; i < devices.size(); ++i) {
+    const DeviceInfo& device = devices[i];
+    if (selector.serial.has_value() && device.serial != selector.serial.value()) {
+      continue;
+    }
+    if (selector.user_id.has_value() && device.user_id != selector.user_id.value()) {
+      continue;
+    }
+    candidate_indices.push_back(i);
+  }
+
+  if (candidate_indices.empty()) {
+    if (selector.serial.has_value()) {
+      error = "no device matched selector serial:" + selector.serial.value();
+    } else if (selector.user_id.has_value()) {
+      error = "no device matched selector user_id:" + selector.user_id.value();
+    } else {
+      error = "no candidate devices available for index selector";
+    }
+    return false;
+  }
+
+  if (selector.index.has_value()) {
+    const std::size_t ordinal = selector.index.value();
+    if (ordinal >= candidate_indices.size()) {
+      error = "selector index " + std::to_string(ordinal) + " is out of range for " +
+              std::to_string(candidate_indices.size()) + " candidate device(s)";
+      return false;
+    }
+    selected_index = candidate_indices[ordinal];
+    selected = devices[selected_index];
+    return true;
+  }
+
+  if (candidate_indices.size() > 1U) {
+    error = "selector matched multiple devices (" + std::to_string(candidate_indices.size()) +
+            "); add index:<n> to disambiguate";
+    return false;
+  }
+
+  selected_index = candidate_indices.front();
+  selected = devices[selected_index];
+  return true;
+}
+
+bool ResolveConnectedDevice(std::string_view selector_text, DeviceInfo& selected,
+                            std::size_t& selected_index, std::string& error) {
+  DeviceSelector selector;
+  if (!ParseDeviceSelector(selector_text, selector, error)) {
+    return false;
+  }
+
+  std::vector<DeviceInfo> devices;
+  if (!EnumerateConnectedDevices(devices, error)) {
+    return false;
+  }
+
+  return ResolveDeviceSelector(devices, selector, selected, selected_index, error);
 }
 
 } // namespace labops::backends::real_sdk

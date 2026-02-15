@@ -322,6 +322,14 @@ target_link_libraries(real_device_enumeration_smoke PRIVATE labops_backends)
 target_compile_features(real_device_enumeration_smoke PRIVATE cxx_std_20)
 add_test(NAME real_device_enumeration_smoke COMMAND real_device_enumeration_smoke)
 
+# Smoke test for selector parsing/resolution against discovered real devices.
+add_executable(real_device_selector_resolution_smoke
+  tests/backends/real_device_selector_resolution_smoke.cpp
+)
+target_link_libraries(real_device_selector_resolution_smoke PRIVATE labops_backends)
+target_compile_features(real_device_selector_resolution_smoke PRIVATE cxx_std_20)
+add_test(NAME real_device_selector_resolution_smoke COMMAND real_device_selector_resolution_smoke)
+
 # Smoke test for deterministic frame generation and timing envelope.
 add_executable(sim_frame_generator_smoke
   tests/backends/sim_frame_generator_smoke.cpp
@@ -481,6 +489,17 @@ target_include_directories(list_backends_smoke PRIVATE src)
 target_link_libraries(list_backends_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
 target_compile_features(list_backends_smoke PRIVATE cxx_std_20)
 add_test(NAME list_backends_smoke COMMAND list_backends_smoke)
+
+# Integration smoke test for run-time selector resolution via:
+# `labops run ... --device <selector>`
+add_executable(run_device_selector_resolution_smoke
+  tests/labops/run_device_selector_resolution_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(run_device_selector_resolution_smoke PRIVATE src)
+target_link_libraries(run_device_selector_resolution_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(run_device_selector_resolution_smoke PRIVATE cxx_std_20)
+add_test(NAME run_device_selector_resolution_smoke COMMAND run_device_selector_resolution_smoke)
 
 # Integration smoke test for real-backend device listing contract.
 add_executable(list_devices_real_backend_smoke

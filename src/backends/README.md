@@ -26,6 +26,9 @@ The project needs one consistent workflow that can run on different camera stack
   - `DeviceInfo` + discovery mapping normalize SDK camera descriptors into
     stable fields (`model`, `serial`, `user_id`, `transport`, `ip`, `mac`) for
     CLI visibility and downstream evidence capture.
+  - device selector parsing/resolution supports deterministic camera choice by
+    `serial`, `user_id`, and optional `index` tie-breaks so repeated runs pick
+    the same physical device.
   - `CreateRealBackend()` selects the effective implementation based on build
     availability (real skeleton when enabled, sdk stub fallback otherwise).
 - `sim/`: deterministic in-repo implementation of the contract with

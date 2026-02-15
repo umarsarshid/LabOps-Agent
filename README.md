@@ -59,6 +59,19 @@ CSV
 LABOPS_REAL_DEVICE_FIXTURE="$(pwd)/tmp/devices.csv" ./tmp/build/labops list-devices --backend real
 ```
 
+When `backend` is `real_stub`, you can force deterministic camera selection
+for a run with `--device`:
+
+```bash
+LABOPS_REAL_DEVICE_FIXTURE="$(pwd)/tmp/devices.csv" \
+  ./tmp/build/labops run <scenario_with_backend_real_stub.json> --out tmp/runs --device serial:SN-1001
+```
+
+Selector format:
+- `serial:<value>`
+- `user_id:<value>`
+- optional `index:<n>` (0-based) to disambiguate when multiple devices match
+
 ## Typical Workflow
 
 1. Validate a scenario.
@@ -113,8 +126,8 @@ That means LabOps is already useful for repeatable testing and triage flow, even
 - `labops list-backends`
 - `labops list-devices --backend real`
 - `labops validate <scenario.json>`
-- `labops run <scenario.json> --out <dir> [--zip] [--redact] [--soak ...]`
-- `labops baseline capture <scenario.json>`
+- `labops run <scenario.json> --out <dir> [--device <selector>] [--zip] [--redact] [--soak ...]`
+- `labops baseline capture <scenario.json> [--device <selector>]`
 - `labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]`
 - `labops kb draft --run <run_folder> [--out <kb_draft.md>]`
 

@@ -15,9 +15,10 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Parse run artifact options (`--out <dir>`, `--zip`, `--redact`,
   `--soak`, `--checkpoint-interval-ms <ms>`, `--soak-stop-file <path>`,
   `--resume <checkpoint.json>`, `--log-level <debug|info|warn|error>`,
-  `--apply-netem`, `--netem-iface`, `--apply-netem-force`).
+  `--apply-netem`, `--netem-iface`, `--apply-netem-force`,
+  `--device <selector>`).
 - Parse baseline capture command contracts (`baseline capture <scenario.json>
-  [--redact] [--log-level <debug|info|warn|error>] [--apply-netem
+  [--redact] [--device <selector>] [--log-level <debug|info|warn|error>] [--apply-netem
   --netem-iface <iface> [--apply-netem-force]]`).
 - Parse compare command contracts (`compare --baseline ... --run ... [--out ...]`).
 - Parse KB drafting contracts (`kb draft --run <run_folder> [--out <kb_draft.md>]`).
@@ -30,6 +31,10 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
     (`model`, `serial`, `user_id`, `transport`, optional `ip`/`mac`) from
     real-backend descriptor mapping.
 - Route scenario validation through schema loader with actionable errors.
+- Parse and validate scenario-level `device_selector` plus CLI `--device`
+  overrides; resolve selectors deterministically (serial/user_id with optional
+  index tie-break) before backend connect so repeated runs target the same
+  camera identity.
 - Validate optional `netem_profile` references against
   `tools/netem_profiles/<profile>.json`.
 - Apply scenario settings to backend params and emit `CONFIG_APPLIED` audit

@@ -24,7 +24,7 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
   optional `ip`/`mac`).
 - `labops validate <scenario.json>`: validates scenario schema and prints
   actionable field-level errors when invalid.
-- `labops run <scenario.json> --out <dir> [--zip] [--redact] [--soak --checkpoint-interval-ms <ms> [--soak-stop-file <path>] [--resume <checkpoint.json>]] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: emits a per-run bundle under
+- `labops run <scenario.json> --out <dir> [--device <selector>] [--zip] [--redact] [--soak --checkpoint-interval-ms <ms> [--soak-stop-file <path>] [--resume <checkpoint.json>]] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: emits a per-run bundle under
   `<dir>/<run_id>/` containing `scenario.json`, `run.json`, `events.jsonl`,
   `metrics.csv`, `metrics.json`, `summary.md`, `report.html`,
   `hostprobe.json`, and
@@ -36,12 +36,16 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
   checkpoints (`soak_checkpoint.json`, `checkpoints/checkpoint_*.json`) and
   resumable frame cache (`soak_frames.jsonl`) so evidence survives safe
   stop/resume; runs sim backend lifecycle;
+  when backend is `real_stub`, optional `--device` resolves one connected
+  device by `serial:<value>` or `user_id:<value>` and optional `index:<n>`
+  before connect so run selection is deterministic;
   evaluates configured scenario thresholds against computed metrics; returns
   non-zero when thresholds fail; and reports output paths.
-- `labops baseline capture <scenario.json> [--redact] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: captures a scenario baseline into
+- `labops baseline capture <scenario.json> [--redact] [--device <selector>] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: captures a scenario baseline into
   `baselines/<scenario_id>/` using the same run pipeline and metrics writers as
   `labops run`, so release/regression comparisons use identical evidence math
-  and optional identifier redaction behavior.
+  and optional identifier redaction behavior; supports the same selector
+  format used by `run`.
 - `labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]`:
   computes metric deltas and emits `diff.json` + `diff.md` (default output
   directory is the `--run` target when `--out` is omitted).

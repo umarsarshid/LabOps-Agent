@@ -75,11 +75,13 @@ constexpr int kExitThresholdsFailed =
 void PrintUsage(std::ostream& out) {
   out << "usage:\n"
       << "  labops run <scenario.json> [--out <dir>] [--zip] [--redact] "
+         "[--device <selector>] "
          "[--soak] [--checkpoint-interval-ms <ms>] [--resume <checkpoint.json>] "
          "[--soak-stop-file <path>] "
          "[--log-level <debug|info|warn|error>] "
          "[--apply-netem --netem-iface <iface> [--apply-netem-force]]\n"
       << "  labops baseline capture <scenario.json> [--redact] "
+         "[--device <selector>] "
          "[--log-level <debug|info|warn|error>] "
          "[--apply-netem --netem-iface <iface> [--apply-netem-force]]\n"
       << "  labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]\n"
@@ -94,6 +96,7 @@ void PrintUsage(std::ostream& out) {
 void PrintBaselineUsage(std::ostream& out) {
   out << "usage:\n"
       << "  labops baseline capture <scenario.json> [--redact] "
+         "[--device <selector>] "
          "[--log-level <debug|info|warn|error>] "
          "[--apply-netem --netem-iface <iface> [--apply-netem-force]]\n";
 }
@@ -233,6 +236,7 @@ struct RunPlan {
   std::chrono::milliseconds duration{1'000};
   std::string backend = std::string(kBackendSim);
   std::optional<std::string> netem_profile;
+  std::optional<std::string> device_selector;
   struct Thresholds {
     std::optional<double> min_avg_fps;
     std::optional<double> max_drop_rate_percent;
@@ -258,6 +262,8 @@ struct KbDraftOptions {
 struct ListDevicesOptions {
   std::string backend;
 };
+
+bool ValidateDeviceSelectorText(std::string_view selector_text, std::string& error);
 
 // Parse `run` args with an explicit contract:
 // - one scenario path
@@ -360,6 +366,19 @@ bool ParseRunOptions(const std::vector<std::string_view>& args, RunOptions& opti
       ++i;
       continue;
     }
+    if (token == "--device") {
+      if (i + 1 >= args.size()) {
+        error = "missing value for --device";
+        return false;
+      }
+      if (!options.device_selector.empty()) {
+        error = "--device may be provided at most once";
+        return false;
+      }
+      options.device_selector = std::string(args[i + 1]);
+      ++i;
+      continue;
+    }
 
     if (!token.empty() && token.front() == '-') {
       error = "unknown option: " + std::string(token);
@@ -398,6 +417,10 @@ bool ParseRunOptions(const std::vector<std::string_view>& args, RunOptions& opti
   }
   if (!options.apply_netem && !options.netem_interface.empty()) {
     error = "--netem-iface requires --apply-netem";
+    return false;
+  }
+  if (!options.device_selector.empty() &&
+      !ValidateDeviceSelectorText(options.device_selector, error)) {
     return false;
   }
 
@@ -446,6 +469,19 @@ bool ParseBaselineCaptureOptions(const std::vector<std::string_view>& args, RunO
       ++i;
       continue;
     }
+    if (token == "--device") {
+      if (i + 1 >= args.size()) {
+        error = "missing value for --device";
+        return false;
+      }
+      if (!options.device_selector.empty()) {
+        error = "--device may be provided at most once";
+        return false;
+      }
+      options.device_selector = std::string(args[i + 1]);
+      ++i;
+      continue;
+    }
 
     if (!token.empty() && token.front() == '-') {
       error = "unknown option: " + std::string(token);
@@ -469,6 +505,10 @@ bool ParseBaselineCaptureOptions(const std::vector<std::string_view>& args, RunO
   }
   if (!options.apply_netem && !options.netem_interface.empty()) {
     error = "--netem-iface requires --apply-netem";
+    return false;
+  }
+  if (!options.device_selector.empty() &&
+      !ValidateDeviceSelectorText(options.device_selector, error)) {
     return false;
   }
 
@@ -606,6 +646,15 @@ bool ParseListDevicesOptions(const std::vector<std::string_view>& args, ListDevi
   }
 
   return true;
+}
+
+bool ValidateDeviceSelectorText(std::string_view selector_text, std::string& error) {
+  backends::real_sdk::DeviceSelector parsed;
+  if (backends::real_sdk::ParseDeviceSelector(selector_text, parsed, error)) {
+    return true;
+  }
+  error = "invalid device selector '" + std::string(selector_text) + "': " + error;
+  return false;
 }
 
 bool ReadTextFile(const std::string& path, std::string& contents, std::string& error) {
@@ -1280,6 +1329,23 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
     plan.netem_profile = netem_profile.value();
   }
 
+  if (const auto device_selector = FindStringJsonField(scenario_text, "device_selector");
+      device_selector.has_value()) {
+    if (device_selector->empty()) {
+      error = "scenario device_selector must not be empty";
+      return false;
+    }
+    if (!ValidateDeviceSelectorText(device_selector.value(), error)) {
+      return false;
+    }
+    plan.device_selector = device_selector.value();
+  }
+
+  if (plan.device_selector.has_value() && plan.backend != kBackendRealStub) {
+    error = "device_selector requires backend real_stub";
+    return false;
+  }
+
   return true;
 }
 
@@ -1321,6 +1387,81 @@ bool BuildBackendFromRunPlan(const RunPlan& run_plan,
 
   error = "unsupported backend in run plan: " + run_plan.backend;
   return false;
+}
+
+struct ResolvedDeviceSelection {
+  std::string selector_text;
+  backends::real_sdk::DeviceInfo device;
+  std::size_t discovered_index = 0;
+};
+
+bool ResolveDeviceSelectionForRun(const RunPlan& run_plan, const RunOptions& options,
+                                  std::optional<ResolvedDeviceSelection>& resolved,
+                                  std::string& error) {
+  resolved.reset();
+  error.clear();
+
+  std::optional<std::string> selector_text;
+  if (!options.device_selector.empty()) {
+    selector_text = options.device_selector;
+  } else if (run_plan.device_selector.has_value()) {
+    selector_text = run_plan.device_selector.value();
+  }
+
+  if (!selector_text.has_value()) {
+    return true;
+  }
+  if (run_plan.backend != kBackendRealStub) {
+    error = "--device/device_selector requires backend real_stub";
+    return false;
+  }
+
+  backends::real_sdk::DeviceInfo selected_device;
+  std::size_t selected_index = 0;
+  if (!backends::real_sdk::ResolveConnectedDevice(selector_text.value(), selected_device,
+                                                  selected_index, error)) {
+    return false;
+  }
+
+  resolved = ResolvedDeviceSelection{
+      .selector_text = selector_text.value(),
+      .device = std::move(selected_device),
+      .discovered_index = selected_index,
+  };
+  return true;
+}
+
+bool ApplyDeviceSelectionToBackend(backends::ICameraBackend& backend,
+                                   const ResolvedDeviceSelection& selection,
+                                   backends::BackendConfig& applied_params, std::string& error) {
+  auto apply = [&](std::string key, std::string value) {
+    if (!backend.SetParam(key, value, error)) {
+      return false;
+    }
+    applied_params[std::move(key)] = std::move(value);
+    return true;
+  };
+
+  if (!apply("device.selector", selection.selector_text) ||
+      !apply("device.index", std::to_string(selection.discovered_index)) ||
+      !apply("device.model", selection.device.model) ||
+      !apply("device.serial", selection.device.serial) ||
+      !apply("device.user_id",
+             selection.device.user_id.empty() ? "(none)" : selection.device.user_id) ||
+      !apply("device.transport", selection.device.transport)) {
+    return false;
+  }
+
+  if (selection.device.ip_address.has_value() &&
+      !apply("device.ip", selection.device.ip_address.value())) {
+    return false;
+  }
+  if (selection.device.mac_address.has_value() &&
+      !apply("device.mac", selection.device.mac_address.value())) {
+    return false;
+  }
+
+  return true;
 }
 
 // Bundle layout contract:
@@ -1866,12 +2007,15 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     *run_result = ScenarioRunResult{};
   }
 
-  logger.Info("run execution requested", {{"scenario_path", options.scenario_path},
-                                          {"output_root", options.output_dir.string()},
-                                          {"zip_bundle", options.zip_bundle ? "true" : "false"},
-                                          {"redact", options.redact_identifiers ? "true" : "false"},
-                                          {"soak_mode", options.soak_mode ? "true" : "false"},
-                                          {"netem_apply", options.apply_netem ? "true" : "false"}});
+  logger.Info(
+      "run execution requested",
+      {{"scenario_path", options.scenario_path},
+       {"output_root", options.output_dir.string()},
+       {"zip_bundle", options.zip_bundle ? "true" : "false"},
+       {"redact", options.redact_identifiers ? "true" : "false"},
+       {"soak_mode", options.soak_mode ? "true" : "false"},
+       {"netem_apply", options.apply_netem ? "true" : "false"},
+       {"device_selector", options.device_selector.empty() ? "-" : options.device_selector}});
 
   std::string error;
   if (options.soak_mode && !use_per_run_bundle_dir) {
@@ -1903,6 +2047,24 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
                  {{"scenario_path", options.scenario_path}, {"error", error}});
     std::cerr << "error: " << error << '\n';
     return kExitSchemaInvalid;
+  }
+
+  std::optional<ResolvedDeviceSelection> resolved_device_selection;
+  if (!ResolveDeviceSelectionForRun(run_plan, options, resolved_device_selection, error)) {
+    logger.Error("device selector resolution failed", {{"error", error}});
+    std::cerr << "error: device selector resolution failed: " << error << '\n';
+    return kExitFailure;
+  }
+  if (resolved_device_selection.has_value()) {
+    const ResolvedDeviceSelection& selected = resolved_device_selection.value();
+    logger.Info(
+        "device selector resolved",
+        {{"selector", selected.selector_text},
+         {"selected_index", std::to_string(selected.discovered_index)},
+         {"selected_model", selected.device.model},
+         {"selected_serial", selected.device.serial},
+         {"selected_user_id", selected.device.user_id.empty() ? "(none)" : selected.device.user_id},
+         {"selected_transport", selected.device.transport}});
   }
 
   std::optional<artifacts::NetemCommandSuggestions> netem_suggestions;
@@ -2062,6 +2224,15 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     return kExitFailure;
   }
 
+  backends::BackendConfig selected_device_params;
+  if (resolved_device_selection.has_value() &&
+      !ApplyDeviceSelectionToBackend(*backend, resolved_device_selection.value(),
+                                     selected_device_params, error)) {
+    logger.Error("failed to apply resolved device selector", {{"error", error}});
+    std::cerr << "error: failed to apply resolved device selector: " << error << '\n';
+    return kExitFailure;
+  }
+
   if (!backend->Connect(error)) {
     logger.Error("backend connect failed",
                  {{"backend", run_info.config.backend}, {"error", error}});
@@ -2071,6 +2242,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   logger.Info("backend connected", {{"backend", run_info.config.backend}});
 
   backends::BackendConfig applied_params;
+  for (const auto& [key, value] : selected_device_params) {
+    applied_params[key] = value;
+  }
   if (!backends::sim::ApplyScenarioConfig(*backend, run_plan.sim_config, error, &applied_params)) {
     logger.Error("backend config apply failed", {{"error", error}});
     std::cerr << "error: backend config failed: " << error << '\n';

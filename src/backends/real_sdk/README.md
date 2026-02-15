@@ -26,6 +26,13 @@ This folder is that bridge.
     (`model/serial/user_id/transport/ip/mac`)
   - supports local OSS discovery fixture via `LABOPS_REAL_DEVICE_FIXTURE` CSV
     so discovery behavior is testable without vendor SDK binaries
+  - parses and resolves deterministic selectors used by CLI/scenarios:
+    - `serial:<value>`
+    - `user_id:<value>`
+    - optional `index:<n>` (0-based) to disambiguate multi-match cases
+  - exposes one-shot `ResolveConnectedDevice(...)` helper used by run/baseline
+    command paths before backend connect so selected camera identity is
+    captured in run evidence
   - creates the effective backend object for real runs:
     - real backend enabled -> `RealBackend`
     - real backend disabled -> `sdk_stub::RealCameraBackendStub`

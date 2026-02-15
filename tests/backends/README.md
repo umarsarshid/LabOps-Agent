@@ -27,6 +27,10 @@ stable interface regardless of real hardware availability.
 - `real_device_enumeration_smoke.cpp`: validates real-device descriptor
   enumeration/mapping into normalized `DeviceInfo` fields (including transport
   normalization and optional IP/MAC handling).
+- `real_device_selector_resolution_smoke.cpp`: validates selector parsing and
+  deterministic resolution rules (`serial`/`user_id` with optional 0-based
+  `index` disambiguation) both against in-memory fixture devices and
+  environment-driven discovery fixtures.
 
 ## Connection to the project
 

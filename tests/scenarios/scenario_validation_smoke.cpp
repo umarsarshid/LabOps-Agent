@@ -61,6 +61,36 @@ int main() {
   }
 
   {
+    const std::string valid_real_selector_json = R"json(
+{
+  "schema_version": "1.0",
+  "scenario_id": "real_selector_smoke",
+  "backend": "real_stub",
+  "device_selector": "serial:SN-1001,index:0",
+  "duration": {
+    "duration_ms": 2000
+  },
+  "camera": {
+    "fps": 30,
+    "trigger_mode": "free_run"
+  },
+  "thresholds": {
+    "min_avg_fps": 1.0
+  }
+}
+)json";
+
+    labops::scenarios::ValidationReport report;
+    std::string error;
+    if (!labops::scenarios::ValidateScenarioText(valid_real_selector_json, report, error)) {
+      Fail("ValidateScenarioText failed unexpectedly for valid real selector json: " + error);
+    }
+    if (!report.valid || !report.issues.empty()) {
+      Fail("expected valid real selector scenario to produce zero validation issues");
+    }
+  }
+
+  {
     const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                             std::chrono::system_clock::now().time_since_epoch())
                             .count();
@@ -149,6 +179,7 @@ int main() {
   "schema_version": "1.0",
   "scenario_id": "Bad Id",
   "backend": "bad_backend",
+  "device_selector": "serial:",
   "duration": { "duration_ms": 0 },
   "camera": {
     "fps": 0,
@@ -196,6 +227,9 @@ int main() {
     if (!ContainsIssue(report, "backend", "must be one of")) {
       Fail("missing actionable issue for backend enum");
     }
+    if (!ContainsIssue(report, "device_selector", "non-empty value")) {
+      Fail("missing actionable issue for device_selector clause value");
+    }
     if (!ContainsIssue(report, "thresholds", "at least one threshold")) {
       Fail("missing actionable issue for thresholds object");
     }
@@ -204,6 +238,32 @@ int main() {
     }
     if (!ContainsIssue(report, "oaat.variables[0].values", "non-empty array")) {
       Fail("missing actionable issue for oaat variable values");
+    }
+  }
+
+  {
+    const std::string invalid_selector_backend_json = R"json(
+{
+  "schema_version": "1.0",
+  "scenario_id": "selector_wrong_backend",
+  "backend": "sim",
+  "device_selector": "serial:SN-1001",
+  "duration": { "duration_ms": 1000 },
+  "camera": { "fps": 20 },
+  "thresholds": { "min_avg_fps": 1.0 }
+}
+)json";
+
+    labops::scenarios::ValidationReport report;
+    std::string error;
+    if (!labops::scenarios::ValidateScenarioText(invalid_selector_backend_json, report, error)) {
+      Fail("ValidateScenarioText failed unexpectedly for selector/backend mismatch: " + error);
+    }
+    if (report.valid) {
+      Fail("expected selector/backend mismatch scenario to fail validation");
+    }
+    if (!ContainsIssue(report, "device_selector", "requires backend")) {
+      Fail("missing actionable issue for device_selector backend requirement");
     }
   }
 

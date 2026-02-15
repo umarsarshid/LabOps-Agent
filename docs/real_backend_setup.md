@@ -54,7 +54,17 @@ CSV
 
 export LABOPS_REAL_DEVICE_FIXTURE="$(pwd)/tmp/devices.csv"
 ./tmp/build-real/labops list-devices --backend real
+
+# Deterministic camera selection in run/baseline flows.
+./tmp/build-real/labops run <scenario_with_backend_real_stub.json> --out tmp/runs --device serial:SN-1001
+./tmp/build-real/labops baseline capture <scenario_with_backend_real_stub.json> --device user_id:Primary,index:0
 ```
+
+Selector format supported by `--device` and scenario `device_selector`:
+
+- `serial:<value>`
+- `user_id:<value>`
+- optional `index:<n>` (0-based tie-break when multiple devices match)
 
 You can point SDK discovery to your local install using either CMake cache vars
 or environment variables:
