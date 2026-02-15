@@ -73,6 +73,7 @@ target_compile_features(labops_events PUBLIC cxx_std_20)
 add_library(labops_backends
   src/backends/real_sdk/real_backend.cpp
   src/backends/real_sdk/real_backend_factory.cpp
+  src/backends/real_sdk/sdk_context.cpp
   src/backends/sdk_stub/real_camera_backend_stub.cpp
   src/backends/sim/scenario_config.cpp
   src/backends/sim/sim_camera_backend.cpp
@@ -303,6 +304,15 @@ add_executable(real_backend_factory_smoke
 target_link_libraries(real_backend_factory_smoke PRIVATE labops_backends)
 target_compile_features(real_backend_factory_smoke PRIVATE cxx_std_20)
 add_test(NAME real_backend_factory_smoke COMMAND real_backend_factory_smoke)
+
+# Smoke test for process-level SDK context RAII behavior:
+# init once across multiple handles and safe shutdown on final release.
+add_executable(sdk_context_smoke
+  tests/backends/sdk_context_smoke.cpp
+)
+target_link_libraries(sdk_context_smoke PRIVATE labops_backends)
+target_compile_features(sdk_context_smoke PRIVATE cxx_std_20)
+add_test(NAME sdk_context_smoke COMMAND sdk_context_smoke)
 
 # Smoke test for deterministic frame generation and timing envelope.
 add_executable(sim_frame_generator_smoke

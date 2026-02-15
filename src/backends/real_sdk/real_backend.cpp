@@ -27,9 +27,17 @@ bool RealBackend::Connect(std::string& error) {
     return false;
   }
 
-  // Keep this deterministic and hardware-free for now. This class is the
-  // integration seam where proprietary SDK session setup will be added later.
-  error = "real backend skeleton cannot connect yet because SDK session wiring is not implemented";
+  // Acquire process-level SDK context first so init/shutdown behavior is
+  // centralized and balanced even before camera session APIs are wired.
+  if (!sdk_context_.Acquire(error)) {
+    return false;
+  }
+
+  // Skeleton keeps connect non-operational until camera session wiring lands.
+  // Release immediately so failed connect attempts do not pin SDK lifetime.
+  sdk_context_.Release();
+  error =
+      "real backend skeleton initialized SDK context but camera session wiring is not implemented";
   return false;
 }
 

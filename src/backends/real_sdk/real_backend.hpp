@@ -1,6 +1,7 @@
 #pragma once
 
 #include "backends/camera_backend.hpp"
+#include "backends/real_sdk/sdk_context.hpp"
 
 #include <chrono>
 #include <string>
@@ -30,6 +31,7 @@ public:
                                       std::string& error) override;
 
 private:
+  SdkContext sdk_context_;
   BackendConfig params_;
   bool connected_ = false;
   bool running_ = false;

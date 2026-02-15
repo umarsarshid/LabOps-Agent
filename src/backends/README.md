@@ -21,6 +21,8 @@ The project needs one consistent workflow that can run on different camera stack
 - `real_sdk/`: real-backend skeleton + factory wiring.
   - `RealBackend` implements `ICameraBackend` with deterministic placeholder
     behavior until vendor SDK calls are integrated.
+  - `SdkContext` provides one-time process SDK init/shutdown via RAII so
+    startup/teardown are safe across repeated runs and tests.
   - `CreateRealBackend()` selects the effective implementation based on build
     availability (real skeleton when enabled, sdk stub fallback otherwise).
 - `sim/`: deterministic in-repo implementation of the contract with

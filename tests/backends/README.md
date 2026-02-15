@@ -22,6 +22,8 @@ stable interface regardless of real hardware availability.
 - `real_backend_factory_smoke.cpp`: validates real-backend factory behavior in
   both build states (enabled -> real skeleton, disabled -> sdk_stub fallback)
   and verifies actionable skeleton errors without requiring camera hardware.
+- `sdk_context_smoke.cpp`: validates real SDK context RAII behavior (init once,
+  handle reference counting, and safe shutdown on final release).
 
 ## Connection to the project
 
