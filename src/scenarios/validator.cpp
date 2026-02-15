@@ -802,6 +802,27 @@ void ValidateOaat(const JsonValue& root, ValidationReport& report) {
   }
 }
 
+void ValidateApplyMode(const JsonValue& root, ValidationReport& report) {
+  const JsonValue* apply_mode = GetField(root, "apply_mode");
+  if (apply_mode == nullptr) {
+    return;
+  }
+
+  if (!IsString(apply_mode)) {
+    AddIssue(report, "apply_mode", "must be a string when provided");
+    return;
+  }
+
+  const std::string normalized = ToLower(Trim(apply_mode->string_value));
+  if (normalized.empty()) {
+    AddIssue(report, "apply_mode", "must not be empty when provided");
+    return;
+  }
+  if (normalized != "strict" && normalized != "best_effort" && normalized != "best-effort") {
+    AddIssue(report, "apply_mode", "must be one of: strict, best_effort");
+  }
+}
+
 void ValidateNetemProfile(const JsonValue& root, const fs::path& scenario_path,
                           ValidationReport& report) {
   const JsonValue* profile = GetField(root, "netem_profile");
@@ -985,6 +1006,7 @@ void ValidateScenarioObject(const JsonValue& root, const fs::path& scenario_path
   ValidateSimFaults(root, report);
   ValidateThresholds(root, report);
   ValidateOaat(root, report);
+  ValidateApplyMode(root, report);
   ValidateNetemProfile(root, scenario_path, report);
   ValidateBackend(root, report);
   ValidateDeviceSelector(root, report);

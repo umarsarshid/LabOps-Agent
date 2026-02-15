@@ -25,6 +25,7 @@ A scenario JSON document is an object with these top-level sections:
 - `tags`
 - `duration`
 - `backend`
+- `apply_mode`
 - `device_selector`
 - `netem_profile`
 - `camera`
@@ -73,6 +74,17 @@ A scenario JSON document is an object with these top-level sections:
   - `"sim"` (default when field is omitted)
   - `"real_stub"` (deterministic non-SDK stub path useful for integration
     contract testing)
+
+### `apply_mode` (optional)
+
+- Type: string
+- Purpose: controls how real-backend parameter application handles unsupported
+  settings.
+- Allowed values:
+  - `"strict"` (default): fail fast on first unsupported parameter
+  - `"best_effort"`: record unsupported settings and continue with supported ones
+- Note: this mode is used by real-backend parameter application. Sim backend
+  behavior remains unchanged.
 
 ### `device_selector` (optional)
 

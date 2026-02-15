@@ -11,6 +11,8 @@ namespace labops::events {
 enum class EventType {
   kRunStarted,
   kConfigApplied,
+  kConfigUnsupported,
+  kConfigAdjusted,
   kStreamStarted,
   kFrameReceived,
   kFrameDropped,

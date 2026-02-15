@@ -220,12 +220,12 @@ bool LoadParamKeyMapFromFile(const fs::path& path, ParamKeyMap& map, std::string
 }
 
 fs::path ResolveDefaultParamKeyMapPath() {
-  if (const char* env = std::getenv("LABOPS_PARAM_KEY_MAP");
-      env != nullptr && *env != '\0') {
+  if (const char* env = std::getenv("LABOPS_PARAM_KEY_MAP"); env != nullptr && *env != '\0') {
     return fs::path(env);
   }
 
-  const fs::path relative = fs::path("src") / "backends" / "real_sdk" / "maps" / "param_key_map.json";
+  const fs::path relative =
+      fs::path("src") / "backends" / "real_sdk" / "maps" / "param_key_map.json";
   std::error_code ec;
   fs::path cursor = fs::current_path(ec);
   if (ec) {

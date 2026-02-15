@@ -38,6 +38,9 @@ stable interface regardless of real hardware availability.
 - `param_key_map_smoke.cpp`: validates loading of the data-driven generic-key
   to SDK-node mapping (`maps/param_key_map.json`) and verifies behavior changes
   through JSON edits alone, so mapping updates do not require core code edits.
+- `real_apply_params_smoke.cpp`: validates strict/best-effort real-parameter
+  application behavior, including unsupported handling and adjusted value
+  reporting (for downstream config-event emission).
 
 ## Connection to the project
 

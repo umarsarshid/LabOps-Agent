@@ -22,6 +22,8 @@ Debugging camera failures requires timeline evidence, not just summary metrics. 
 ## Current stream trace event types
 
 - `CONFIG_APPLIED`
+- `CONFIG_UNSUPPORTED`
+- `CONFIG_ADJUSTED`
 - `STREAM_STARTED`
 - `FRAME_RECEIVED`
 - `FRAME_DROPPED`

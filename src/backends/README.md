@@ -24,6 +24,9 @@ The project needs one consistent workflow that can run on different camera stack
   - includes `ParamKeyMap` loading (`maps/param_key_map.json`) so generic
     LabOps keys can be remapped to vendor node names without editing core
     orchestration code.
+  - includes strict/best-effort real-parameter application that uses both the
+    key map and node adapter, enabling deterministic unsupported/adjusted
+    reporting in run events.
   - `RealBackend` implements `ICameraBackend` with deterministic placeholder
     behavior until vendor SDK calls are integrated.
   - `SdkContext` provides one-time process SDK init/shutdown via RAII so

@@ -84,6 +84,10 @@ std::string ToJson(EventType event_type) {
     return "run_started";
   case EventType::kConfigApplied:
     return "CONFIG_APPLIED";
+  case EventType::kConfigUnsupported:
+    return "CONFIG_UNSUPPORTED";
+  case EventType::kConfigAdjusted:
+    return "CONFIG_ADJUSTED";
   case EventType::kStreamStarted:
     return "STREAM_STARTED";
   case EventType::kFrameReceived:

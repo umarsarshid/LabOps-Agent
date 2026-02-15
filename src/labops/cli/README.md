@@ -40,8 +40,9 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
     so triage bundles capture exact hardware provenance.
 - Validate optional `netem_profile` references against
   `tools/netem_profiles/<profile>.json`.
-- Apply scenario settings to backend params and emit `CONFIG_APPLIED` audit
-  events.
+- Apply scenario settings to backend params and emit config-audit events:
+  `CONFIG_APPLIED`, plus `CONFIG_UNSUPPORTED`/`CONFIG_ADJUSTED` for real
+  backend apply-mode flows (`apply_mode: strict|best_effort`).
 - Execute sim backend run lifecycle and emit stream trace events.
 - On backend connect failures, still emit `run.json` (when bundle dir is
   already initialized) so early-failure runs preserve run metadata evidence.

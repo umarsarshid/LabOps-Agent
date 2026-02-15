@@ -21,6 +21,12 @@ This folder is that bridge.
   - exposes lookup helpers so integration can evolve node naming without
     touching core run orchestration code.
   - supports file-level map overrides for local/vendor-specific updates.
+- `apply_params.hpp` / `apply_params.cpp`:
+  - bridges scenario generic keys to SDK node names using `ParamKeyMap`.
+  - validates/coerces values via `NodeMapAdapter` in strict or best-effort mode.
+  - returns structured applied/unsupported/adjusted results so CLI can emit
+    deterministic config events (`CONFIG_APPLIED`, `CONFIG_UNSUPPORTED`,
+    `CONFIG_ADJUSTED`).
 - `maps/param_key_map.json`:
   - default mapping data for first integration keys:
     - `exposure`, `gain`, `pixel_format`, `roi`,

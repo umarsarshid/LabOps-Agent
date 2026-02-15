@@ -1,0 +1,419 @@
+#include "backends/real_sdk/apply_params.hpp"
+
+#include <algorithm>
+#include <charconv>
+#include <cmath>
+#include <iomanip>
+#include <optional>
+#include <sstream>
+
+namespace labops::backends::real_sdk {
+
+namespace {
+
+std::string Trim(std::string_view input) {
+  std::size_t begin = 0;
+  while (begin < input.size() && std::isspace(static_cast<unsigned char>(input[begin])) != 0) {
+    ++begin;
+  }
+
+  std::size_t end = input.size();
+  while (end > begin && std::isspace(static_cast<unsigned char>(input[end - 1])) != 0) {
+    --end;
+  }
+
+  return std::string(input.substr(begin, end - begin));
+}
+
+std::string ToLower(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return value;
+}
+
+std::string FormatDouble(double value) {
+  std::ostringstream out;
+  out << std::fixed << std::setprecision(6) << value;
+  std::string text = out.str();
+  while (!text.empty() && text.back() == '0') {
+    text.pop_back();
+  }
+  if (!text.empty() && text.back() == '.') {
+    text.pop_back();
+  }
+  if (text.empty()) {
+    return "0";
+  }
+  return text;
+}
+
+bool ParseBool(std::string_view raw, bool& parsed) {
+  const std::string normalized = ToLower(Trim(raw));
+  if (normalized == "true" || normalized == "1" || normalized == "on") {
+    parsed = true;
+    return true;
+  }
+  if (normalized == "false" || normalized == "0" || normalized == "off") {
+    parsed = false;
+    return true;
+  }
+  return false;
+}
+
+bool ParseInt64(std::string_view raw, std::int64_t& parsed) {
+  const std::string text = Trim(raw);
+  if (text.empty()) {
+    return false;
+  }
+
+  const char* begin = text.data();
+  const char* end = begin + text.size();
+  const auto [ptr, ec] = std::from_chars(begin, end, parsed);
+  if (ec != std::errc() || ptr != end) {
+    return false;
+  }
+  return true;
+}
+
+bool ParseDouble(std::string_view raw, double& parsed) {
+  const std::string text = Trim(raw);
+  if (text.empty()) {
+    return false;
+  }
+
+  char* parse_end = nullptr;
+  parsed = std::strtod(text.c_str(), &parse_end);
+  if (parse_end == nullptr || *parse_end != '\0' || !std::isfinite(parsed)) {
+    return false;
+  }
+  return true;
+}
+
+bool ClampWithRange(double& value, const NodeNumericRange& range, std::string& reason) {
+  const double requested = value;
+  bool adjusted = false;
+
+  if (range.min.has_value() && value < range.min.value()) {
+    value = range.min.value();
+    adjusted = true;
+  }
+  if (range.max.has_value() && value > range.max.value()) {
+    value = range.max.value();
+    adjusted = true;
+  }
+
+  if (!adjusted) {
+    reason.clear();
+    return false;
+  }
+
+  reason = "clamped from " + FormatDouble(requested) + " to " + FormatDouble(value);
+  return true;
+}
+
+std::optional<std::string> FindCaseInsensitiveEnumValue(const std::vector<std::string>& values,
+                                                        std::string_view requested) {
+  const std::string requested_lower = ToLower(std::string(requested));
+  for (const std::string& value : values) {
+    if (ToLower(value) == requested_lower) {
+      return value;
+    }
+  }
+  return std::nullopt;
+}
+
+std::unique_ptr<InMemoryNodeMapAdapter> BuildDefaultNodeAdapter() {
+  auto adapter = std::make_unique<InMemoryNodeMapAdapter>();
+
+  adapter->UpsertNode("ExposureTime", InMemoryNodeMapAdapter::NodeDefinition{
+                                          .value_type = NodeValueType::kFloat64,
+                                          .float64_value = 1200.0,
+                                          .numeric_range =
+                                              NodeNumericRange{
+                                                  .min = std::optional<double>(5.0),
+                                                  .max = std::optional<double>(10'000'000.0),
+                                              },
+                                      });
+  adapter->UpsertNode("Gain", InMemoryNodeMapAdapter::NodeDefinition{
+                                  .value_type = NodeValueType::kFloat64,
+                                  .float64_value = 0.0,
+                                  .numeric_range =
+                                      NodeNumericRange{
+                                          .min = std::optional<double>(0.0),
+                                          .max = std::optional<double>(48.0),
+                                      },
+                              });
+  adapter->UpsertNode("PixelFormat", InMemoryNodeMapAdapter::NodeDefinition{
+                                         .value_type = NodeValueType::kEnumeration,
+                                         .string_value = std::optional<std::string>("mono8"),
+                                         .enum_values =
+                                             std::vector<std::string>{
+                                                 "mono8",
+                                                 "mono12",
+                                                 "rgb8",
+                                             },
+                                     });
+  adapter->UpsertNode("RegionOfInterest", InMemoryNodeMapAdapter::NodeDefinition{
+                                              .value_type = NodeValueType::kString,
+                                              .string_value = std::optional<std::string>(""),
+                                          });
+  adapter->UpsertNode("TriggerMode", InMemoryNodeMapAdapter::NodeDefinition{
+                                         .value_type = NodeValueType::kEnumeration,
+                                         .string_value = std::optional<std::string>("free_run"),
+                                         .enum_values =
+                                             std::vector<std::string>{
+                                                 "free_run",
+                                                 "software",
+                                                 "hardware",
+                                             },
+                                     });
+  adapter->UpsertNode("TriggerSource", InMemoryNodeMapAdapter::NodeDefinition{
+                                           .value_type = NodeValueType::kEnumeration,
+                                           .string_value = std::optional<std::string>("line0"),
+                                           .enum_values =
+                                               std::vector<std::string>{
+                                                   "line0",
+                                                   "line1",
+                                                   "software",
+                                               },
+                                       });
+  adapter->UpsertNode("AcquisitionFrameRate", InMemoryNodeMapAdapter::NodeDefinition{
+                                                  .value_type = NodeValueType::kFloat64,
+                                                  .float64_value = 30.0,
+                                                  .numeric_range =
+                                                      NodeNumericRange{
+                                                          .min = std::optional<double>(1.0),
+                                                          .max = std::optional<double>(240.0),
+                                                      },
+                                              });
+
+  return adapter;
+}
+
+} // namespace
+
+const char* ToString(ParamApplyMode mode) {
+  switch (mode) {
+  case ParamApplyMode::kStrict:
+    return "strict";
+  case ParamApplyMode::kBestEffort:
+    return "best_effort";
+  }
+  return "strict";
+}
+
+bool ParseParamApplyMode(std::string_view raw_mode, ParamApplyMode& mode, std::string& error) {
+  error.clear();
+  const std::string normalized = ToLower(Trim(raw_mode));
+  if (normalized.empty() || normalized == "strict") {
+    mode = ParamApplyMode::kStrict;
+    return true;
+  }
+  if (normalized == "best_effort" || normalized == "best-effort") {
+    mode = ParamApplyMode::kBestEffort;
+    return true;
+  }
+
+  error = "scenario apply_mode must be one of: strict, best_effort";
+  return false;
+}
+
+std::unique_ptr<INodeMapAdapter> CreateDefaultNodeMapAdapter() {
+  return BuildDefaultNodeAdapter();
+}
+
+bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAdapter& node_adapter,
+                 const std::vector<ApplyParamInput>& params, ParamApplyMode mode,
+                 ApplyParamsResult& result, std::string& error) {
+  result = ApplyParamsResult{};
+  error.clear();
+
+  for (const ApplyParamInput& input : params) {
+    const std::string generic_key = Trim(input.generic_key);
+    if (generic_key.empty()) {
+      continue;
+    }
+
+    UnsupportedParam unsupported{
+        .generic_key = generic_key,
+        .requested_value = input.requested_value,
+    };
+
+    std::string node_name;
+    if (!key_map.Resolve(generic_key, node_name)) {
+      unsupported.reason = "no generic->node mapping was found";
+      result.unsupported.push_back(unsupported);
+      if (mode == ParamApplyMode::kStrict) {
+        error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
+        return false;
+      }
+      continue;
+    }
+
+    if (!node_adapter.Has(node_name)) {
+      unsupported.reason = "mapped SDK node '" + node_name + "' is not available";
+      result.unsupported.push_back(unsupported);
+      if (mode == ParamApplyMode::kStrict) {
+        error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
+        return false;
+      }
+      continue;
+    }
+
+    AppliedParam applied{
+        .generic_key = generic_key,
+        .node_name = node_name,
+        .requested_value = input.requested_value,
+        .applied_value = input.requested_value,
+    };
+
+    std::string write_error;
+    std::string backend_value = input.requested_value;
+    switch (node_adapter.GetType(node_name)) {
+    case NodeValueType::kBool: {
+      bool parsed = false;
+      if (!ParseBool(input.requested_value, parsed)) {
+        unsupported.reason = "expected boolean value";
+        result.unsupported.push_back(unsupported);
+        if (mode == ParamApplyMode::kStrict) {
+          error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
+          return false;
+        }
+        continue;
+      }
+      if (!node_adapter.TrySetBool(node_name, parsed, write_error)) {
+        unsupported.reason = write_error.empty() ? "node rejected bool value" : write_error;
+        result.unsupported.push_back(unsupported);
+        if (mode == ParamApplyMode::kStrict) {
+          error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
+          return false;
+        }
+        continue;
+      }
+      backend_value = parsed ? "true" : "false";
+      break;
+    }
+    case NodeValueType::kInt64: {
+      std::int64_t parsed = 0;
+      if (!ParseInt64(input.requested_value, parsed)) {
+        unsupported.reason = "expected integer value";
+        result.unsupported.push_back(unsupported);
+        if (mode == ParamApplyMode::kStrict) {
+          error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
+          return false;
+        }
+        continue;
+      }
+
+      NodeNumericRange range;
+      if (node_adapter.TryGetNumericRange(node_name, range)) {
+        double value = static_cast<double>(parsed);
+        std::string adjust_reason;
+        if (ClampWithRange(value, range, adjust_reason)) {
+          parsed = static_cast<std::int64_t>(std::llround(value));
+          applied.adjusted = true;
+          applied.adjustment_reason = std::move(adjust_reason);
+        }
+      }
+
+      if (!node_adapter.TrySetInt64(node_name, parsed, write_error)) {
+        unsupported.reason = write_error.empty() ? "node rejected integer value" : write_error;
+        result.unsupported.push_back(unsupported);
+        if (mode == ParamApplyMode::kStrict) {
+          error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
+          return false;
+        }
+        continue;
+      }
+
+      backend_value = std::to_string(parsed);
+      break;
+    }
+    case NodeValueType::kFloat64: {
+      double parsed = 0.0;
+      if (!ParseDouble(input.requested_value, parsed)) {
+        unsupported.reason = "expected floating-point value";
+        result.unsupported.push_back(unsupported);
+        if (mode == ParamApplyMode::kStrict) {
+          error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
+          return false;
+        }
+        continue;
+      }
+
+      NodeNumericRange range;
+      if (node_adapter.TryGetNumericRange(node_name, range)) {
+        std::string adjust_reason;
+        if (ClampWithRange(parsed, range, adjust_reason)) {
+          applied.adjusted = true;
+          applied.adjustment_reason = std::move(adjust_reason);
+        }
+      }
+
+      if (!node_adapter.TrySetFloat64(node_name, parsed, write_error)) {
+        unsupported.reason = write_error.empty() ? "node rejected float value" : write_error;
+        result.unsupported.push_back(unsupported);
+        if (mode == ParamApplyMode::kStrict) {
+          error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
+          return false;
+        }
+        continue;
+      }
+
+      backend_value = FormatDouble(parsed);
+      break;
+    }
+    case NodeValueType::kEnumeration:
+    case NodeValueType::kString: {
+      std::string normalized_value = input.requested_value;
+      if (node_adapter.GetType(node_name) == NodeValueType::kEnumeration) {
+        const std::vector<std::string> allowed = node_adapter.ListEnumValues(node_name);
+        const std::optional<std::string> canonical =
+            FindCaseInsensitiveEnumValue(allowed, input.requested_value);
+        if (canonical.has_value() && canonical.value() != input.requested_value) {
+          normalized_value = canonical.value();
+          applied.adjusted = true;
+          applied.adjustment_reason = "normalized enumeration value casing";
+        }
+      }
+
+      if (!node_adapter.TrySetString(node_name, normalized_value, write_error)) {
+        unsupported.reason = write_error.empty() ? "node rejected string value" : write_error;
+        result.unsupported.push_back(unsupported);
+        if (mode == ParamApplyMode::kStrict) {
+          error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
+          return false;
+        }
+        continue;
+      }
+
+      backend_value = normalized_value;
+      break;
+    }
+    case NodeValueType::kUnknown:
+    default:
+      unsupported.reason = "node value type is unknown";
+      result.unsupported.push_back(unsupported);
+      if (mode == ParamApplyMode::kStrict) {
+        error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
+        return false;
+      }
+      continue;
+    }
+
+    std::string backend_error;
+    if (!backend.SetParam(node_name, backend_value, backend_error)) {
+      error = "failed to set mapped backend parameter '" + node_name + "' for generic key '" +
+              generic_key +
+              "': " + (backend_error.empty() ? "backend rejected value" : backend_error);
+      return false;
+    }
+
+    applied.applied_value = backend_value;
+    result.applied.push_back(std::move(applied));
+  }
+
+  return true;
+}
+
+} // namespace labops::backends::real_sdk

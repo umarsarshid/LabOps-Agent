@@ -11,6 +11,7 @@
 #include "artifacts/run_writer.hpp"
 #include "artifacts/scenario_writer.hpp"
 #include "backends/camera_backend.hpp"
+#include "backends/real_sdk/apply_params.hpp"
 #include "backends/real_sdk/real_backend_factory.hpp"
 #include "backends/sim/scenario_config.hpp"
 #include "backends/sim/sim_camera_backend.hpp"
@@ -235,6 +236,8 @@ struct RunPlan {
   backends::sim::SimScenarioConfig sim_config;
   std::chrono::milliseconds duration{1'000};
   std::string backend = std::string(kBackendSim);
+  backends::real_sdk::ParamApplyMode real_apply_mode = backends::real_sdk::ParamApplyMode::kStrict;
+  std::vector<backends::real_sdk::ApplyParamInput> real_params;
   std::optional<std::string> netem_profile;
   std::optional<std::string> device_selector;
   struct Thresholds {
@@ -892,6 +895,120 @@ std::optional<std::string> FindStringJsonField(const std::string& text, std::str
   return std::nullopt;
 }
 
+std::string FormatCompactDouble(double value) {
+  std::ostringstream out;
+  out << std::fixed << std::setprecision(6) << value;
+  std::string text = out.str();
+  while (!text.empty() && text.back() == '0') {
+    text.pop_back();
+  }
+  if (!text.empty() && text.back() == '.') {
+    text.pop_back();
+  }
+  if (text.empty()) {
+    return "0";
+  }
+  return text;
+}
+
+void UpsertRealParam(std::vector<backends::real_sdk::ApplyParamInput>& params, std::string key,
+                     std::string value) {
+  for (auto& existing : params) {
+    if (existing.generic_key == key) {
+      existing.requested_value = std::move(value);
+      return;
+    }
+  }
+  params.push_back(backends::real_sdk::ApplyParamInput{.generic_key = std::move(key),
+                                                       .requested_value = std::move(value)});
+}
+
+bool ExtractJsonObjectField(std::string_view text, std::string_view key, std::string& object_text) {
+  object_text.clear();
+  const std::string needle = "\"" + std::string(key) + "\"";
+  const std::size_t key_pos = text.find(needle);
+  if (key_pos == std::string_view::npos) {
+    return false;
+  }
+
+  const std::size_t colon_pos = text.find(':', key_pos + needle.size());
+  if (colon_pos == std::string_view::npos) {
+    return false;
+  }
+
+  std::size_t cursor = colon_pos + 1;
+  while (cursor < text.size() && std::isspace(static_cast<unsigned char>(text[cursor])) != 0) {
+    ++cursor;
+  }
+  if (cursor >= text.size() || text[cursor] != '{') {
+    return false;
+  }
+
+  const std::size_t start = cursor;
+  std::size_t depth = 0;
+  bool in_string = false;
+  bool escaped = false;
+  for (; cursor < text.size(); ++cursor) {
+    const char c = text[cursor];
+    if (in_string) {
+      if (escaped) {
+        escaped = false;
+      } else if (c == '\\') {
+        escaped = true;
+      } else if (c == '"') {
+        in_string = false;
+      }
+      continue;
+    }
+
+    if (c == '"') {
+      in_string = true;
+      continue;
+    }
+    if (c == '{') {
+      ++depth;
+      continue;
+    }
+    if (c == '}') {
+      if (depth == 0U) {
+        return false;
+      }
+      --depth;
+      if (depth == 0U) {
+        object_text = std::string(text.substr(start, cursor - start + 1));
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+bool BuildRoiParamValue(const std::string& scenario_text, std::string& roi_value,
+                        std::string& error) {
+  roi_value.clear();
+  error.clear();
+
+  std::string roi_object;
+  if (!ExtractJsonObjectField(scenario_text, "roi", roi_object)) {
+    return false;
+  }
+
+  const auto x = FindUnsignedJsonField(roi_object, "x");
+  const auto y = FindUnsignedJsonField(roi_object, "y");
+  const auto width = FindUnsignedJsonField(roi_object, "width");
+  const auto height = FindUnsignedJsonField(roi_object, "height");
+  if (!x.has_value() || !y.has_value() || !width.has_value() || !height.has_value()) {
+    error = "scenario camera.roi must include x, y, width, and height";
+    return false;
+  }
+
+  roi_value = "x=" + std::to_string(x.value()) + ",y=" + std::to_string(y.value()) +
+              ",width=" + std::to_string(width.value()) +
+              ",height=" + std::to_string(height.value());
+  return true;
+}
+
 bool IsValidSlug(std::string_view value) {
   if (value.empty()) {
     return false;
@@ -1271,6 +1388,25 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
     plan.backend = *backend;
   }
 
+  if (const auto apply_mode = FindStringJsonField(scenario_text, "apply_mode");
+      apply_mode.has_value()) {
+    if (!backends::real_sdk::ParseParamApplyMode(apply_mode.value(), plan.real_apply_mode, error)) {
+      return false;
+    }
+  }
+
+  const auto requested_fps = FindUnsignedJsonField(scenario_text, "fps");
+  const auto pixel_format = FindStringJsonField(scenario_text, "pixel_format");
+  const auto exposure_us = FindUnsignedJsonField(scenario_text, "exposure_us");
+  const auto gain_db = FindNumberJsonField(scenario_text, "gain_db");
+  const auto trigger_mode = FindStringJsonField(scenario_text, "trigger_mode");
+  const auto trigger_source = FindStringJsonField(scenario_text, "trigger_source");
+  std::string roi_value;
+  const bool has_roi = ExtractJsonObjectField(scenario_text, "roi", roi_value);
+  if (has_roi && !BuildRoiParamValue(scenario_text, roi_value, error)) {
+    return false;
+  }
+
   if (!assign_u32("fps", plan.sim_config.fps)) {
     return false;
   }
@@ -1294,6 +1430,28 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
   }
   if (!assign_u32("reorder", plan.sim_config.faults.reorder)) {
     return false;
+  }
+
+  if (requested_fps.has_value()) {
+    UpsertRealParam(plan.real_params, "frame_rate", std::to_string(plan.sim_config.fps));
+  }
+  if (pixel_format.has_value() && !pixel_format->empty()) {
+    UpsertRealParam(plan.real_params, "pixel_format", pixel_format.value());
+  }
+  if (exposure_us.has_value()) {
+    UpsertRealParam(plan.real_params, "exposure", std::to_string(exposure_us.value()));
+  }
+  if (gain_db.has_value()) {
+    UpsertRealParam(plan.real_params, "gain", FormatCompactDouble(gain_db.value()));
+  }
+  if (trigger_mode.has_value() && !trigger_mode->empty()) {
+    UpsertRealParam(plan.real_params, "trigger_mode", trigger_mode.value());
+  }
+  if (trigger_source.has_value() && !trigger_source->empty()) {
+    UpsertRealParam(plan.real_params, "trigger_source", trigger_source.value());
+  }
+  if (has_roi) {
+    UpsertRealParam(plan.real_params, "roi", roi_value);
   }
 
   if (!assign_non_negative_double("min_avg_fps", plan.thresholds.min_avg_fps)) {
@@ -1539,6 +1697,96 @@ BuildConfigAppliedPayload(const core::schema::RunInfo& run_info,
   }
 
   return payload;
+}
+
+std::map<std::string, std::string>
+BuildConfigUnsupportedPayload(const core::schema::RunInfo& run_info,
+                              const backends::real_sdk::UnsupportedParam& unsupported,
+                              const backends::real_sdk::ParamApplyMode mode) {
+  return {
+      {"run_id", run_info.run_id},
+      {"scenario_id", run_info.config.scenario_id},
+      {"apply_mode", backends::real_sdk::ToString(mode)},
+      {"generic_key", unsupported.generic_key},
+      {"requested_value", unsupported.requested_value},
+      {"reason", unsupported.reason},
+  };
+}
+
+std::map<std::string, std::string>
+BuildConfigAdjustedPayload(const core::schema::RunInfo& run_info,
+                           const backends::real_sdk::AppliedParam& adjusted,
+                           const backends::real_sdk::ParamApplyMode mode) {
+  return {
+      {"run_id", run_info.run_id},
+      {"scenario_id", run_info.config.scenario_id},
+      {"apply_mode", backends::real_sdk::ToString(mode)},
+      {"generic_key", adjusted.generic_key},
+      {"node_name", adjusted.node_name},
+      {"requested_value", adjusted.requested_value},
+      {"applied_value", adjusted.applied_value},
+      {"reason", adjusted.adjustment_reason},
+  };
+}
+
+bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan& run_plan,
+                               const core::schema::RunInfo& run_info, const fs::path& bundle_dir,
+                               backends::BackendConfig& applied_params, fs::path& events_path,
+                               core::logging::Logger& logger, std::string& error) {
+  const fs::path key_map_path = backends::real_sdk::ResolveDefaultParamKeyMapPath();
+  backends::real_sdk::ParamKeyMap key_map;
+  if (!backends::real_sdk::LoadParamKeyMapFromFile(key_map_path, key_map, error)) {
+    error = "failed to load real backend param key map: " + error;
+    return false;
+  }
+
+  std::unique_ptr<backends::real_sdk::INodeMapAdapter> adapter =
+      backends::real_sdk::CreateDefaultNodeMapAdapter();
+  if (adapter == nullptr) {
+    error = "failed to initialize real backend node-map adapter";
+    return false;
+  }
+
+  backends::real_sdk::ApplyParamsResult apply_result;
+  if (!backends::real_sdk::ApplyParams(backend, key_map, *adapter, run_plan.real_params,
+                                       run_plan.real_apply_mode, apply_result, error)) {
+    for (const auto& unsupported : apply_result.unsupported) {
+      std::string event_error;
+      if (!AppendTraceEvent(
+              events::EventType::kConfigUnsupported, std::chrono::system_clock::now(),
+              BuildConfigUnsupportedPayload(run_info, unsupported, run_plan.real_apply_mode),
+              bundle_dir, events_path, event_error)) {
+        logger.Warn("failed to append CONFIG_UNSUPPORTED event on strict apply failure",
+                    {{"error", event_error}});
+      }
+    }
+    return false;
+  }
+
+  for (const auto& unsupported : apply_result.unsupported) {
+    if (!AppendTraceEvent(
+            events::EventType::kConfigUnsupported, std::chrono::system_clock::now(),
+            BuildConfigUnsupportedPayload(run_info, unsupported, run_plan.real_apply_mode),
+            bundle_dir, events_path, error)) {
+      return false;
+    }
+    logger.Warn("config unsupported in best-effort mode",
+                {{"generic_key", unsupported.generic_key}, {"reason", unsupported.reason}});
+  }
+
+  for (const auto& applied : apply_result.applied) {
+    applied_params[applied.generic_key] = applied.applied_value;
+    if (!applied.adjusted) {
+      continue;
+    }
+    if (!AppendTraceEvent(events::EventType::kConfigAdjusted, std::chrono::system_clock::now(),
+                          BuildConfigAdjustedPayload(run_info, applied, run_plan.real_apply_mode),
+                          bundle_dir, events_path, error)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 // Evaluates scenario pass/fail thresholds against computed metrics.
@@ -2271,6 +2519,31 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     return kExitFailure;
   }
 
+  fs::path events_path;
+  backends::BackendConfig applied_params;
+  for (const auto& [key, value] : selected_device_params) {
+    applied_params[key] = value;
+  }
+
+  bool config_applied_event_emitted = false;
+  if (run_plan.backend == kBackendRealStub) {
+    if (!ApplyRealParamsWithEvents(*backend, run_plan, run_info, bundle_dir, applied_params,
+                                   events_path, logger, error)) {
+      logger.Error("backend config apply failed", {{"error", error}});
+      std::cerr << "error: backend config failed: " << error << '\n';
+      return kExitFailure;
+    }
+
+    if (!AppendTraceEvent(events::EventType::kConfigApplied, std::chrono::system_clock::now(),
+                          BuildConfigAppliedPayload(run_info, applied_params), bundle_dir,
+                          events_path, error)) {
+      logger.Error("failed to append CONFIG_APPLIED event", {{"error", error}});
+      std::cerr << "error: failed to append CONFIG_APPLIED event: " << error << '\n';
+      return kExitFailure;
+    }
+    config_applied_event_emitted = true;
+  }
+
   if (!backend->Connect(error)) {
     logger.Error("backend connect failed",
                  {{"backend", run_info.config.backend}, {"error", error}});
@@ -2290,25 +2563,25 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
   logger.Info("backend connected", {{"backend", run_info.config.backend}});
 
-  backends::BackendConfig applied_params;
-  for (const auto& [key, value] : selected_device_params) {
-    applied_params[key] = value;
-  }
-  if (!backends::sim::ApplyScenarioConfig(*backend, run_plan.sim_config, error, &applied_params)) {
-    logger.Error("backend config apply failed", {{"error", error}});
-    std::cerr << "error: backend config failed: " << error << '\n';
-    return kExitFailure;
+  if (run_plan.backend == kBackendSim) {
+    if (!backends::sim::ApplyScenarioConfig(*backend, run_plan.sim_config, error,
+                                            &applied_params)) {
+      logger.Error("backend config apply failed", {{"error", error}});
+      std::cerr << "error: backend config failed: " << error << '\n';
+      return kExitFailure;
+    }
   }
   logger.Debug("backend config applied", {{"param_count", std::to_string(applied_params.size())}});
 
-  fs::path events_path;
-  const auto config_applied_at = std::chrono::system_clock::now();
-  if (!AppendTraceEvent(events::EventType::kConfigApplied, config_applied_at,
-                        BuildConfigAppliedPayload(run_info, applied_params), bundle_dir,
-                        events_path, error)) {
-    logger.Error("failed to append CONFIG_APPLIED event", {{"error", error}});
-    std::cerr << "error: failed to append CONFIG_APPLIED event: " << error << '\n';
-    return kExitFailure;
+  if (!config_applied_event_emitted) {
+    const auto config_applied_at = std::chrono::system_clock::now();
+    if (!AppendTraceEvent(events::EventType::kConfigApplied, config_applied_at,
+                          BuildConfigAppliedPayload(run_info, applied_params), bundle_dir,
+                          events_path, error)) {
+      logger.Error("failed to append CONFIG_APPLIED event", {{"error", error}});
+      std::cerr << "error: failed to append CONFIG_APPLIED event: " << error << '\n';
+      return kExitFailure;
+    }
   }
 
   ScopedNetemTeardown netem_teardown_guard(&logger);

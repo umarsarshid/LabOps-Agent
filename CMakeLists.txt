@@ -71,6 +71,7 @@ target_compile_features(labops_events PUBLIC cxx_std_20)
 # Camera backend contracts plus sim implementation used for hardware-free
 # development and CI.
 add_library(labops_backends
+  src/backends/real_sdk/apply_params.cpp
   src/backends/real_sdk/node_map_adapter.cpp
   src/backends/real_sdk/param_key_map.cpp
   src/backends/real_sdk/real_backend.cpp
@@ -348,6 +349,14 @@ target_link_libraries(param_key_map_smoke PRIVATE labops_backends)
 target_compile_features(param_key_map_smoke PRIVATE cxx_std_20)
 add_test(NAME param_key_map_smoke COMMAND param_key_map_smoke)
 
+# Smoke test for strict vs best-effort real-backend parameter application.
+add_executable(real_apply_params_smoke
+  tests/backends/real_apply_params_smoke.cpp
+)
+target_link_libraries(real_apply_params_smoke PRIVATE labops_backends)
+target_compile_features(real_apply_params_smoke PRIVATE cxx_std_20)
+add_test(NAME real_apply_params_smoke COMMAND real_apply_params_smoke)
+
 # Smoke test for deterministic frame generation and timing envelope.
 add_executable(sim_frame_generator_smoke
   tests/backends/sim_frame_generator_smoke.cpp
@@ -528,6 +537,16 @@ target_include_directories(list_devices_real_backend_smoke PRIVATE src)
 target_link_libraries(list_devices_real_backend_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
 target_compile_features(list_devices_real_backend_smoke PRIVATE cxx_std_20)
 add_test(NAME list_devices_real_backend_smoke COMMAND list_devices_real_backend_smoke)
+
+# Integration smoke test for strict vs best-effort real apply-mode event flow.
+add_executable(real_apply_mode_events_smoke
+  tests/labops/real_apply_mode_events_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(real_apply_mode_events_smoke PRIVATE src)
+target_link_libraries(real_apply_mode_events_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(real_apply_mode_events_smoke PRIVATE cxx_std_20)
+add_test(NAME real_apply_mode_events_smoke COMMAND real_apply_mode_events_smoke)
 
 # Integration smoke test for KB draft generation from a run folder.
 add_executable(kb_draft_from_run_folder_smoke
