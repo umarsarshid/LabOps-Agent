@@ -42,8 +42,7 @@ int DispatchWithCapturedStdout(std::vector<std::string> argv_storage, std::strin
 
 int main() {
   std::string stdout_text;
-  const int exit_code =
-      DispatchWithCapturedStdout({"labops", "list-backends"}, stdout_text);
+  const int exit_code = DispatchWithCapturedStdout({"labops", "list-backends"}, stdout_text);
   if (exit_code != 0) {
     Fail("list-backends returned non-zero exit code");
   }

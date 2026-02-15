@@ -52,6 +52,10 @@ surface (argument parsing + runtime orchestration + artifact/event output).
   correlate directly with bundle artifacts.
 - `list_backends_smoke.cpp`: verifies `labops list-backends` prints deterministic
   availability output for `sim` plus `real` (enabled or disabled with reason).
+- `list_devices_real_backend_smoke.cpp`: verifies
+  `labops list-devices --backend real` returns device-list output when real
+  backend is enabled and friendly `BACKEND_NOT_AVAILABLE` messaging when
+  disabled.
 - `kb_draft_from_run_folder_smoke.cpp`: verifies `labops kb draft --run <dir>`
   generates `kb_draft.md` from `engineer_packet.md` with populated run-context,
   repro, hypothesis, and evidence-link sections.

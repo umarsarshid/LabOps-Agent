@@ -42,6 +42,7 @@ cmake --build tmp/build
 ```bash
 ./tmp/build/labops version
 ./tmp/build/labops list-backends
+./tmp/build/labops list-devices --backend real
 ./tmp/build/labops validate scenarios/sim_baseline.json
 ./tmp/build/labops run scenarios/sim_baseline.json --out tmp/runs
 ```
@@ -98,6 +99,7 @@ That means LabOps is already useful for repeatable testing and triage flow, even
 
 - `labops version`
 - `labops list-backends`
+- `labops list-devices --backend real`
 - `labops validate <scenario.json>`
 - `labops run <scenario.json> --out <dir> [--zip] [--redact] [--soak ...]`
 - `labops baseline capture <scenario.json>`

@@ -85,6 +85,7 @@ void PrintUsage(std::ostream& out) {
       << "  labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]\n"
       << "  labops kb draft --run <run_folder> [--out <kb_draft.md>]\n"
       << "  labops list-backends\n"
+      << "  labops list-devices --backend <real>\n"
       << "  labops validate <scenario.json>\n"
       << "  labops version\n";
 }
@@ -100,6 +101,11 @@ void PrintBaselineUsage(std::ostream& out) {
 void PrintKbUsage(std::ostream& out) {
   out << "usage:\n"
       << "  labops kb draft --run <run_folder> [--out <kb_draft.md>]\n";
+}
+
+void PrintListDevicesUsage(std::ostream& out) {
+  out << "usage:\n"
+      << "  labops list-devices --backend <real>\n";
 }
 
 // SIGINT is handled as a best-effort safe pause request for soak runs.
@@ -247,6 +253,10 @@ struct KbDraftOptions {
   fs::path run_folder;
   fs::path output_path;
   bool has_output_path = false;
+};
+
+struct ListDevicesOptions {
+  std::string backend;
 };
 
 // Parse `run` args with an explicit contract:
@@ -563,6 +573,36 @@ bool ParseKbDraftOptions(const std::vector<std::string_view>& args, KbDraftOptio
   }
   if (!options.has_output_path) {
     options.output_path = options.run_folder / "kb_draft.md";
+  }
+
+  return true;
+}
+
+bool ParseListDevicesOptions(const std::vector<std::string_view>& args, ListDevicesOptions& options,
+                             std::string& error) {
+  for (std::size_t i = 0; i < args.size(); ++i) {
+    const std::string_view token = args[i];
+    if (token == "--backend") {
+      if (i + 1 >= args.size()) {
+        error = "missing value for --backend";
+        return false;
+      }
+      options.backend = std::string(args[i + 1]);
+      ++i;
+      continue;
+    }
+
+    error = "unknown option: " + std::string(token);
+    return false;
+  }
+
+  if (options.backend.empty()) {
+    error = "list-devices requires --backend <real>";
+    return false;
+  }
+  if (options.backend != "real") {
+    error = "list-devices currently supports only --backend real";
+    return false;
   }
 
   return true;
@@ -2620,6 +2660,31 @@ int CommandBaseline(const std::vector<std::string_view>& args) {
   return kExitUsage;
 }
 
+int CommandListDevices(const std::vector<std::string_view>& args) {
+  ListDevicesOptions options;
+  std::string error;
+  if (!ParseListDevicesOptions(args, options, error)) {
+    std::cerr << "error: " << error << '\n';
+    PrintListDevicesUsage(std::cerr);
+    return kExitUsage;
+  }
+
+  if (!backends::sdk_stub::IsRealBackendEnabledAtBuild()) {
+    std::cerr << "error: BACKEND_NOT_AVAILABLE: real backend "
+              << backends::sdk_stub::RealBackendAvailabilityStatusText() << '\n';
+    return kExitFailure;
+  }
+
+  // This repository intentionally ships only sdk_stub integration. Even when
+  // the real backend path is enabled by build plumbing, device listing remains
+  // a non-proprietary placeholder until vendor SDK integration is implemented.
+  std::cout << "backend: real\n";
+  std::cout << "status: enabled\n";
+  std::cout << "devices: 0\n";
+  std::cout << "note: sdk_stub does not implement device discovery in this repository\n";
+  return kExitSuccess;
+}
+
 int CommandKbDraft(const std::vector<std::string_view>& args) {
   KbDraftOptions options;
   std::string error;
@@ -2742,6 +2807,10 @@ int Dispatch(int argc, char** argv) {
 
   if (command == "list-backends") {
     return CommandListBackends(args);
+  }
+
+  if (command == "list-devices") {
+    return CommandListDevices(args);
   }
 
   if (command == "validate") {

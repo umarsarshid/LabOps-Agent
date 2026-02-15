@@ -453,6 +453,16 @@ target_link_libraries(list_backends_smoke PRIVATE labops_artifacts labops_backen
 target_compile_features(list_backends_smoke PRIVATE cxx_std_20)
 add_test(NAME list_backends_smoke COMMAND list_backends_smoke)
 
+# Integration smoke test for real-backend device listing contract.
+add_executable(list_devices_real_backend_smoke
+  tests/labops/list_devices_real_backend_smoke.cpp
+  src/labops/cli/router.cpp
+)
+target_include_directories(list_devices_real_backend_smoke PRIVATE src)
+target_link_libraries(list_devices_real_backend_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_compile_features(list_devices_real_backend_smoke PRIVATE cxx_std_20)
+add_test(NAME list_devices_real_backend_smoke COMMAND list_devices_real_backend_smoke)
+
 # Integration smoke test for KB draft generation from a run folder.
 add_executable(kb_draft_from_run_folder_smoke
   tests/labops/kb_draft_from_run_folder_smoke.cpp

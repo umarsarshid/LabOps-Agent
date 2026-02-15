@@ -39,6 +39,7 @@ Use the real-backend build toggle for local integration work:
 cmake -S . -B tmp/build-real -DLABOPS_ENABLE_REAL_BACKEND=ON
 cmake --build tmp/build-real
 ./tmp/build-real/labops list-backends
+./tmp/build-real/labops list-devices --backend real
 ```
 
 You can point SDK discovery to your local install using either CMake cache vars
