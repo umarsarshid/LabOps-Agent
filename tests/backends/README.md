@@ -24,6 +24,9 @@ stable interface regardless of real hardware availability.
   and verifies actionable skeleton errors without requiring camera hardware.
 - `sdk_context_smoke.cpp`: validates real SDK context RAII behavior (init once,
   handle reference counting, and safe shutdown on final release).
+- `real_device_enumeration_smoke.cpp`: validates real-device descriptor
+  enumeration/mapping into normalized `DeviceInfo` fields (including transport
+  normalization and optional IP/MAC handling).
 
 ## Connection to the project
 

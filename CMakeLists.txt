@@ -314,6 +314,14 @@ target_link_libraries(sdk_context_smoke PRIVATE labops_backends)
 target_compile_features(sdk_context_smoke PRIVATE cxx_std_20)
 add_test(NAME sdk_context_smoke COMMAND sdk_context_smoke)
 
+# Smoke test for real device enumeration and descriptor normalization.
+add_executable(real_device_enumeration_smoke
+  tests/backends/real_device_enumeration_smoke.cpp
+)
+target_link_libraries(real_device_enumeration_smoke PRIVATE labops_backends)
+target_compile_features(real_device_enumeration_smoke PRIVATE cxx_std_20)
+add_test(NAME real_device_enumeration_smoke COMMAND real_device_enumeration_smoke)
+
 # Smoke test for deterministic frame generation and timing envelope.
 add_executable(sim_frame_generator_smoke
   tests/backends/sim_frame_generator_smoke.cpp

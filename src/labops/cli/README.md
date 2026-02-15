@@ -26,6 +26,9 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Surface backend device-discovery contract (`list-devices --backend real`)
   including friendly `BACKEND_NOT_AVAILABLE` messaging when real backend is not
   active.
+  - when enabled, prints normalized per-device identity fields
+    (`model`, `serial`, `user_id`, `transport`, optional `ip`/`mac`) from
+    real-backend descriptor mapping.
 - Route scenario validation through schema loader with actionable errors.
 - Validate optional `netem_profile` references against
   `tools/netem_profiles/<profile>.json`.

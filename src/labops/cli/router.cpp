@@ -2675,12 +2675,35 @@ int CommandListDevices(const std::vector<std::string_view>& args) {
     return kExitFailure;
   }
 
-  // Device discovery is intentionally deferred. This keeps command contracts
-  // stable while the proprietary SDK adapter is integrated in later milestones.
+  std::vector<backends::real_sdk::DeviceInfo> devices;
+  if (!backends::real_sdk::EnumerateConnectedDevices(devices, error)) {
+    std::cerr << "error: DEVICE_DISCOVERY_FAILED: " << error << '\n';
+    return kExitFailure;
+  }
+
   std::cout << "backend: real\n";
   std::cout << "status: enabled\n";
-  std::cout << "devices: 0\n";
-  std::cout << "note: real backend skeleton does not implement device discovery yet\n";
+  std::cout << "devices: " << devices.size() << '\n';
+  if (devices.empty()) {
+    std::cout << "note: no cameras detected\n";
+    std::cout << "hint: set LABOPS_REAL_DEVICE_FIXTURE to a descriptor CSV for local validation\n";
+    return kExitSuccess;
+  }
+
+  for (std::size_t i = 0; i < devices.size(); ++i) {
+    const backends::real_sdk::DeviceInfo& device = devices[i];
+    std::cout << "device[" << i << "].model: " << device.model << '\n';
+    std::cout << "device[" << i << "].serial: " << device.serial << '\n';
+    std::cout << "device[" << i
+              << "].user_id: " << (device.user_id.empty() ? "(none)" : device.user_id) << '\n';
+    std::cout << "device[" << i << "].transport: " << device.transport << '\n';
+    if (device.ip_address.has_value()) {
+      std::cout << "device[" << i << "].ip: " << device.ip_address.value() << '\n';
+    }
+    if (device.mac_address.has_value()) {
+      std::cout << "device[" << i << "].mac: " << device.mac_address.value() << '\n';
+    }
+  }
   return kExitSuccess;
 }
 

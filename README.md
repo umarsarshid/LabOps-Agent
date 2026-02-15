@@ -47,6 +47,18 @@ cmake --build tmp/build
 ./tmp/build/labops run scenarios/sim_baseline.json --out tmp/runs
 ```
 
+If real backend is enabled and you want to demo device discovery in this
+open-source repo, provide a descriptor CSV:
+
+```bash
+cat > tmp/devices.csv <<'CSV'
+model,serial,user_id,transport,ip,mac
+SprintCam,SN-1001,Primary,GigE,10.0.0.21,aa-bb-cc-dd-ee-01
+SprintCam,SN-1002,,USB3VISION,,
+CSV
+LABOPS_REAL_DEVICE_FIXTURE="$(pwd)/tmp/devices.csv" ./tmp/build/labops list-devices --backend real
+```
+
 ## Typical Workflow
 
 1. Validate a scenario.

@@ -21,6 +21,11 @@ This folder is that bridge.
   - guarantees shutdown happens when the final active handle releases.
 - `real_backend_factory.hpp` / `real_backend_factory.cpp`:
   - centralizes build-status helpers for CLI (`enabled`, `SDK missing`, etc.)
+  - defines normalized `DeviceInfo` used by `labops list-devices`
+  - maps SDK-style device descriptors into `DeviceInfo` fields
+    (`model/serial/user_id/transport/ip/mac`)
+  - supports local OSS discovery fixture via `LABOPS_REAL_DEVICE_FIXTURE` CSV
+    so discovery behavior is testable without vendor SDK binaries
   - creates the effective backend object for real runs:
     - real backend enabled -> `RealBackend`
     - real backend disabled -> `sdk_stub::RealCameraBackendStub`

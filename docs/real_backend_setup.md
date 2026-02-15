@@ -42,6 +42,20 @@ cmake --build tmp/build-real
 ./tmp/build-real/labops list-devices --backend real
 ```
 
+For OSS/local validation (without proprietary SDK enumeration calls), you can
+provide a descriptor fixture:
+
+```bash
+cat > tmp/devices.csv <<'CSV'
+model,serial,user_id,transport,ip,mac
+SprintCam,SN-1001,Primary,GigE,10.0.0.21,aa-bb-cc-dd-ee-01
+SprintCam,SN-1002,,USB3VISION,,
+CSV
+
+export LABOPS_REAL_DEVICE_FIXTURE="$(pwd)/tmp/devices.csv"
+./tmp/build-real/labops list-devices --backend real
+```
+
 You can point SDK discovery to your local install using either CMake cache vars
 or environment variables:
 
