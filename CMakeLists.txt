@@ -71,6 +71,7 @@ target_compile_features(labops_events PUBLIC cxx_std_20)
 # Camera backend contracts plus sim implementation used for hardware-free
 # development and CI.
 add_library(labops_backends
+  src/backends/real_sdk/node_map_adapter.cpp
   src/backends/real_sdk/real_backend.cpp
   src/backends/real_sdk/real_backend_factory.cpp
   src/backends/real_sdk/sdk_context.cpp
@@ -329,6 +330,14 @@ add_executable(real_device_selector_resolution_smoke
 target_link_libraries(real_device_selector_resolution_smoke PRIVATE labops_backends)
 target_compile_features(real_device_selector_resolution_smoke PRIVATE cxx_std_20)
 add_test(NAME real_device_selector_resolution_smoke COMMAND real_device_selector_resolution_smoke)
+
+# Smoke test for generic-key node-map adapter query/set contracts.
+add_executable(node_map_adapter_smoke
+  tests/backends/node_map_adapter_smoke.cpp
+)
+target_link_libraries(node_map_adapter_smoke PRIVATE labops_backends)
+target_compile_features(node_map_adapter_smoke PRIVATE cxx_std_20)
+add_test(NAME node_map_adapter_smoke COMMAND node_map_adapter_smoke)
 
 # Smoke test for deterministic frame generation and timing envelope.
 add_executable(sim_frame_generator_smoke

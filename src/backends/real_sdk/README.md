@@ -10,6 +10,12 @@ This folder is that bridge.
 
 ## Current contents
 
+- `node_map_adapter.hpp` / `node_map_adapter.cpp`:
+  - introduces `INodeMapAdapter` abstraction for generic parameter keys.
+  - supports pre-apply capability checks (`Has`, type query, enum/range query)
+    and typed get/set contracts used by future SDK node mapping.
+  - keeps early bridge logic deterministic with an in-memory implementation so
+    behavior is testable before proprietary node APIs are linked.
 - `real_backend.hpp` / `real_backend.cpp`:
   - `RealBackend` implements `ICameraBackend`.
   - behavior is intentionally deterministic and non-streaming for now.

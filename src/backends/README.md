@@ -19,6 +19,8 @@ The project needs one consistent workflow that can run on different camera stack
   - `FrameSample` now includes `frame_id`, `timestamp`, `size_bytes`, and
     optional `dropped`.
 - `real_sdk/`: real-backend skeleton + factory wiring.
+  - includes `NodeMapAdapter` abstraction used for generic-key capability
+    checks and future SDK node mapping before camera apply calls are executed.
   - `RealBackend` implements `ICameraBackend` with deterministic placeholder
     behavior until vendor SDK calls are integrated.
   - `SdkContext` provides one-time process SDK init/shutdown via RAII so

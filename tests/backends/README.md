@@ -31,6 +31,10 @@ stable interface regardless of real hardware availability.
   deterministic resolution rules (`serial`/`user_id` with optional 0-based
   `index` disambiguation) both against in-memory fixture devices and
   environment-driven discovery fixtures.
+- `node_map_adapter_smoke.cpp`: validates `NodeMapAdapter` contracts for
+  pre-apply parameter capability checks (`Has`/type/range/enum listing) and
+  typed get/set behavior with actionable failures for mismatched/out-of-range
+  writes.
 
 ## Connection to the project
 
