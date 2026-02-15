@@ -1,0 +1,9 @@
+{
+  "exposure": "ExposureTime",
+  "gain": "Gain",
+  "pixel_format": "PixelFormat",
+  "roi": "RegionOfInterest",
+  "trigger_mode": "TriggerMode",
+  "trigger_source": "TriggerSource",
+  "frame_rate": "AcquisitionFrameRate"
+}

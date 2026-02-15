@@ -21,6 +21,9 @@ The project needs one consistent workflow that can run on different camera stack
 - `real_sdk/`: real-backend skeleton + factory wiring.
   - includes `NodeMapAdapter` abstraction used for generic-key capability
     checks and future SDK node mapping before camera apply calls are executed.
+  - includes `ParamKeyMap` loading (`maps/param_key_map.json`) so generic
+    LabOps keys can be remapped to vendor node names without editing core
+    orchestration code.
   - `RealBackend` implements `ICameraBackend` with deterministic placeholder
     behavior until vendor SDK calls are integrated.
   - `SdkContext` provides one-time process SDK init/shutdown via RAII so

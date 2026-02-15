@@ -35,6 +35,9 @@ stable interface regardless of real hardware availability.
   pre-apply parameter capability checks (`Has`/type/range/enum listing) and
   typed get/set behavior with actionable failures for mismatched/out-of-range
   writes.
+- `param_key_map_smoke.cpp`: validates loading of the data-driven generic-key
+  to SDK-node mapping (`maps/param_key_map.json`) and verifies behavior changes
+  through JSON edits alone, so mapping updates do not require core code edits.
 
 ## Connection to the project
 

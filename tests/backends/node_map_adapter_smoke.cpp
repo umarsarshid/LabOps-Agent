@@ -31,33 +31,30 @@ int main() {
   using labops::backends::real_sdk::NodeValueType;
 
   InMemoryNodeMapAdapter adapter;
-  adapter.UpsertNode(
-      "camera.fps",
-      InMemoryNodeMapAdapter::NodeDefinition{
-          .value_type = NodeValueType::kInt64,
-          .int64_value = 30,
-          .numeric_range = NodeNumericRange{
-              .min = std::optional<double>(1.0),
-              .max = std::optional<double>(240.0),
-          },
-      });
-  adapter.UpsertNode(
-      "camera.exposure_us",
-      InMemoryNodeMapAdapter::NodeDefinition{
-          .value_type = NodeValueType::kFloat64,
-          .float64_value = 1200.0,
-          .numeric_range = NodeNumericRange{
-              .min = std::optional<double>(50.0),
-              .max = std::optional<double>(1'000'000.0),
-          },
-      });
-  adapter.UpsertNode(
-      "camera.pixel_format",
-      InMemoryNodeMapAdapter::NodeDefinition{
-          .value_type = NodeValueType::kEnumeration,
-          .string_value = std::optional<std::string>("mono8"),
-          .enum_values = std::vector<std::string>{"mono8", "mono12", "rgb8"},
-      });
+  adapter.UpsertNode("camera.fps", InMemoryNodeMapAdapter::NodeDefinition{
+                                       .value_type = NodeValueType::kInt64,
+                                       .int64_value = 30,
+                                       .numeric_range =
+                                           NodeNumericRange{
+                                               .min = std::optional<double>(1.0),
+                                               .max = std::optional<double>(240.0),
+                                           },
+                                   });
+  adapter.UpsertNode("camera.exposure_us", InMemoryNodeMapAdapter::NodeDefinition{
+                                               .value_type = NodeValueType::kFloat64,
+                                               .float64_value = 1200.0,
+                                               .numeric_range =
+                                                   NodeNumericRange{
+                                                       .min = std::optional<double>(50.0),
+                                                       .max = std::optional<double>(1'000'000.0),
+                                                   },
+                                           });
+  adapter.UpsertNode("camera.pixel_format",
+                     InMemoryNodeMapAdapter::NodeDefinition{
+                         .value_type = NodeValueType::kEnumeration,
+                         .string_value = std::optional<std::string>("mono8"),
+                         .enum_values = std::vector<std::string>{"mono8", "mono12", "rgb8"},
+                     });
 
   // Core done-condition signal: callers can query key existence before any
   // write/apply operation is attempted.

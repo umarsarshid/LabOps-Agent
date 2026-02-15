@@ -12,8 +12,9 @@ bool IsSupportedStringValue(const std::vector<std::string>& values, std::string_
 }
 
 template <typename SetterFunc>
-bool WithNodeForWrite(std::map<std::string, InMemoryNodeMapAdapter::NodeDefinition, std::less<>>& nodes,
-                      std::string_view key, std::string& error, SetterFunc&& setter) {
+bool WithNodeForWrite(
+    std::map<std::string, InMemoryNodeMapAdapter::NodeDefinition, std::less<>>& nodes,
+    std::string_view key, std::string& error, SetterFunc&& setter) {
   error.clear();
   auto it = nodes.find(key);
   if (it == nodes.end()) {
@@ -24,8 +25,9 @@ bool WithNodeForWrite(std::map<std::string, InMemoryNodeMapAdapter::NodeDefiniti
 }
 
 template <typename GetterFunc>
-bool WithNodeForRead(const std::map<std::string, InMemoryNodeMapAdapter::NodeDefinition, std::less<>>& nodes,
-                     std::string_view key, GetterFunc&& getter) {
+bool WithNodeForRead(
+    const std::map<std::string, InMemoryNodeMapAdapter::NodeDefinition, std::less<>>& nodes,
+    std::string_view key, GetterFunc&& getter) {
   const auto it = nodes.find(key);
   if (it == nodes.end()) {
     return false;
@@ -164,8 +166,8 @@ bool InMemoryNodeMapAdapter::TrySetString(std::string_view key, std::string_view
       return false;
     }
     if (!IsSupportedStringValue(node.enum_values, value)) {
-      write_error = "value '" + std::string(value) + "' is not supported for key '" +
-                    std::string(key) + "'";
+      write_error =
+          "value '" + std::string(value) + "' is not supported for key '" + std::string(key) + "'";
       return false;
     }
     node.string_value = std::string(value);
@@ -190,7 +192,8 @@ std::vector<std::string> InMemoryNodeMapAdapter::ListEnumValues(std::string_view
   return it->second.enum_values;
 }
 
-bool InMemoryNodeMapAdapter::TryGetNumericRange(std::string_view key, NodeNumericRange& range) const {
+bool InMemoryNodeMapAdapter::TryGetNumericRange(std::string_view key,
+                                                NodeNumericRange& range) const {
   return WithNodeForRead(nodes_, key, [&](const NodeDefinition& node) {
     if (node.value_type != NodeValueType::kInt64 && node.value_type != NodeValueType::kFloat64) {
       return false;

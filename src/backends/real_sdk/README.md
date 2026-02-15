@@ -16,6 +16,15 @@ This folder is that bridge.
     and typed get/set contracts used by future SDK node mapping.
   - keeps early bridge logic deterministic with an in-memory implementation so
     behavior is testable before proprietary node APIs are linked.
+- `param_key_map.hpp` / `param_key_map.cpp`:
+  - loads data-driven generic key -> SDK node-name mappings from JSON.
+  - exposes lookup helpers so integration can evolve node naming without
+    touching core run orchestration code.
+  - supports file-level map overrides for local/vendor-specific updates.
+- `maps/param_key_map.json`:
+  - default mapping data for first integration keys:
+    - `exposure`, `gain`, `pixel_format`, `roi`,
+      `trigger_mode`, `trigger_source`, `frame_rate`
 - `real_backend.hpp` / `real_backend.cpp`:
   - `RealBackend` implements `ICameraBackend`.
   - behavior is intentionally deterministic and non-streaming for now.

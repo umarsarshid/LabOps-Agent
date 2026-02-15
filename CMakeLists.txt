@@ -72,6 +72,7 @@ target_compile_features(labops_events PUBLIC cxx_std_20)
 # development and CI.
 add_library(labops_backends
   src/backends/real_sdk/node_map_adapter.cpp
+  src/backends/real_sdk/param_key_map.cpp
   src/backends/real_sdk/real_backend.cpp
   src/backends/real_sdk/real_backend_factory.cpp
   src/backends/real_sdk/sdk_context.cpp
@@ -338,6 +339,14 @@ add_executable(node_map_adapter_smoke
 target_link_libraries(node_map_adapter_smoke PRIVATE labops_backends)
 target_compile_features(node_map_adapter_smoke PRIVATE cxx_std_20)
 add_test(NAME node_map_adapter_smoke COMMAND node_map_adapter_smoke)
+
+# Smoke test for data-driven generic-key -> SDK-node map loading.
+add_executable(param_key_map_smoke
+  tests/backends/param_key_map_smoke.cpp
+)
+target_link_libraries(param_key_map_smoke PRIVATE labops_backends)
+target_compile_features(param_key_map_smoke PRIVATE cxx_std_20)
+add_test(NAME param_key_map_smoke COMMAND param_key_map_smoke)
 
 # Smoke test for deterministic frame generation and timing envelope.
 add_executable(sim_frame_generator_smoke
