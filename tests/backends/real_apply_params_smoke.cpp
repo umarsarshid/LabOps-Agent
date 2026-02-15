@@ -102,6 +102,17 @@ int main() {
     if (result.unsupported.size() != 1U) {
       Fail("strict apply should report one unsupported parameter");
     }
+    if (result.readback_rows.size() != 2U) {
+      Fail("strict apply should capture readback rows for all attempted settings");
+    }
+    if (result.readback_rows[0].generic_key != "frame_rate" || !result.readback_rows[0].supported ||
+        !result.readback_rows[0].applied || result.readback_rows[0].actual_value != "60") {
+      Fail("strict apply readback for applied frame_rate is incorrect");
+    }
+    if (result.readback_rows[1].generic_key != "unknown_knob" ||
+        result.readback_rows[1].supported || result.readback_rows[1].applied) {
+      Fail("strict apply readback for unsupported key is incorrect");
+    }
   }
 
   // Best-effort mode should continue applying supported parameters, emit
@@ -127,8 +138,12 @@ int main() {
     if (result.unsupported.size() != 1U) {
       Fail("best-effort apply should record 1 unsupported parameter");
     }
+    if (result.readback_rows.size() != 3U) {
+      Fail("best-effort apply should capture readback rows for all requested settings");
+    }
 
     bool saw_adjusted_frame_rate = false;
+    bool saw_adjusted_readback = false;
     for (const auto& applied : result.applied) {
       if (applied.generic_key == "frame_rate") {
         if (!applied.adjusted) {
@@ -140,8 +155,19 @@ int main() {
         saw_adjusted_frame_rate = true;
       }
     }
+    for (const auto& row : result.readback_rows) {
+      if (row.generic_key == "frame_rate") {
+        if (!row.supported || !row.applied || !row.adjusted || row.actual_value != "240") {
+          Fail("best-effort readback for frame_rate is incorrect");
+        }
+        saw_adjusted_readback = true;
+      }
+    }
     if (!saw_adjusted_frame_rate) {
       Fail("expected adjusted frame_rate result entry");
+    }
+    if (!saw_adjusted_readback) {
+      Fail("expected adjusted frame_rate readback entry");
     }
 
     const auto dumped = backend.DumpConfig();

@@ -12,6 +12,9 @@ this folder guard against accidental output-shape or file-path regressions.
 - `run_writer_smoke.cpp`: verifies `WriteRunJson(...)` creates `run.json` in
   the requested output directory and emits required metadata fields, including
   optional real-device metadata when provided.
+- `config_verify_writer_smoke.cpp`: verifies `WriteConfigVerifyJson(...)`
+  creates `config_verify.json` with per-setting requested/actual/supported
+  rows and summary counters.
 - `metrics_writers_smoke.cpp`: verifies `WriteMetricsCsv(...)` and
   `WriteMetricsJson(...)` create both metrics artifacts with expected fields.
 - `html_report_writer_smoke.cpp`: verifies `WriteRunSummaryHtml(...)` creates

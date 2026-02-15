@@ -137,6 +137,14 @@ std::vector<std::string> ReadEventTypes(const fs::path& events_path) {
   return types;
 }
 
+std::string ReadFile(const fs::path& path) {
+  std::ifstream input(path, std::ios::binary);
+  if (!input) {
+    Fail("failed to open file for reading");
+  }
+  return std::string((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+}
+
 bool ContainsType(const std::vector<std::string>& types, std::string_view needle) {
   for (const std::string& type : types) {
     if (type == needle) {
@@ -203,6 +211,20 @@ void AssertBestEffortRun(const fs::path& scenario_path, const fs::path& out_dir)
   if (!ContainsType(types, "CONFIG_ADJUSTED")) {
     Fail("best-effort run missing CONFIG_ADJUSTED event");
   }
+
+  const fs::path verify_path = bundle / "config_verify.json";
+  if (!fs::exists(verify_path)) {
+    Fail("best-effort run missing config_verify.json");
+  }
+  const std::string verify_json = ReadFile(verify_path);
+  if (verify_json.find("\"requested_count\"") == std::string::npos ||
+      verify_json.find("\"supported_count\"") == std::string::npos ||
+      verify_json.find("\"generic_key\":\"frame_rate\"") == std::string::npos ||
+      verify_json.find("\"requested\":\"1000\"") == std::string::npos ||
+      verify_json.find("\"actual\":\"240\"") == std::string::npos ||
+      verify_json.find("\"supported\":true") == std::string::npos) {
+    Fail("best-effort config_verify.json missing requested/actual/supported evidence");
+  }
 }
 
 void AssertStrictRun(const fs::path& scenario_path, const fs::path& out_dir) {
@@ -224,6 +246,17 @@ void AssertStrictRun(const fs::path& scenario_path, const fs::path& out_dir) {
   }
   if (ContainsType(types, "CONFIG_APPLIED")) {
     Fail("strict run should not emit CONFIG_APPLIED when apply failed");
+  }
+
+  const fs::path verify_path = bundle / "config_verify.json";
+  if (!fs::exists(verify_path)) {
+    Fail("strict run missing config_verify.json");
+  }
+  const std::string verify_json = ReadFile(verify_path);
+  if (verify_json.find("\"generic_key\":\"gain\"") == std::string::npos ||
+      verify_json.find("\"supported\":false") == std::string::npos ||
+      verify_json.find("\"applied\":false") == std::string::npos) {
+    Fail("strict config_verify.json missing unsupported evidence");
   }
 }
 

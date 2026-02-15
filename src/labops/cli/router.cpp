@@ -2,6 +2,7 @@
 
 #include "artifacts/bundle_manifest_writer.hpp"
 #include "artifacts/bundle_zip_writer.hpp"
+#include "artifacts/config_verify_writer.hpp"
 #include "artifacts/hostprobe_writer.hpp"
 #include "artifacts/html_report_writer.hpp"
 #include "artifacts/kb_draft_writer.hpp"
@@ -1732,7 +1733,10 @@ BuildConfigAdjustedPayload(const core::schema::RunInfo& run_info,
 bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan& run_plan,
                                const core::schema::RunInfo& run_info, const fs::path& bundle_dir,
                                backends::BackendConfig& applied_params, fs::path& events_path,
-                               core::logging::Logger& logger, std::string& error) {
+                               fs::path& config_verify_path, core::logging::Logger& logger,
+                               std::string& error) {
+  config_verify_path.clear();
+
   const fs::path key_map_path = backends::real_sdk::ResolveDefaultParamKeyMapPath();
   backends::real_sdk::ParamKeyMap key_map;
   if (!backends::real_sdk::LoadParamKeyMapFromFile(key_map_path, key_map, error)) {
@@ -1750,6 +1754,12 @@ bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan&
   backends::real_sdk::ApplyParamsResult apply_result;
   if (!backends::real_sdk::ApplyParams(backend, key_map, *adapter, run_plan.real_params,
                                        run_plan.real_apply_mode, apply_result, error)) {
+    std::string write_error;
+    if (!artifacts::WriteConfigVerifyJson(run_info, apply_result, run_plan.real_apply_mode,
+                                          bundle_dir, config_verify_path, write_error)) {
+      error = "failed to write config_verify.json: " + write_error;
+      return false;
+    }
     for (const auto& unsupported : apply_result.unsupported) {
       std::string event_error;
       if (!AppendTraceEvent(
@@ -1784,6 +1794,12 @@ bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan&
                           bundle_dir, events_path, error)) {
       return false;
     }
+  }
+
+  if (!artifacts::WriteConfigVerifyJson(run_info, apply_result, run_plan.real_apply_mode,
+                                        bundle_dir, config_verify_path, error)) {
+    error = "failed to write config_verify.json: " + error;
+    return false;
   }
 
   return true;
@@ -2520,6 +2536,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
 
   fs::path events_path;
+  fs::path config_verify_artifact_path;
   backends::BackendConfig applied_params;
   for (const auto& [key, value] : selected_device_params) {
     applied_params[key] = value;
@@ -2528,7 +2545,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   bool config_applied_event_emitted = false;
   if (run_plan.backend == kBackendRealStub) {
     if (!ApplyRealParamsWithEvents(*backend, run_plan, run_info, bundle_dir, applied_params,
-                                   events_path, logger, error)) {
+                                   events_path, config_verify_artifact_path, logger, error)) {
       logger.Error("backend config apply failed", {{"error", error}});
       std::cerr << "error: backend config failed: " << error << '\n';
       return kExitFailure;
@@ -2557,6 +2574,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
                 << run_write_error << '\n';
     } else if (run_result != nullptr) {
       run_result->run_json_path = run_artifact_path;
+    }
+    if (!config_verify_artifact_path.empty()) {
+      std::cerr << "info: config verify artifact: " << config_verify_artifact_path.string() << '\n';
     }
     std::cerr << "error: backend connect failed: " << error << '\n';
     return kExitBackendConnectFailed;
@@ -2855,6 +2875,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
             soak_checkpoint_latest_path, soak_checkpoint_history_path,
             soak_frame_cache_path,
         };
+        if (!config_verify_artifact_path.empty() && fs::exists(config_verify_artifact_path)) {
+          bundle_artifact_paths.push_back(config_verify_artifact_path);
+        }
         bundle_artifact_paths.insert(bundle_artifact_paths.end(),
                                      hostprobe_raw_artifact_paths.begin(),
                                      hostprobe_raw_artifact_paths.end());
@@ -2875,6 +2898,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
         std::cout << "run_id: " << run_info.run_id << '\n';
         std::cout << "bundle: " << bundle_dir.string() << '\n';
         std::cout << "events: " << events_path.string() << '\n';
+        if (!config_verify_artifact_path.empty()) {
+          std::cout << "config_verify: " << config_verify_artifact_path.string() << '\n';
+        }
         std::cout << "artifact: " << run_artifact_path.string() << '\n';
         std::cout << "manifest: " << bundle_manifest_path.string() << '\n';
         std::cout << "soak_mode: enabled\n";
@@ -3008,6 +3034,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
       scenario_artifact_path, hostprobe_artifact_path, run_artifact_path,     events_path,
       metrics_csv_path,       metrics_json_path,       summary_markdown_path, report_html_path,
   };
+  if (!config_verify_artifact_path.empty() && fs::exists(config_verify_artifact_path)) {
+    bundle_artifact_paths.push_back(config_verify_artifact_path);
+  }
   if (options.soak_mode) {
     if (!soak_frame_cache_path.empty() && fs::exists(soak_frame_cache_path)) {
       bundle_artifact_paths.push_back(soak_frame_cache_path);
@@ -3037,11 +3066,14 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     }
   }
 
-  logger.Info("run artifacts written", {{"bundle_dir", bundle_dir.string()},
-                                        {"events", events_path.string()},
-                                        {"metrics_json", metrics_json_path.string()},
-                                        {"summary", summary_markdown_path.string()},
-                                        {"report_html", report_html_path.string()}});
+  logger.Info("run artifacts written",
+              {{"bundle_dir", bundle_dir.string()},
+               {"events", events_path.string()},
+               {"config_verify",
+                config_verify_artifact_path.empty() ? "-" : config_verify_artifact_path.string()},
+               {"metrics_json", metrics_json_path.string()},
+               {"summary", summary_markdown_path.string()},
+               {"report_html", report_html_path.string()}});
 
   std::cout << success_prefix << options.scenario_path << '\n';
   std::cout << "run_id: " << run_info.run_id << '\n';
@@ -3070,6 +3102,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   std::cout << '\n';
   std::cout << "artifact: " << run_artifact_path.string() << '\n';
   std::cout << "events: " << events_path.string() << '\n';
+  if (!config_verify_artifact_path.empty()) {
+    std::cout << "config_verify: " << config_verify_artifact_path.string() << '\n';
+  }
   std::cout << "metrics_csv: " << metrics_csv_path.string() << '\n';
   std::cout << "metrics_json: " << metrics_json_path.string() << '\n';
   std::cout << "summary: " << summary_markdown_path.string() << '\n';

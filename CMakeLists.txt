@@ -134,6 +134,7 @@ target_compile_features(labops_metrics PUBLIC cxx_std_20)
 add_library(labops_artifacts
   src/artifacts/bundle_manifest_writer.cpp
   src/artifacts/bundle_zip_writer.cpp
+  src/artifacts/config_verify_writer.cpp
   src/artifacts/kb_draft_writer.cpp
   src/artifacts/html_report_writer.cpp
   src/artifacts/hostprobe_writer.cpp
@@ -176,6 +177,14 @@ add_executable(run_writer_smoke
 target_link_libraries(run_writer_smoke PRIVATE labops_artifacts labops_schema)
 target_compile_features(run_writer_smoke PRIVATE cxx_std_20)
 add_test(NAME run_writer_smoke COMMAND run_writer_smoke)
+
+# Smoke test for real-config readback verification artifact contract.
+add_executable(config_verify_writer_smoke
+  tests/artifacts/config_verify_writer_smoke.cpp
+)
+target_link_libraries(config_verify_writer_smoke PRIVATE labops_artifacts labops_schema)
+target_compile_features(config_verify_writer_smoke PRIVATE cxx_std_20)
+add_test(NAME config_verify_writer_smoke COMMAND config_verify_writer_smoke)
 
 # Smoke test for agent experiment-state serialization and artifact writing.
 add_executable(agent_state_writer_smoke

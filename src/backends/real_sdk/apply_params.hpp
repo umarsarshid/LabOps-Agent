@@ -38,9 +38,26 @@ struct AppliedParam {
   std::string adjustment_reason;
 };
 
+// Per-setting readback row captured after apply attempt.
+//
+// This is the canonical evidence record for "what was requested vs what the
+// backend/node model actually holds", including unsupported and failed-apply
+// cases.
+struct ReadbackRow {
+  std::string generic_key;
+  std::string node_name;
+  std::string requested_value;
+  std::string actual_value;
+  bool supported = false;
+  bool applied = false;
+  bool adjusted = false;
+  std::string reason;
+};
+
 struct ApplyParamsResult {
   std::vector<AppliedParam> applied;
   std::vector<UnsupportedParam> unsupported;
+  std::vector<ReadbackRow> readback_rows;
 };
 
 const char* ToString(ParamApplyMode mode);

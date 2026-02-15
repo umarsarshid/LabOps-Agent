@@ -13,6 +13,8 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 - `nic_*.txt` raw NIC command outputs captured best-effort per platform.
 - `run.json` for run metadata, including optional resolved real-device identity
   and version fields.
+- `config_verify.json` real-backend apply/readback evidence showing requested
+  vs actual values and support/apply status per setting.
 - `events.jsonl` append-only run timeline.
 - `metrics.csv` for plotting and spreadsheet workflows.
 - `metrics.json` for machine parsing by agent logic.
@@ -32,6 +34,9 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 
 - `run_writer.hpp/.cpp`: writes canonical `run.json` files into an output
   directory and ensures directory creation.
+- `config_verify_writer.hpp/.cpp`: writes `config_verify.json` for real-backend
+  parameter apply verification, including per-setting requested/actual/support
+  rows and summary counters.
 - `metrics_writer.hpp/.cpp`: writes canonical metrics artifacts:
   - `metrics.csv` for plotting and spreadsheet workflows
   - `metrics.json` for machine parsing by agent logic

@@ -67,9 +67,10 @@ surface (argument parsing + runtime orchestration + artifact/event output).
 - `real_apply_mode_events_smoke.cpp`: verifies real-backend `apply_mode`
   behavior:
   `best_effort` records unsupported settings and continues (emitting
-  `CONFIG_UNSUPPORTED`, `CONFIG_ADJUSTED`, and `CONFIG_APPLIED`), while
+  `CONFIG_UNSUPPORTED`, `CONFIG_ADJUSTED`, and `CONFIG_APPLIED`) plus writes
+  `config_verify.json` with requested/actual/supported evidence, while
   `strict` fails early on unsupported settings and does not emit
-  `CONFIG_APPLIED`.
+  `CONFIG_APPLIED` (but still writes `config_verify.json` evidence).
 - `kb_draft_from_run_folder_smoke.cpp`: verifies `labops kb draft --run <dir>`
   generates `kb_draft.md` from `engineer_packet.md` with populated run-context,
   repro, hypothesis, and evidence-link sections.

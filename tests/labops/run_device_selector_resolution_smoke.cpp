@@ -210,8 +210,12 @@ int main() {
 
     const fs::path bundle_dir = ResolveSingleBundleDir(out_dir);
     const fs::path run_json_path = bundle_dir / "run.json";
+    const fs::path config_verify_path = bundle_dir / "config_verify.json";
     if (!fs::exists(run_json_path)) {
       Fail("expected run.json to be written on backend connect failure");
+    }
+    if (!fs::exists(config_verify_path)) {
+      Fail("expected config_verify.json to be written before backend connect failure");
     }
     const std::string run_json = ReadFile(run_json_path);
     AssertContains(run_json, "\"real_device\":");
@@ -220,6 +224,11 @@ int main() {
     AssertContains(run_json, "\"transport\":\"usb\"");
     AssertContains(run_json, "\"firmware_version\":\"4.0.0\"");
     AssertContains(run_json, "\"sdk_version\":\"21.1.8\"");
+
+    const std::string verify_json = ReadFile(config_verify_path);
+    AssertContains(verify_json, "\"requested_count\"");
+    AssertContains(verify_json, "\"generic_key\":\"frame_rate\"");
+    AssertContains(verify_json, "\"supported\":true");
   } else {
     if (exit_code != labops::core::errors::ToInt(labops::core::errors::ExitCode::kFailure)) {
       Fail("expected generic failure exit code when real backend is disabled");

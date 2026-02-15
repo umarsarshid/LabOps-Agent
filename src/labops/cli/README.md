@@ -43,6 +43,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Apply scenario settings to backend params and emit config-audit events:
   `CONFIG_APPLIED`, plus `CONFIG_UNSUPPORTED`/`CONFIG_ADJUSTED` for real
   backend apply-mode flows (`apply_mode: strict|best_effort`).
+- For real-backend runs, emit `config_verify.json` with requested vs actual vs
+  supported per-setting readback evidence after apply.
 - Execute sim backend run lifecycle and emit stream trace events.
 - On backend connect failures, still emit `run.json` (when bundle dir is
   already initialized) so early-failure runs preserve run metadata evidence.
@@ -61,7 +63,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Evaluate scenario thresholds (FPS/drop/timing) against computed metrics and
   return non-zero when thresholds fail.
 - Emit standardized per-run bundles under `<out>/<run_id>/` including
-  `scenario.json`, `run.json`, `events.jsonl`, metrics artifacts,
+  `scenario.json`, `run.json`, `config_verify.json` (real backend),
+  `events.jsonl`, metrics artifacts,
   `summary.md`, `report.html`, `hostprobe.json`
   (with parsed NIC MTU/link hints when available),
   platform NIC raw command outputs (`nic_*.txt`),

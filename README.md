@@ -19,6 +19,8 @@ For each run, you get a folder with files like:
 
 - `run.json`: run settings and metadata (and for real runs: resolved camera
   model/serial/transport plus firmware/SDK version evidence when available)
+- `config_verify.json` (real backend): requested vs actual vs supported
+  setting readback after apply
 - `events.jsonl`: timeline of stream events
 - `metrics.csv` and `metrics.json`: FPS, drops, timing numbers
 - `summary.md`: quick human-readable summary

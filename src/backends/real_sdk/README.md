@@ -24,9 +24,11 @@ This folder is that bridge.
 - `apply_params.hpp` / `apply_params.cpp`:
   - bridges scenario generic keys to SDK node names using `ParamKeyMap`.
   - validates/coerces values via `NodeMapAdapter` in strict or best-effort mode.
+  - performs per-setting readback verification and returns structured
+    `requested vs actual vs supported` rows.
   - returns structured applied/unsupported/adjusted results so CLI can emit
-    deterministic config events (`CONFIG_APPLIED`, `CONFIG_UNSUPPORTED`,
-    `CONFIG_ADJUSTED`).
+    deterministic config events and `config_verify.json` evidence
+    (`CONFIG_APPLIED`, `CONFIG_UNSUPPORTED`, `CONFIG_ADJUSTED`).
 - `maps/param_key_map.json`:
   - default mapping data for first integration keys:
     - `exposure`, `gain`, `pixel_format`, `roi`,

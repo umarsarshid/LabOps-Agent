@@ -46,15 +46,17 @@ Current high-level write sequence:
 3. `hostprobe.json` is written with host system snapshot.
 4. raw NIC command outputs (`nic_*.txt`) are written (best-effort per platform).
 5. optional netem impairment is applied when `--apply-netem` is requested.
-6. `events.jsonl` receives lifecycle and frame events.
-7. netem teardown is attempted on run exit when apply succeeded.
-8. `run.json` is written after stream completion (or earlier on certain
+6. for real-backend runs, `config_verify.json` is written after setting apply
+   to record requested vs actual vs supported readback evidence.
+7. `events.jsonl` receives lifecycle and frame events.
+8. netem teardown is attempted on run exit when apply succeeded.
+9. `run.json` is written after stream completion (or earlier on certain
    backend initialization failures so run metadata is still preserved).
-9. `metrics.csv` and `metrics.json` are written.
-10. `summary.md` is written as a one-page human triage report.
-11. `report.html` is written as a static browser triage report (no JS).
-12. `bundle_manifest.json` is generated from required artifacts.
-13. optional `.zip` archive is created as a sibling of bundle directory.
+10. `metrics.csv` and `metrics.json` are written.
+11. `summary.md` is written as a one-page human triage report.
+12. `report.html` is written as a static browser triage report (no JS).
+13. `bundle_manifest.json` is generated from required artifacts.
+14. optional `.zip` archive is created as a sibling of bundle directory.
 
 ## Directory Layout Contract
 
@@ -67,6 +69,7 @@ Required bundle structure:
     hostprobe.json
     nic_*.txt
     run.json
+    config_verify.json   # real-backend runs
     events.jsonl
     metrics.csv
     metrics.json
@@ -92,6 +95,7 @@ Optional output:
 | `hostprobe.json` | yes | host probe writer | Captures host OS/CPU/RAM/uptime/load context and parsed NIC highlights (including MTU/link hints when available). |
 | `nic_*.txt` | yes | host probe writer | Raw NIC command outputs (platform-specific command set). |
 | `run.json` | yes | run writer | Captures run identity, immutable config, optional real-device identity/version metadata, and run timestamps. |
+| `config_verify.json` | conditional (real backend) | config verify writer | Captures per-setting requested vs actual vs supported readback evidence after apply. |
 | `events.jsonl` | yes | event writer | Timeline-level evidence for stream behavior and failures. |
 | `metrics.csv` | yes | metrics writer | Human-readable metrics for spreadsheets and quick plotting. |
 | `metrics.json` | yes | metrics writer | Machine-readable metrics for automation and agent parsing. |
@@ -221,6 +225,8 @@ Format:
 Current event types in run flow:
 
 - `CONFIG_APPLIED`
+- `CONFIG_UNSUPPORTED`
+- `CONFIG_ADJUSTED`
 - `STREAM_STARTED`
 - `FRAME_RECEIVED`
 - `FRAME_DROPPED`

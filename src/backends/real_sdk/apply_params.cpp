@@ -1,8 +1,10 @@
 #include "backends/real_sdk/apply_params.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <cmath>
+#include <cstdlib>
 #include <iomanip>
 #include <optional>
 #include <sstream>
@@ -122,6 +124,56 @@ std::optional<std::string> FindCaseInsensitiveEnumValue(const std::vector<std::s
   return std::nullopt;
 }
 
+bool TryReadNodeValueAsString(INodeMapAdapter& node_adapter, std::string_view node_name,
+                              std::string& actual_value, std::string& error) {
+  actual_value.clear();
+  error.clear();
+
+  switch (node_adapter.GetType(node_name)) {
+  case NodeValueType::kBool: {
+    bool value = false;
+    if (!node_adapter.TryGetBool(node_name, value)) {
+      error = "failed to read bool value";
+      return false;
+    }
+    actual_value = value ? "true" : "false";
+    return true;
+  }
+  case NodeValueType::kInt64: {
+    std::int64_t value = 0;
+    if (!node_adapter.TryGetInt64(node_name, value)) {
+      error = "failed to read integer value";
+      return false;
+    }
+    actual_value = std::to_string(value);
+    return true;
+  }
+  case NodeValueType::kFloat64: {
+    double value = 0.0;
+    if (!node_adapter.TryGetFloat64(node_name, value)) {
+      error = "failed to read float value";
+      return false;
+    }
+    actual_value = FormatDouble(value);
+    return true;
+  }
+  case NodeValueType::kString:
+  case NodeValueType::kEnumeration: {
+    std::string value;
+    if (!node_adapter.TryGetString(node_name, value)) {
+      error = "failed to read string value";
+      return false;
+    }
+    actual_value = value;
+    return true;
+  }
+  case NodeValueType::kUnknown:
+  default:
+    error = "node value type is unknown";
+    return false;
+  }
+}
+
 std::unique_ptr<InMemoryNodeMapAdapter> BuildDefaultNodeAdapter() {
   auto adapter = std::make_unique<InMemoryNodeMapAdapter>();
 
@@ -234,6 +286,11 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
       continue;
     }
 
+    ReadbackRow readback_row{
+        .generic_key = generic_key,
+        .requested_value = input.requested_value,
+    };
+
     UnsupportedParam unsupported{
         .generic_key = generic_key,
         .requested_value = input.requested_value,
@@ -242,6 +299,10 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
     std::string node_name;
     if (!key_map.Resolve(generic_key, node_name)) {
       unsupported.reason = "no generic->node mapping was found";
+      readback_row.supported = false;
+      readback_row.applied = false;
+      readback_row.reason = unsupported.reason;
+      result.readback_rows.push_back(readback_row);
       result.unsupported.push_back(unsupported);
       if (mode == ParamApplyMode::kStrict) {
         error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
@@ -252,6 +313,11 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
 
     if (!node_adapter.Has(node_name)) {
       unsupported.reason = "mapped SDK node '" + node_name + "' is not available";
+      readback_row.node_name = node_name;
+      readback_row.supported = false;
+      readback_row.applied = false;
+      readback_row.reason = unsupported.reason;
+      result.readback_rows.push_back(readback_row);
       result.unsupported.push_back(unsupported);
       if (mode == ParamApplyMode::kStrict) {
         error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
@@ -274,6 +340,11 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
       bool parsed = false;
       if (!ParseBool(input.requested_value, parsed)) {
         unsupported.reason = "expected boolean value";
+        readback_row.node_name = node_name;
+        readback_row.supported = true;
+        readback_row.applied = false;
+        readback_row.reason = unsupported.reason;
+        result.readback_rows.push_back(readback_row);
         result.unsupported.push_back(unsupported);
         if (mode == ParamApplyMode::kStrict) {
           error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
@@ -283,6 +354,11 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
       }
       if (!node_adapter.TrySetBool(node_name, parsed, write_error)) {
         unsupported.reason = write_error.empty() ? "node rejected bool value" : write_error;
+        readback_row.node_name = node_name;
+        readback_row.supported = true;
+        readback_row.applied = false;
+        readback_row.reason = unsupported.reason;
+        result.readback_rows.push_back(readback_row);
         result.unsupported.push_back(unsupported);
         if (mode == ParamApplyMode::kStrict) {
           error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
@@ -297,6 +373,11 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
       std::int64_t parsed = 0;
       if (!ParseInt64(input.requested_value, parsed)) {
         unsupported.reason = "expected integer value";
+        readback_row.node_name = node_name;
+        readback_row.supported = true;
+        readback_row.applied = false;
+        readback_row.reason = unsupported.reason;
+        result.readback_rows.push_back(readback_row);
         result.unsupported.push_back(unsupported);
         if (mode == ParamApplyMode::kStrict) {
           error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
@@ -318,6 +399,11 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
 
       if (!node_adapter.TrySetInt64(node_name, parsed, write_error)) {
         unsupported.reason = write_error.empty() ? "node rejected integer value" : write_error;
+        readback_row.node_name = node_name;
+        readback_row.supported = true;
+        readback_row.applied = false;
+        readback_row.reason = unsupported.reason;
+        result.readback_rows.push_back(readback_row);
         result.unsupported.push_back(unsupported);
         if (mode == ParamApplyMode::kStrict) {
           error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
@@ -333,6 +419,11 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
       double parsed = 0.0;
       if (!ParseDouble(input.requested_value, parsed)) {
         unsupported.reason = "expected floating-point value";
+        readback_row.node_name = node_name;
+        readback_row.supported = true;
+        readback_row.applied = false;
+        readback_row.reason = unsupported.reason;
+        result.readback_rows.push_back(readback_row);
         result.unsupported.push_back(unsupported);
         if (mode == ParamApplyMode::kStrict) {
           error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
@@ -352,6 +443,11 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
 
       if (!node_adapter.TrySetFloat64(node_name, parsed, write_error)) {
         unsupported.reason = write_error.empty() ? "node rejected float value" : write_error;
+        readback_row.node_name = node_name;
+        readback_row.supported = true;
+        readback_row.applied = false;
+        readback_row.reason = unsupported.reason;
+        result.readback_rows.push_back(readback_row);
         result.unsupported.push_back(unsupported);
         if (mode == ParamApplyMode::kStrict) {
           error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
@@ -379,6 +475,11 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
 
       if (!node_adapter.TrySetString(node_name, normalized_value, write_error)) {
         unsupported.reason = write_error.empty() ? "node rejected string value" : write_error;
+        readback_row.node_name = node_name;
+        readback_row.supported = true;
+        readback_row.applied = false;
+        readback_row.reason = unsupported.reason;
+        result.readback_rows.push_back(readback_row);
         result.unsupported.push_back(unsupported);
         if (mode == ParamApplyMode::kStrict) {
           error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
@@ -393,6 +494,11 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
     case NodeValueType::kUnknown:
     default:
       unsupported.reason = "node value type is unknown";
+      readback_row.node_name = node_name;
+      readback_row.supported = false;
+      readback_row.applied = false;
+      readback_row.reason = unsupported.reason;
+      result.readback_rows.push_back(readback_row);
       result.unsupported.push_back(unsupported);
       if (mode == ParamApplyMode::kStrict) {
         error = "unsupported parameter '" + generic_key + "': " + unsupported.reason;
@@ -403,11 +509,35 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
 
     std::string backend_error;
     if (!backend.SetParam(node_name, backend_value, backend_error)) {
+      readback_row.node_name = node_name;
+      readback_row.supported = true;
+      readback_row.applied = false;
+      readback_row.adjusted = applied.adjusted;
+      readback_row.reason = "backend rejected mapped value: " +
+                            (backend_error.empty() ? "unknown error" : backend_error);
+      result.readback_rows.push_back(readback_row);
       error = "failed to set mapped backend parameter '" + node_name + "' for generic key '" +
               generic_key +
               "': " + (backend_error.empty() ? "backend rejected value" : backend_error);
       return false;
     }
+
+    readback_row.node_name = node_name;
+    readback_row.supported = true;
+    readback_row.applied = true;
+    readback_row.adjusted = applied.adjusted;
+    if (!applied.adjustment_reason.empty()) {
+      readback_row.reason = applied.adjustment_reason;
+    }
+    std::string readback_error;
+    if (!TryReadNodeValueAsString(node_adapter, node_name, readback_row.actual_value,
+                                  readback_error)) {
+      if (!readback_row.reason.empty()) {
+        readback_row.reason += "; ";
+      }
+      readback_row.reason += "readback unavailable: " + readback_error;
+    }
+    result.readback_rows.push_back(readback_row);
 
     applied.applied_value = backend_value;
     result.applied.push_back(std::move(applied));

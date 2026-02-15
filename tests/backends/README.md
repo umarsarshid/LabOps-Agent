@@ -40,7 +40,8 @@ stable interface regardless of real hardware availability.
   through JSON edits alone, so mapping updates do not require core code edits.
 - `real_apply_params_smoke.cpp`: validates strict/best-effort real-parameter
   application behavior, including unsupported handling and adjusted value
-  reporting (for downstream config-event emission).
+  reporting plus per-setting readback rows (`requested/actual/supported`) used
+  by `config_verify.json`.
 
 ## Connection to the project
 
