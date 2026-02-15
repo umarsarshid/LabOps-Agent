@@ -71,6 +71,8 @@ target_compile_features(labops_events PUBLIC cxx_std_20)
 # Camera backend contracts plus sim implementation used for hardware-free
 # development and CI.
 add_library(labops_backends
+  src/backends/real_sdk/real_backend.cpp
+  src/backends/real_sdk/real_backend_factory.cpp
   src/backends/sdk_stub/real_camera_backend_stub.cpp
   src/backends/sim/scenario_config.cpp
   src/backends/sim/sim_camera_backend.cpp
@@ -292,6 +294,15 @@ add_executable(sdk_stub_backend_smoke
 target_link_libraries(sdk_stub_backend_smoke PRIVATE labops_backends)
 target_compile_features(sdk_stub_backend_smoke PRIVATE cxx_std_20)
 add_test(NAME sdk_stub_backend_smoke COMMAND sdk_stub_backend_smoke)
+
+# Smoke test for real-backend factory behavior:
+# enabled builds select the real skeleton, disabled builds fall back to sdk_stub.
+add_executable(real_backend_factory_smoke
+  tests/backends/real_backend_factory_smoke.cpp
+)
+target_link_libraries(real_backend_factory_smoke PRIVATE labops_backends)
+target_compile_features(real_backend_factory_smoke PRIVATE cxx_std_20)
+add_test(NAME real_backend_factory_smoke COMMAND real_backend_factory_smoke)
 
 # Smoke test for deterministic frame generation and timing envelope.
 add_executable(sim_frame_generator_smoke

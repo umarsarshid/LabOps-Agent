@@ -11,7 +11,7 @@
 #include "artifacts/run_writer.hpp"
 #include "artifacts/scenario_writer.hpp"
 #include "backends/camera_backend.hpp"
-#include "backends/sdk_stub/real_camera_backend_stub.hpp"
+#include "backends/real_sdk/real_backend_factory.hpp"
 #include "backends/sim/scenario_config.hpp"
 #include "backends/sim/sim_camera_backend.hpp"
 #include "core/errors/exit_codes.hpp"
@@ -189,10 +189,10 @@ int CommandListBackends(const std::vector<std::string_view>& args) {
   }
 
   std::cout << "sim ✅ enabled\n";
-  if (backends::sdk_stub::IsRealBackendEnabledAtBuild()) {
+  if (backends::real_sdk::IsRealBackendEnabledAtBuild()) {
     std::cout << "real ✅ enabled\n";
   } else {
-    std::cout << "real ⚠️ " << backends::sdk_stub::RealBackendAvailabilityStatusText() << '\n';
+    std::cout << "real ⚠️ " << backends::real_sdk::RealBackendAvailabilityStatusText() << '\n';
   }
   return kExitSuccess;
 }
@@ -1315,7 +1315,7 @@ bool BuildBackendFromRunPlan(const RunPlan& run_plan,
     return true;
   }
   if (run_plan.backend == kBackendRealStub) {
-    backend = std::make_unique<backends::sdk_stub::RealCameraBackendStub>();
+    backend = backends::real_sdk::CreateRealBackend();
     return true;
   }
 
@@ -2669,19 +2669,18 @@ int CommandListDevices(const std::vector<std::string_view>& args) {
     return kExitUsage;
   }
 
-  if (!backends::sdk_stub::IsRealBackendEnabledAtBuild()) {
+  if (!backends::real_sdk::IsRealBackendEnabledAtBuild()) {
     std::cerr << "error: BACKEND_NOT_AVAILABLE: real backend "
-              << backends::sdk_stub::RealBackendAvailabilityStatusText() << '\n';
+              << backends::real_sdk::RealBackendAvailabilityStatusText() << '\n';
     return kExitFailure;
   }
 
-  // This repository intentionally ships only sdk_stub integration. Even when
-  // the real backend path is enabled by build plumbing, device listing remains
-  // a non-proprietary placeholder until vendor SDK integration is implemented.
+  // Device discovery is intentionally deferred. This keeps command contracts
+  // stable while the proprietary SDK adapter is integrated in later milestones.
   std::cout << "backend: real\n";
   std::cout << "status: enabled\n";
   std::cout << "devices: 0\n";
-  std::cout << "note: sdk_stub does not implement device discovery in this repository\n";
+  std::cout << "note: real backend skeleton does not implement device discovery yet\n";
   return kExitSuccess;
 }
 

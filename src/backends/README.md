@@ -18,6 +18,11 @@ The project needs one consistent workflow that can run on different camera stack
   `set_param`, `dump_config`, `pull_frames(duration)`).
   - `FrameSample` now includes `frame_id`, `timestamp`, `size_bytes`, and
     optional `dropped`.
+- `real_sdk/`: real-backend skeleton + factory wiring.
+  - `RealBackend` implements `ICameraBackend` with deterministic placeholder
+    behavior until vendor SDK calls are integrated.
+  - `CreateRealBackend()` selects the effective implementation based on build
+    availability (real skeleton when enabled, sdk stub fallback otherwise).
 - `sim/`: deterministic in-repo implementation of the contract with
   scenario-controlled fault knobs.
 - `sdk_stub/`: non-proprietary real-backend integration boundary.
@@ -27,6 +32,7 @@ The project needs one consistent workflow that can run on different camera stack
 ## Current and planned backends
 
 - `sim/`: deterministic simulator for development and CI.
+- `real_sdk/`: SDK-enabled real-backend skeleton and object factory.
 - `sdk_stub/`: integration-ready stub path for proprietary camera SDKs.
 
 ## Connection to the project

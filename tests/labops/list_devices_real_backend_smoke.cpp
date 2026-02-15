@@ -1,4 +1,4 @@
-#include "backends/sdk_stub/real_camera_backend_stub.hpp"
+#include "backends/real_sdk/real_backend_factory.hpp"
 #include "labops/cli/router.hpp"
 
 #include <cstdlib>
@@ -52,14 +52,14 @@ int main() {
   const int exit_code = DispatchWithCapturedStreams({"labops", "list-devices", "--backend", "real"},
                                                     stdout_text, stderr_text);
 
-  if (labops::backends::sdk_stub::IsRealBackendEnabledAtBuild()) {
+  if (labops::backends::real_sdk::IsRealBackendEnabledAtBuild()) {
     if (exit_code != 0) {
       Fail("list-devices should succeed when real backend is enabled");
     }
     AssertContains(stdout_text, "backend: real");
     AssertContains(stdout_text, "status: enabled");
     AssertContains(stdout_text, "devices: 0");
-    AssertContains(stdout_text, "sdk_stub does not implement device discovery");
+    AssertContains(stdout_text, "real backend skeleton does not implement device discovery yet");
     return 0;
   }
 
@@ -69,6 +69,6 @@ int main() {
   AssertContains(stderr_text, "BACKEND_NOT_AVAILABLE");
   AssertContains(stderr_text,
                  std::string("real backend ") +
-                     std::string(labops::backends::sdk_stub::RealBackendAvailabilityStatusText()));
+                     std::string(labops::backends::real_sdk::RealBackendAvailabilityStatusText()));
   return 0;
 }
