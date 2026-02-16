@@ -1,14 +1,13 @@
 #include "artifacts/config_report_writer.hpp"
+#include "artifacts/output_dir_utils.hpp"
+#include "core/time_utils.hpp"
 
 #include <algorithm>
-#include <ctime>
 #include <fstream>
-#include <iomanip>
 #include <map>
 #include <optional>
 #include <sstream>
 #include <string_view>
-#include <system_error>
 
 namespace fs = std::filesystem;
 
@@ -33,21 +32,6 @@ struct ReportRow {
   ReportStatus status = ReportStatus::kUnsupported;
 };
 
-bool EnsureOutputDir(const fs::path& output_dir, std::string& error) {
-  if (output_dir.empty()) {
-    error = "output directory cannot be empty";
-    return false;
-  }
-
-  std::error_code ec;
-  fs::create_directories(output_dir, ec);
-  if (ec) {
-    error = "failed to create output directory '" + output_dir.string() + "': " + ec.message();
-    return false;
-  }
-  return true;
-}
-
 const char* ModeToString(backends::real_sdk::ParamApplyMode mode) {
   switch (mode) {
   case backends::real_sdk::ParamApplyMode::kStrict:
@@ -56,31 +40,6 @@ const char* ModeToString(backends::real_sdk::ParamApplyMode mode) {
     return "best_effort";
   }
   return "strict";
-}
-
-std::string FormatUtcTimestamp(std::chrono::system_clock::time_point timestamp) {
-  const auto millis_since_epoch =
-      std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()).count();
-  const auto millis_component = static_cast<int>((millis_since_epoch % 1000 + 1000) % 1000);
-
-  const std::time_t epoch_seconds = std::chrono::system_clock::to_time_t(timestamp);
-  std::tm utc_time{};
-#if defined(_WIN32)
-  const errno_t result = gmtime_s(&utc_time, &epoch_seconds);
-  if (result != 0) {
-    return "";
-  }
-#else
-  const std::tm* result = gmtime_r(&epoch_seconds, &utc_time);
-  if (result == nullptr) {
-    return "";
-  }
-#endif
-
-  std::ostringstream out;
-  out << std::put_time(&utc_time, "%Y-%m-%dT%H:%M:%S") << '.' << std::setw(3) << std::setfill('0')
-      << millis_component << 'Z';
-  return out.str();
 }
 
 std::string EscapeMarkdownCell(std::string value) {
@@ -278,8 +237,9 @@ bool WriteConfigReportMarkdown(
   out_file << "- scenario_id: `" << run_info.config.scenario_id << "`\n";
   out_file << "- backend: `" << run_info.config.backend << "`\n";
   out_file << "- apply_mode: `" << ModeToString(mode) << "`\n";
-  out_file << "- started_at_utc: `" << FormatUtcTimestamp(run_info.timestamps.started_at) << "`\n";
-  out_file << "- finished_at_utc: `" << FormatUtcTimestamp(run_info.timestamps.finished_at)
+  out_file << "- started_at_utc: `" << core::FormatUtcTimestamp(run_info.timestamps.started_at)
+           << "`\n";
+  out_file << "- finished_at_utc: `" << core::FormatUtcTimestamp(run_info.timestamps.finished_at)
            << "`\n";
   out_file << '\n';
 

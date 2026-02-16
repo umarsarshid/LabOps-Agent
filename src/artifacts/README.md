@@ -38,6 +38,8 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 
 - `run_writer.hpp/.cpp`: writes canonical `run.json` files into an output
   directory and ensures directory creation.
+- `output_dir_utils.hpp`: shared output-directory creation/error helper used by
+  artifact writers so directory handling and error text stay consistent.
 - `config_verify_writer.hpp/.cpp`: writes `config_verify.json` for real-backend
   parameter apply verification, including per-setting requested/actual/support
   rows and summary counters.

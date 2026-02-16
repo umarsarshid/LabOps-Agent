@@ -35,8 +35,8 @@ bool ResolveNetemProfilePath(const fs::path& scenario_path, std::string_view pro
 
   fs::path cursor = scenario_absolute.parent_path();
   while (!cursor.empty()) {
-    const fs::path candidate = cursor / "tools" / "netem_profiles" /
-                               (std::string(profile_id) + ".json");
+    const fs::path candidate =
+        cursor / "tools" / "netem_profiles" / (std::string(profile_id) + ".json");
     std::error_code exists_ec;
     if (fs::exists(candidate, exists_ec) && !exists_ec &&
         fs::is_regular_file(candidate, exists_ec) && !exists_ec) {

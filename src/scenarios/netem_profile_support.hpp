@@ -16,7 +16,6 @@ bool IsLowercaseSlug(std::string_view value);
 // Returns true and fills `resolved_path` when found, otherwise returns false and
 // clears `resolved_path`.
 bool ResolveNetemProfilePath(const std::filesystem::path& scenario_path,
-                             std::string_view profile_id,
-                             std::filesystem::path& resolved_path);
+                             std::string_view profile_id, std::filesystem::path& resolved_path);
 
 } // namespace labops::scenarios
