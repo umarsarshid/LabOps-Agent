@@ -14,6 +14,8 @@ LabOps must be predictable. Tests verify command contracts, scenario validation,
 
 ## Current framework split
 
+- Shared helper headers under `tests/common/` for reusable assertions, temp-dir
+  creation, and CLI dispatch boilerplate.
 - Catch2 unit tests under `tests/core/` (schema/event JSON contracts).
 - Lightweight smoke executables for artifact/event path validation in other
   subfolders, including backend interface conformance checks.

@@ -1,30 +1,22 @@
+#include "../common/assertions.hpp"
+#include "../common/temp_dir.hpp"
+
 #include "agent/experiment_state.hpp"
 #include "agent/state_writer.hpp"
 
 #include <chrono>
-#include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
-#include <iterator>
 #include <string_view>
 
 namespace fs = std::filesystem;
 
 namespace {
 
-void Fail(std::string_view message) {
-  std::cerr << message << '\n';
-  std::abort();
-}
-
-void AssertContains(std::string_view text, std::string_view needle) {
-  if (text.find(needle) == std::string_view::npos) {
-    std::cerr << "expected to find: " << needle << '\n';
-    std::cerr << "actual text: " << text << '\n';
-    std::abort();
-  }
-}
+using labops::tests::common::AssertContains;
+using labops::tests::common::CreateUniqueTempDir;
+using labops::tests::common::Fail;
+using labops::tests::common::ReadFileToString;
 
 } // namespace
 
@@ -74,10 +66,10 @@ int main() {
   row.notes = "Drop spike appears after ROI enable.";
   state.results_table.push_back(row);
 
-  const fs::path out_dir =
-      fs::temp_directory_path() / "labops-agent-state-writer-smoke-agent-session-01";
+  const fs::path temp_root =
+      CreateUniqueTempDir("labops-agent-state-writer-smoke-agent-session-01");
+  const fs::path out_dir = temp_root / "out";
   std::error_code cleanup_ec;
-  fs::remove_all(out_dir, cleanup_ec);
 
   fs::path written_path;
   std::string error;
@@ -90,12 +82,7 @@ int main() {
     Fail("written path mismatch");
   }
 
-  std::ifstream input(written_path, std::ios::binary);
-  if (!input) {
-    Fail("failed to open written agent_state.json");
-  }
-
-  std::string content((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+  std::string content = ReadFileToString(written_path);
   AssertContains(content, "\"session_id\":\"agent-session-01\"");
   AssertContains(content, "\"scenario_id\":\"trigger_roi\"");
   AssertContains(content, "\"baseline_id\":\"sim_baseline\"");
@@ -107,7 +94,7 @@ int main() {
   AssertContains(content, "\"drop_rate_percent\":18.000");
   AssertContains(content, "\"jitter_p95_us\":4500.000");
 
-  fs::remove_all(out_dir, cleanup_ec);
+  fs::remove_all(temp_root, cleanup_ec);
   std::cout << "agent_state_writer_smoke: ok\n";
   return 0;
 }

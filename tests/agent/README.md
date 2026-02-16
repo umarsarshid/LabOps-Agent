@@ -10,6 +10,13 @@ artifact consumers.
 
 ## Current test coverage
 
+Most tests in this folder can use helpers from `tests/common/` for:
+- text assertions
+- temp-directory lifecycle
+- file text loading
+
+That keeps triage-flow checks concise and easier to maintain.
+
 - `agent_state_writer_smoke.cpp`
   - Builds a representative experiment state.
   - Writes `agent_state.json`.

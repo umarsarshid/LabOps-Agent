@@ -1,124 +1,105 @@
-# Commit Summary: Deduplicate JSON/UTC/output-dir utility helpers
+# Commit Summary: Add shared test utilities for assertions, temp dirs, and CLI dispatch
 
 Date: 2026-02-16
 
 ## Goal
-Remove repeated helper implementations for:
-- JSON string escaping
-- UTC timestamp formatting
-- output directory creation for artifact writers
+Reduce repeated test boilerplate by introducing a shared `tests/common/` utility layer for:
+- text assertions
+- temp-directory lifecycle helpers
+- CLI dispatch argv conversion
 
-This refactor targets the duplicated logic currently seen in:
-- `src/artifacts/config_report_writer.cpp`
-- `src/artifacts/config_verify_writer.cpp`
-- `src/core/schema/run_contract.cpp`
-- `src/events/event_model.cpp`
+This directly addresses repetition highlighted in:
+- `tests/labops/compare_diff_smoke.cpp`
+- `tests/agent/agent_state_writer_smoke.cpp`
 
 ## Why this change matters
-- The same helper logic had been copy/pasted across modules.
-- Duplicate helpers are easy to accidentally diverge over time.
-- Divergence in JSON escaping or timestamp formatting would create subtle, hard-to-debug inconsistencies in artifacts/events.
-- Shared output-dir creation logic keeps failure text and behavior consistent across artifact writers and tests.
+- Many smoke tests redefined nearly identical helpers (`Fail`, `AssertContains`, temp-path creation, argv conversion).
+- Repetition increases maintenance cost and creates inconsistent failure messages.
+- Shared helpers make tests easier to read and keep test behavior consistent.
 
 ## Implementation details
 
-### 1) Added shared core JSON helper
+### 1) Added shared test assertion helpers
 File added:
-- `src/core/json_utils.hpp`
+- `tests/common/assertions.hpp`
 
 What:
-- Added `core::EscapeJson(std::string_view)` as a shared, inline utility.
+- `Fail(std::string_view)`
+- `AssertContains(std::string_view, std::string_view)`
+- `AssertNotContains(std::string_view, std::string_view)`
+- `ReadFileToString(const std::filesystem::path&)`
 
 Why:
-- Provides one canonical JSON escaping implementation for schema, events, and artifact writers.
+- Standardizes assertion and file-loading behavior across smoke tests.
 
-### 2) Added shared core UTC timestamp helper
+### 2) Added shared temp-dir helpers
 File added:
-- `src/core/time_utils.hpp`
+- `tests/common/temp_dir.hpp`
 
 What:
-- Added `core::FormatUtcTimestamp(std::chrono::system_clock::time_point)`.
-- Preserves existing millisecond-precision UTC output contract.
+- `CreateUniqueTempDir(std::string_view prefix)`
+- `RemovePathBestEffort(const std::filesystem::path&)`
 
 Why:
-- Ensures all timestamped outputs use the exact same formatter and platform handling.
+- Removes repeated timestamp + temp root + directory create/cleanup code.
 
-### 3) Added shared artifact output-dir helper
+### 3) Added shared CLI dispatch helper
 File added:
-- `src/artifacts/output_dir_utils.hpp`
+- `tests/common/cli_dispatch.hpp`
 
 What:
-- Added `artifacts::EnsureOutputDir(const std::filesystem::path&, std::string&)`.
-- Keeps existing behavior and error-message wording.
+- `DispatchArgs(const std::vector<std::string>&)`
 
 Why:
-- Avoids repeated filesystem guard code in every artifact writer.
+- Removes repeated `std::vector<char*>` argv conversion before calling
+  `labops::cli::Dispatch`.
 
-### 4) Rewired `run_contract` to shared core helpers
+### 4) Added shared helper folder documentation
+File added:
+- `tests/common/README.md`
+
+What:
+- Explains helper purpose and function inventory.
+
+Why:
+- Makes onboarding and future reuse straightforward.
+
+### 5) Migrated `compare_diff_smoke` to shared helpers
 File changed:
-- `src/core/schema/run_contract.cpp`
+- `tests/labops/compare_diff_smoke.cpp`
 
 What:
-- Removed local `EscapeJson` and `FormatUtcTimestamp` implementations.
-- Switched serialization calls to `core::EscapeJson(...)` and `core::FormatUtcTimestamp(...)`.
+- Replaced local `Fail` + `AssertContains` with shared versions.
+- Replaced local `DispatchArgs` with shared dispatcher.
+- Replaced manual temp-root creation with `CreateUniqueTempDir(...)`.
+- Replaced local file read boilerplate with `ReadFileToString(...)`.
 
 Why:
-- Run contract JSON now depends on shared serialization/time utility code rather than local copies.
+- This file had all three categories of duplicate boilerplate.
 
-### 5) Rewired event model to shared core helpers
+### 6) Migrated `agent_state_writer_smoke` to shared helpers
 File changed:
-- `src/events/event_model.cpp`
+- `tests/agent/agent_state_writer_smoke.cpp`
 
 What:
-- Removed local `EscapeJson` and `FormatUtcTimestamp` implementations.
-- Switched event serialization calls to `core::EscapeJson(...)` and `core::FormatUtcTimestamp(...)`.
+- Replaced local `Fail` + `AssertContains` with shared versions.
+- Replaced fixed temp path with unique temp-root helper.
+- Replaced local file read boilerplate with `ReadFileToString(...)`.
 
 Why:
-- Event JSONL output now uses the exact same escape/time implementation as run contracts.
+- Keeps this test deterministic while removing repeated setup/assertion code.
 
-### 6) Rewired config verify writer to shared helpers
-File changed:
-- `src/artifacts/config_verify_writer.cpp`
-
-What:
-- Removed local `EscapeJson` and local output-dir helper.
-- Switched to `core::EscapeJson(...)` and `artifacts::EnsureOutputDir(...)`.
-
-Why:
-- Eliminates duplicated JSON and filesystem utility logic in this artifact writer.
-
-### 7) Rewired config report writer to shared helpers
-File changed:
-- `src/artifacts/config_report_writer.cpp`
-
-What:
-- Removed local UTC formatter and local output-dir helper.
-- Switched to `core::FormatUtcTimestamp(...)` and `artifacts::EnsureOutputDir(...)`.
-
-Why:
-- Keeps timestamp rendering and directory creation behavior aligned with all other modules.
-
-### 8) Updated module docs for discoverability
+### 7) Updated test documentation for shared utility usage
 Files changed:
-- `src/core/README.md`
-- `src/artifacts/README.md`
+- `tests/README.md`
+- `tests/labops/README.md`
+- `tests/agent/README.md`
 
 What:
-- Documented the new shared helper headers and their purpose.
+- Added references to `tests/common/` and why it should be used.
 
 Why:
-- Helps future engineers find the single source of truth quickly.
-
-### 9) Formatting normalization discovered during check
-Files changed:
-- `src/scenarios/netem_profile_support.cpp`
-- `src/scenarios/netem_profile_support.hpp`
-
-What:
-- `clang-format`-only line wrapping changes.
-
-Why:
-- Required to keep CI formatter checks passing with clang-format v21.
+- Encourages consistent patterns in future tests.
 
 ## Verification
 
@@ -146,28 +127,26 @@ Commands:
 Result:
 - Both passed.
 
-### Targeted regression tests
+### Targeted tests
 Commands:
-- `ctest --test-dir tmp/build -R "run_contract_json_smoke|events_jsonl_smoke|config_verify_writer_smoke|config_report_writer_smoke" --output-on-failure`
-- `ctest --test-dir tmp/build-real -R "run_contract_json_smoke|events_jsonl_smoke|config_verify_writer_smoke|config_report_writer_smoke" --output-on-failure`
+- `ctest --test-dir tmp/build -R "compare_diff_smoke|agent_state_writer_smoke|baseline_capture_smoke" --output-on-failure`
+- `ctest --test-dir tmp/build-real -R "compare_diff_smoke|agent_state_writer_smoke|baseline_capture_smoke" --output-on-failure`
 
 Result:
-- 4/4 passed in each build tree.
+- 3/3 passed in each build tree.
 
 ## Behavior impact
-- Intended behavior is unchanged.
-- This is a consistency/maintainability refactor that reduces helper duplication and drift risk.
-- Serialization contracts and timestamp format remain the same.
+- No product/runtime behavior changes.
+- Test behavior remains equivalent; helper logic is centralized.
+- This is a maintainability/refactor commit for test infrastructure.
 
 ## Files touched
-- `src/core/json_utils.hpp` (new)
-- `src/core/time_utils.hpp` (new)
-- `src/artifacts/output_dir_utils.hpp` (new)
-- `src/core/schema/run_contract.cpp`
-- `src/events/event_model.cpp`
-- `src/artifacts/config_verify_writer.cpp`
-- `src/artifacts/config_report_writer.cpp`
-- `src/core/README.md`
-- `src/artifacts/README.md`
-- `src/scenarios/netem_profile_support.cpp` (format-only)
-- `src/scenarios/netem_profile_support.hpp` (format-only)
+- `tests/common/assertions.hpp` (new)
+- `tests/common/temp_dir.hpp` (new)
+- `tests/common/cli_dispatch.hpp` (new)
+- `tests/common/README.md` (new)
+- `tests/labops/compare_diff_smoke.cpp`
+- `tests/agent/agent_state_writer_smoke.cpp`
+- `tests/README.md`
+- `tests/labops/README.md`
+- `tests/agent/README.md`

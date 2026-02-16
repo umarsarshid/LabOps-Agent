@@ -1,12 +1,10 @@
-#include "labops/cli/router.hpp"
+#include "../common/assertions.hpp"
+#include "../common/cli_dispatch.hpp"
+#include "../common/temp_dir.hpp"
 
-#include <chrono>
 #include <cmath>
-#include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
-#include <iterator>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -15,18 +13,11 @@ namespace fs = std::filesystem;
 
 namespace {
 
-void Fail(std::string_view message) {
-  std::cerr << message << '\n';
-  std::abort();
-}
-
-void AssertContains(std::string_view text, std::string_view needle) {
-  if (text.find(needle) == std::string_view::npos) {
-    std::cerr << "expected to find: " << needle << '\n';
-    std::cerr << "actual text: " << text << '\n';
-    std::abort();
-  }
-}
+using labops::tests::common::AssertContains;
+using labops::tests::common::CreateUniqueTempDir;
+using labops::tests::common::DispatchArgs;
+using labops::tests::common::Fail;
+using labops::tests::common::ReadFileToString;
 
 fs::path ResolveScenarioPath(const std::string& scenario_name) {
   const std::vector<fs::path> roots = {
@@ -43,15 +34,6 @@ fs::path ResolveScenarioPath(const std::string& scenario_name) {
   }
 
   return {};
-}
-
-int DispatchArgs(const std::vector<std::string>& argv_storage) {
-  std::vector<char*> argv;
-  argv.reserve(argv_storage.size());
-  for (const auto& arg : argv_storage) {
-    argv.push_back(const_cast<char*>(arg.c_str()));
-  }
-  return labops::cli::Dispatch(static_cast<int>(argv.size()), argv.data());
 }
 
 fs::path ResolveSingleRunBundleDir(const fs::path& out_root) {
@@ -131,19 +113,9 @@ int main() {
     Fail("unable to resolve scenarios/dropped_frames.json");
   }
 
-  const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                          std::chrono::system_clock::now().time_since_epoch())
-                          .count();
-  const fs::path temp_root =
-      fs::temp_directory_path() / ("labops-compare-diff-" + std::to_string(now_ms));
+  const fs::path temp_root = CreateUniqueTempDir("labops-compare-diff");
   const fs::path out_dir = temp_root / "out";
-
   std::error_code ec;
-  fs::remove_all(temp_root, ec);
-  fs::create_directories(temp_root, ec);
-  if (ec) {
-    Fail("failed to create temp root");
-  }
 
   const fs::path original_cwd = fs::current_path(ec);
   if (ec) {
@@ -185,13 +157,7 @@ int main() {
     Fail("compare did not produce diff.md");
   }
 
-  std::ifstream diff_json_input(diff_json_path, std::ios::binary);
-  if (!diff_json_input) {
-    fs::current_path(original_cwd, ec);
-    Fail("failed to open diff.json");
-  }
-  const std::string diff_json((std::istreambuf_iterator<char>(diff_json_input)),
-                              std::istreambuf_iterator<char>());
+  const std::string diff_json = ReadFileToString(diff_json_path);
   AssertContains(diff_json, "\"compared_metrics\":[");
   AssertContains(diff_json, "\"metric\":\"avg_fps\"");
   AssertContains(diff_json, "\"metric\":\"drop_rate_percent\"");
@@ -207,13 +173,7 @@ int main() {
     Fail("expected non-zero drop_rate_percent delta");
   }
 
-  std::ifstream diff_md_input(diff_md_path, std::ios::binary);
-  if (!diff_md_input) {
-    fs::current_path(original_cwd, ec);
-    Fail("failed to open diff.md");
-  }
-  const std::string diff_md((std::istreambuf_iterator<char>(diff_md_input)),
-                            std::istreambuf_iterator<char>());
+  const std::string diff_md = ReadFileToString(diff_md_path);
   AssertContains(diff_md, "# Metrics Diff");
   AssertContains(diff_md, "| drop_rate_percent |");
 

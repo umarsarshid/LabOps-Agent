@@ -9,6 +9,13 @@ surface (argument parsing + runtime orchestration + artifact/event output).
 
 ## Current contents
 
+Most tests in this folder use shared helper headers from `tests/common/` for:
+- assertion helpers (`AssertContains`, failure reporting)
+- unique temp-root setup
+- CLI `argv` dispatch boilerplate
+
+This keeps each test focused on contract verification instead of setup code.
+
 - `run_stream_trace_smoke.cpp`: drives `labops run` via CLI dispatch and
   verifies `events.jsonl` contains config-audit plus realistic stream lifecycle events and
   `metrics.csv`/`metrics.json` are emitted with expected metric fields,
