@@ -1,75 +1,93 @@
-# Commit Summary: Add reusable CMake smoke-test macro
+# Commit Summary: Refactor real apply-params unsupported handling (strict vs best-effort)
 
 Date: 2026-02-16
 
 ## Goal
-Reduce CMake maintenance overhead by replacing repeated smoke-test declaration boilerplate (`add_executable` + `target_link_libraries` + `target_compile_features` + `add_test`) with one shared helper macro.
+Reduce repetitive error-handling branches in real parameter apply flow by centralizing unsupported-setting handling into one helper-driven path.
+
+Target:
+- `src/backends/real_sdk/apply_params.cpp`
 
 ## Why this change matters
-- The smoke suite had dozens of near-identical CMake blocks.
-- Repetition made updates risky and time-consuming (easy to miss one test when changing compile/link policy).
-- Centralizing the pattern ensures all smoke tests get consistent compile features and test registration.
+- `ApplyParams(...)` had many near-identical branches for:
+  - map failure
+  - missing node
+  - parse failures (bool/int/float)
+  - node write failures (bool/int/float/string)
+  - unknown node type
+- Each branch repeated the same sequence:
+  1. create unsupported reason
+  2. fill readback row
+  3. push `result.readback_rows`
+  4. push `result.unsupported`
+  5. strict-mode fail vs best-effort continue
+- Repetition increases drift risk (small inconsistencies in supported/applied/reason/error behavior).
 
 ## Implementation details
 
-### 1) Added a small reusable macro
+### 1) Added centralized helper for unsupported handling
 File changed:
-- `CMakeLists.txt`
+- `src/backends/real_sdk/apply_params.cpp`
 
 What:
-- Added `add_labops_smoke_test(...)` macro with arguments:
-  - `NAME`
-  - `SOURCES`
-  - optional `LIBRARIES`
-  - optional `INCLUDE_DIRS`
-- Macro behavior:
-  - validates required args (`NAME`, `SOURCES`)
-  - creates executable
-  - applies include directories (if present)
-  - links libraries (if present)
-  - enforces `cxx_std_20`
-  - registers test via `add_test(NAME ... COMMAND ...)`
+- Added internal helper:
+  - `RecordUnsupportedParameter(...)`
+
+Helper responsibilities:
+- build and append a canonical `ReadbackRow` for unsupported outcomes
+- append `UnsupportedParam` entry
+- enforce strict mode behavior (`error` + return false)
+- allow best-effort behavior (return true, caller continues)
 
 Why:
-- Captures the repeated pattern in one place.
-- Prevents future drift in compile/test setup across smoke targets.
+- One source of truth for strict vs best-effort handling and unsupported evidence emission.
 
-### 2) Added shared CLI smoke-library list
+### 2) Rewired `ApplyParams(...)` to use helper
 File changed:
-- `CMakeLists.txt`
+- `src/backends/real_sdk/apply_params.cpp`
 
 What:
-- Added `LABOPS_CLI_SMOKE_LIBRARIES` list variable containing:
-  - `labops_artifacts`
-  - `labops_backends`
-  - `labops_events`
-  - `labops_metrics`
-  - `labops_scenarios`
-  - `labops_schema`
+- Replaced repeated unsupported branches with `RecordUnsupportedParameter(...)` calls for:
+  - generic key mapping missing
+  - mapped node unavailable
+  - bool/int/float parse failures
+  - bool/int/float/string node write rejections
+  - unknown node type
+- Introduced `resolved_node_name` optional once per resolved key and reused it in all helper calls.
+- Introduced `node_type` local to avoid repeated `GetType(...)` calls and keep switch/enum checks consistent.
 
 Why:
-- Many CLI integration smoke tests shared the exact same library set.
-- Reduces repeated long link lines and improves readability.
+- Keeps logic behaviorally equivalent while removing repeated branch code.
+- Makes future policy changes (strict/best-effort behavior) safer and easier.
 
-### 3) Migrated smoke test targets to macro usage
+### 3) Preserved existing behavior contracts
+Behavior intentionally preserved:
+- strict mode fails on first unsupported condition with same error style:
+  - `unsupported parameter '<key>': <reason>`
+- best-effort mode records unsupported rows and continues.
+- supported/applied flags remain aligned to previous semantics:
+  - parse/write failures: `supported=true`, `applied=false`
+  - mapping missing / node missing / unknown type: `supported=false`, `applied=false`
+- backend `SetParam(...)` failure path remains hard-fail (not treated as unsupported).
+
+### 4) Formatting normalization
 File changed:
-- `CMakeLists.txt`
+- `tests/common/temp_dir.hpp`
 
 What:
-- Replaced all repeated smoke-target blocks with `add_labops_smoke_test(...)` calls.
-- Preserved comments and logical grouping.
-- Preserved special cases:
-  - tests needing `src/labops/cli/router.cpp` include that in `SOURCES`
-  - tests needing `src` include path use `INCLUDE_DIRS src`
-- Left non-smoke targets unchanged:
-  - `labops` executable
-  - `core_unit_tests` Catch2 block
+- `clang-format`-only line-wrap normalization discovered by formatter check.
 
 Why:
-- Full adoption gives immediate maintenance benefit.
-- Keeps behavior equivalent while removing repetitive setup code.
+- Keeps repository-wide formatter checks green.
 
 ## Verification
+
+### Formatting
+Commands:
+- `CLANG_FORMAT_REQUIRED_MAJOR=21 bash tools/clang_format.sh --check`
+
+Result:
+- Passed.
 
 ### Configure
 Commands:
@@ -86,21 +104,20 @@ Commands:
 
 Result:
 - Both passed.
-- All smoke executables still build successfully in both trees.
 
-### Targeted smoke runtime checks
+### Focused regression tests (real apply flow)
 Commands:
-- `ctest --test-dir tmp/build -R "run_contract_json_smoke|events_jsonl_smoke|run_stream_trace_smoke|compare_diff_smoke|agent_state_writer_smoke|scenario_validation_smoke|list_backends_smoke|netem_option_contract_smoke" --output-on-failure`
-- `ctest --test-dir tmp/build-real -R "run_contract_json_smoke|events_jsonl_smoke|run_stream_trace_smoke|compare_diff_smoke|agent_state_writer_smoke|scenario_validation_smoke|list_backends_smoke|netem_option_contract_smoke" --output-on-failure`
+- `ctest --test-dir tmp/build -R "real_apply_params_smoke|real_apply_mode_events_smoke|real_device_selector_resolution_smoke|run_device_selector_resolution_smoke" --output-on-failure`
+- `ctest --test-dir tmp/build-real -R "real_apply_params_smoke|real_apply_mode_events_smoke|real_device_selector_resolution_smoke|run_device_selector_resolution_smoke" --output-on-failure`
 
 Result:
-- 8/8 passed in each build tree.
+- 4/4 passed in each build tree.
 
 ## Behavior impact
-- No product/runtime logic changes.
-- Build/test behavior is intended to be equivalent.
-- Primary impact is build-definition maintainability and consistency.
+- Intended runtime behavior unchanged.
+- Primary impact is maintainability and consistency of unsupported-handling paths.
 
 ## Files touched
-- `CMakeLists.txt`
+- `src/backends/real_sdk/apply_params.cpp`
+- `tests/common/temp_dir.hpp` (format-only)
 

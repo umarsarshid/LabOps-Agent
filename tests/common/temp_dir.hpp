@@ -16,8 +16,7 @@ inline std::filesystem::path CreateUniqueTempDir(std::string_view prefix) {
                           std::chrono::system_clock::now().time_since_epoch())
                           .count();
   const std::filesystem::path root =
-      std::filesystem::temp_directory_path() /
-      (std::string(prefix) + "-" + std::to_string(now_ms));
+      std::filesystem::temp_directory_path() / (std::string(prefix) + "-" + std::to_string(now_ms));
 
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
