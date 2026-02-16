@@ -16,17 +16,21 @@ namespace labops::artifacts {
 
 namespace {
 
+// Keep status typed end-to-end so summary counts and table labels cannot drift
+// due to string typos.
+enum class ReportStatus {
+  kApplied = 0,
+  kAdjusted,
+  kUnsupported,
+};
+
 struct ReportRow {
   std::string generic_key;
   std::string node_name;
   std::string requested;
   std::string actual;
-  std::string status_icon;
-  std::string status_text;
   std::string notes;
-  bool supported = false;
-  bool applied = false;
-  bool adjusted = false;
+  ReportStatus status = ReportStatus::kUnsupported;
 };
 
 bool EnsureOutputDir(const fs::path& output_dir, std::string& error) {
@@ -114,6 +118,40 @@ std::string NormalizeCellValue(const std::string& value) {
   return value;
 }
 
+ReportStatus ClassifyReportStatus(const backends::real_sdk::ReadbackRow& row) {
+  if (!row.supported || !row.applied) {
+    return ReportStatus::kUnsupported;
+  }
+  if (row.adjusted) {
+    return ReportStatus::kAdjusted;
+  }
+  return ReportStatus::kApplied;
+}
+
+const char* ReportStatusIcon(ReportStatus status) {
+  switch (status) {
+  case ReportStatus::kApplied:
+    return "✅";
+  case ReportStatus::kAdjusted:
+    return "⚠";
+  case ReportStatus::kUnsupported:
+    return "❌";
+  }
+  return "❌";
+}
+
+const char* ReportStatusText(ReportStatus status) {
+  switch (status) {
+  case ReportStatus::kApplied:
+    return "applied";
+  case ReportStatus::kAdjusted:
+    return "adjusted";
+  case ReportStatus::kUnsupported:
+    return "unsupported";
+  }
+  return "unsupported";
+}
+
 std::map<std::string, std::string>
 BuildRequestedLookup(const std::vector<backends::real_sdk::ApplyParamInput>& requested_params) {
   std::map<std::string, std::string> requested_by_key;
@@ -140,25 +178,17 @@ BuildReportRows(const std::vector<backends::real_sdk::ApplyParamInput>& requeste
     row.node_name = NormalizeCellValue(readback.node_name);
     row.requested = NormalizeCellValue(readback.requested_value);
     row.actual = NormalizeCellValue(readback.actual_value);
-    row.supported = readback.supported;
-    row.applied = readback.applied;
-    row.adjusted = readback.adjusted;
+    row.status = ClassifyReportStatus(readback);
 
-    if (!readback.supported || !readback.applied) {
-      row.status_icon = "❌";
-      row.status_text = "unsupported";
+    if (row.status == ReportStatus::kUnsupported) {
       row.notes = NormalizeCellValue(readback.reason);
-    } else if (readback.adjusted) {
-      row.status_icon = "⚠";
-      row.status_text = "adjusted";
+    } else if (row.status == ReportStatus::kAdjusted) {
       if (readback.reason.empty()) {
         row.notes = "adjusted due to backend constraints";
       } else {
         row.notes = readback.reason;
       }
     } else {
-      row.status_icon = "✅";
-      row.status_text = "applied";
       row.notes = NormalizeCellValue(readback.reason);
     }
 
@@ -184,11 +214,11 @@ void WriteSummarySection(std::ofstream& out_file, const std::vector<ReportRow>& 
   std::size_t adjusted_count = 0;
   std::size_t unsupported_count = 0;
   for (const auto& row : rows) {
-    if (row.status_text == "applied") {
+    if (row.status == ReportStatus::kApplied) {
       ++applied_count;
       continue;
     }
-    if (row.status_text == "adjusted") {
+    if (row.status == ReportStatus::kAdjusted) {
       ++adjusted_count;
       continue;
     }
@@ -212,7 +242,7 @@ void WriteConfigTable(std::ofstream& out_file, const std::vector<ReportRow>& row
   }
 
   for (const auto& row : rows) {
-    out_file << "| " << row.status_icon << " " << row.status_text << " | "
+    out_file << "| " << ReportStatusIcon(row.status) << " " << ReportStatusText(row.status) << " | "
              << EscapeMarkdownCell(row.generic_key) << " | " << EscapeMarkdownCell(row.node_name)
              << " | " << EscapeMarkdownCell(row.requested) << " | "
              << EscapeMarkdownCell(row.actual) << " | "

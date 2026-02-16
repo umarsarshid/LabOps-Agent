@@ -108,6 +108,9 @@ int main() {
   AssertContains(markdown, "✅ applied");
   AssertContains(markdown, "⚠ adjusted");
   AssertContains(markdown, "❌ unsupported");
+  AssertContains(markdown, "- ✅ applied: 1");
+  AssertContains(markdown, "- ⚠ adjusted: 1");
+  AssertContains(markdown, "- ❌ unsupported: 1");
   AssertContains(markdown, "frame_rate");
   AssertContains(markdown, "trigger_mode");
 

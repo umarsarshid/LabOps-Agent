@@ -103,6 +103,9 @@ int main() {
   AssertContains(content, "\"tested_variables\":[");
   AssertContains(content, "\"results_table\":[");
   AssertContains(content, "\"result\":\"fail\"");
+  AssertContains(content, "\"avg_fps\":22.750");
+  AssertContains(content, "\"drop_rate_percent\":18.000");
+  AssertContains(content, "\"jitter_p95_us\":4500.000");
 
   fs::remove_all(out_dir, cleanup_ec);
   std::cout << "agent_state_writer_smoke: ok\n";
