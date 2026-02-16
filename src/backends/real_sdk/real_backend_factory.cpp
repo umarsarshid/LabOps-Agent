@@ -300,7 +300,7 @@ bool ParseDeviceSelector(std::string_view selector_text, DeviceSelector& selecto
     const std::string key = ToLower(Trim(clause.substr(0, colon)));
     const std::string value = Trim(clause.substr(colon + 1));
     if (value.empty()) {
-      error = "selector clause '" + clause + "' is missing a value";
+      error = "selector clause '" + clause + "' must provide a non-empty value (missing a value)";
       return false;
     }
 

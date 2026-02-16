@@ -101,6 +101,9 @@ add_library(labops_scenarios
 )
 target_include_directories(labops_scenarios PUBLIC src)
 target_compile_features(labops_scenarios PUBLIC cxx_std_20)
+# Scenario validation now reuses real-backend selector parsing so validate/run
+# stay in lockstep for device selector syntax and error behavior.
+target_link_libraries(labops_scenarios PUBLIC labops_backends)
 
 # Host probe collectors for machine context evidence (`hostprobe.json`).
 add_library(labops_hostprobe

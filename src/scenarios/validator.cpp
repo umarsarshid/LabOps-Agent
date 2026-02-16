@@ -1,5 +1,7 @@
 #include "scenarios/validator.hpp"
 
+#include "backends/real_sdk/real_backend_factory.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -890,78 +892,12 @@ void ValidateDeviceSelector(const JsonValue& root, ValidationReport& report) {
     AddIssue(report, "device_selector", "must not be empty when provided");
     return;
   }
-
-  bool has_serial = false;
-  bool has_user_id = false;
-  bool has_index = false;
-  std::size_t clause_offset = 0;
-
-  while (clause_offset <= selector_text.size()) {
-    const std::size_t comma = selector_text.find(',', clause_offset);
-    const std::size_t clause_end = (comma == std::string::npos) ? selector_text.size() : comma;
-    const std::string clause =
-        Trim(std::string_view(selector_text).substr(clause_offset, clause_end - clause_offset));
-
-    if (clause.empty()) {
-      AddIssue(report, "device_selector", "contains an empty selector clause");
-      return;
-    }
-
-    const std::size_t colon = clause.find(':');
-    if (colon == std::string::npos) {
-      AddIssue(report, "device_selector", "each selector clause must use key:value format");
-      return;
-    }
-
-    const std::string key = ToLower(Trim(std::string_view(clause).substr(0, colon)));
-    const std::string value = Trim(std::string_view(clause).substr(colon + 1));
-    if (value.empty()) {
-      AddIssue(report, "device_selector", "each selector clause must provide a non-empty value");
-      return;
-    }
-
-    if (key == "serial") {
-      if (has_serial) {
-        AddIssue(report, "device_selector", "serial key may appear at most once");
-        return;
-      }
-      has_serial = true;
-    } else if (key == "user_id") {
-      if (has_user_id) {
-        AddIssue(report, "device_selector", "user_id key may appear at most once");
-        return;
-      }
-      has_user_id = true;
-    } else if (key == "index") {
-      if (has_index) {
-        AddIssue(report, "device_selector", "index key may appear at most once");
-        return;
-      }
-      has_index = true;
-      if (value.find_first_not_of("0123456789") != std::string::npos) {
-        AddIssue(report, "device_selector", "index value must be a non-negative integer");
-        return;
-      }
-    } else {
-      AddIssue(report, "device_selector",
-               "unsupported key '" + key + "' (allowed: serial, user_id, index)");
-      return;
-    }
-
-    if (comma == std::string::npos) {
-      break;
-    }
-    clause_offset = comma + 1;
-  }
-
-  if (has_serial && has_user_id) {
-    AddIssue(report, "device_selector", "cannot include both serial and user_id");
-    return;
-  }
-
-  if (!has_serial && !has_user_id && !has_index) {
-    AddIssue(report, "device_selector",
-             "must include serial:<value>, user_id:<value>, or index:<n>");
+  // Reuse the runtime parser so `labops validate` and `labops run` enforce the
+  // exact same selector syntax and key rules.
+  backends::real_sdk::DeviceSelector parsed_selector;
+  std::string parse_error;
+  if (!backends::real_sdk::ParseDeviceSelector(selector_text, parsed_selector, parse_error)) {
+    AddIssue(report, "device_selector", parse_error);
     return;
   }
 
