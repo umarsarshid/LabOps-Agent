@@ -212,6 +212,7 @@ int main() {
     const fs::path run_json_path = bundle_dir / "run.json";
     const fs::path config_verify_path = bundle_dir / "config_verify.json";
     const fs::path camera_config_path = bundle_dir / "camera_config.json";
+    const fs::path config_report_path = bundle_dir / "config_report.md";
     if (!fs::exists(run_json_path)) {
       Fail("expected run.json to be written on backend connect failure");
     }
@@ -220,6 +221,9 @@ int main() {
     }
     if (!fs::exists(camera_config_path)) {
       Fail("expected camera_config.json to be written before backend connect failure");
+    }
+    if (!fs::exists(config_report_path)) {
+      Fail("expected config_report.md to be written before backend connect failure");
     }
     const std::string run_json = ReadFile(run_json_path);
     AssertContains(run_json, "\"real_device\":");
@@ -242,6 +246,11 @@ int main() {
     AssertContains(camera_config_json, "\"curated_nodes\":");
     AssertContains(camera_config_json, "\"missing_keys\":");
     AssertContains(camera_config_json, "\"unsupported_keys\":");
+
+    const std::string config_report = ReadFile(config_report_path);
+    AssertContains(config_report, "| Status | Key | Node | Requested | Actual | Notes |");
+    AssertContains(config_report, "frame_rate");
+    AssertContains(config_report, "✅ applied");
   } else {
     if (exit_code != labops::core::errors::ToInt(labops::core::errors::ExitCode::kFailure)) {
       Fail("expected generic failure exit code when real backend is disabled");

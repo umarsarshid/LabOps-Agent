@@ -50,15 +50,17 @@ Current high-level write sequence:
    to record requested vs actual vs supported readback evidence.
 7. for real-backend runs, `camera_config.json` is written as an engineer-facing
    config report (identity + curated node dump + missing/unsupported keys).
-8. `events.jsonl` receives lifecycle and frame events.
-9. netem teardown is attempted on run exit when apply succeeded.
-10. `run.json` is written after stream completion (or earlier on certain
+8. for real-backend runs, `config_report.md` is written as a markdown status
+   table (`✅ applied`, `⚠ adjusted`, `❌ unsupported`) for quick triage.
+9. `events.jsonl` receives lifecycle and frame events.
+10. netem teardown is attempted on run exit when apply succeeded.
+11. `run.json` is written after stream completion (or earlier on certain
    backend initialization failures so run metadata is still preserved).
-11. `metrics.csv` and `metrics.json` are written.
-12. `summary.md` is written as a one-page human triage report.
-13. `report.html` is written as a static browser triage report (no JS).
-14. `bundle_manifest.json` is generated from required artifacts.
-15. optional `.zip` archive is created as a sibling of bundle directory.
+12. `metrics.csv` and `metrics.json` are written.
+13. `summary.md` is written as a one-page human triage report.
+14. `report.html` is written as a static browser triage report (no JS).
+15. `bundle_manifest.json` is generated from required artifacts.
+16. optional `.zip` archive is created as a sibling of bundle directory.
 
 ## Directory Layout Contract
 
@@ -73,6 +75,7 @@ Required bundle structure:
     run.json
     config_verify.json   # real-backend runs
     camera_config.json   # real-backend runs
+    config_report.md     # real-backend runs
     events.jsonl
     metrics.csv
     metrics.json
@@ -100,6 +103,7 @@ Optional output:
 | `run.json` | yes | run writer | Captures run identity, immutable config, optional real-device identity/version metadata, and run timestamps. |
 | `config_verify.json` | conditional (real backend) | config verify writer | Captures per-setting requested vs actual vs supported readback evidence after apply. |
 | `camera_config.json` | conditional (real backend) | camera config writer | Captures resolved camera identity plus curated node rows and missing/unsupported key lists for engineer-readable config triage. |
+| `config_report.md` | conditional (real backend) | config report writer | Provides a one-page markdown status table for applied/adjusted/unsupported settings without opening JSON artifacts. |
 | `events.jsonl` | yes | event writer | Timeline-level evidence for stream behavior and failures. |
 | `metrics.csv` | yes | metrics writer | Human-readable metrics for spreadsheets and quick plotting. |
 | `metrics.json` | yes | metrics writer | Machine-readable metrics for automation and agent parsing. |
@@ -177,6 +181,25 @@ Current fields:
 - `missing_requested_keys`: requested keys that did not produce readback rows
 - `unsupported_keys`: keys that were unsupported or unapplied
 - `backend_dump`: raw backend config key/value snapshot for low-level context
+
+### `config_report.md`
+
+Purpose:
+
+- provide a quick, human-readable config result summary for real-backend runs
+- avoid opening JSON files during first-pass triage
+
+Current sections:
+
+- run identity block (`run_id`, `scenario_id`, `backend`, `apply_mode`)
+- optional collection notes (when config collection had upstream errors)
+- summary counters:
+  - `✅ applied`
+  - `⚠ adjusted`
+  - `❌ unsupported`
+- config status table:
+  - columns: `Status`, `Key`, `Node`, `Requested`, `Actual`, `Notes`
+  - each row is one config key outcome with explicit status icon/text
 
 ### `hostprobe.json`
 

@@ -27,7 +27,8 @@ The project needs one consistent workflow that can run on different camera stack
   - includes strict/best-effort real-parameter application that uses both the
     key map and node adapter, enabling deterministic unsupported/adjusted
     reporting in run events and readback verification (`requested vs actual vs supported`)
-    in bundle evidence (`config_verify.json` + `camera_config.json`).
+    in bundle evidence (`config_verify.json`, `camera_config.json`,
+    `config_report.md`).
   - `RealBackend` implements `ICameraBackend` with deterministic placeholder
     behavior until vendor SDK calls are integrated.
   - `SdkContext` provides one-time process SDK init/shutdown via RAII so

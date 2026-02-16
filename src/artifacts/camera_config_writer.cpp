@@ -135,7 +135,8 @@ std::optional<std::string> ResolveIdentityField(const core::schema::RunInfo& run
                                                 const backends::BackendConfig& backend_dump,
                                                 std::string_view backend_key,
                                                 const std::string& run_info_value) {
-  return ResolveIdentityField(run_info, backend_dump, backend_key, ToNonEmptyOptional(run_info_value));
+  return ResolveIdentityField(run_info, backend_dump, backend_key,
+                              ToNonEmptyOptional(run_info_value));
 }
 
 std::map<std::string, std::string>
@@ -166,13 +167,7 @@ BuildReadbackLookup(const backends::real_sdk::ApplyParamsResult& apply_result) {
 
 std::vector<std::string> CuratedGenericKeys() {
   return {
-      "frame_rate",
-      "pixel_format",
-      "exposure",
-      "gain",
-      "roi",
-      "trigger_mode",
-      "trigger_source",
+      "frame_rate", "pixel_format", "exposure", "gain", "roi", "trigger_mode", "trigger_source",
   };
 }
 
@@ -188,11 +183,12 @@ std::string MissingReason(const std::optional<std::string>& requested_value) {
   return "key not requested by scenario";
 }
 
-std::vector<CuratedNodeRow> BuildCuratedNodeRows(
-    const std::vector<std::string>& curated_keys,
-    const std::map<std::string, std::string>& requested_by_key,
-    const std::map<std::string, backends::real_sdk::ReadbackRow>& readback_by_key,
-    std::vector<std::string>& missing_keys, std::vector<std::string>& unsupported_keys) {
+std::vector<CuratedNodeRow>
+BuildCuratedNodeRows(const std::vector<std::string>& curated_keys,
+                     const std::map<std::string, std::string>& requested_by_key,
+                     const std::map<std::string, backends::real_sdk::ReadbackRow>& readback_by_key,
+                     std::vector<std::string>& missing_keys,
+                     std::vector<std::string>& unsupported_keys) {
   std::vector<CuratedNodeRow> rows;
   rows.reserve(curated_keys.size());
 
@@ -217,10 +213,9 @@ std::vector<CuratedNodeRow> BuildCuratedNodeRows(
 
     const backends::real_sdk::ReadbackRow& readback = readback_it->second;
     row.node_name = ToNonEmptyOptional(readback.node_name);
-    row.requested =
-        ToNonEmptyOptional(readback.requested_value).has_value()
-            ? ToNonEmptyOptional(readback.requested_value)
-            : requested_value;
+    row.requested = ToNonEmptyOptional(readback.requested_value).has_value()
+                        ? ToNonEmptyOptional(readback.requested_value)
+                        : requested_value;
     row.actual = ToNonEmptyOptional(readback.actual_value);
     row.supported = readback.supported;
     row.applied = readback.applied;
@@ -269,7 +264,8 @@ bool WriteCameraConfigJson(const core::schema::RunInfo& run_info,
     return false;
   }
 
-  const std::map<std::string, std::string> requested_by_key = BuildRequestedLookup(requested_params);
+  const std::map<std::string, std::string> requested_by_key =
+      BuildRequestedLookup(requested_params);
   const std::map<std::string, backends::real_sdk::ReadbackRow> readback_by_key =
       BuildReadbackLookup(apply_result);
 
@@ -303,14 +299,14 @@ bool WriteCameraConfigJson(const core::schema::RunInfo& run_info,
   std::optional<std::string> firmware_version;
   std::optional<std::string> sdk_version;
   if (run_info.real_device.has_value()) {
-    model = ResolveIdentityField(run_info, backend_dump, "device.model",
-                                 run_info.real_device->model);
-    serial = ResolveIdentityField(run_info, backend_dump, "device.serial",
-                                  run_info.real_device->serial);
+    model =
+        ResolveIdentityField(run_info, backend_dump, "device.model", run_info.real_device->model);
+    serial =
+        ResolveIdentityField(run_info, backend_dump, "device.serial", run_info.real_device->serial);
     transport = ResolveIdentityField(run_info, backend_dump, "device.transport",
                                      run_info.real_device->transport);
-    user_id =
-        ResolveIdentityField(run_info, backend_dump, "device.user_id", run_info.real_device->user_id);
+    user_id = ResolveIdentityField(run_info, backend_dump, "device.user_id",
+                                   run_info.real_device->user_id);
     firmware_version = ResolveIdentityField(run_info, backend_dump, "device.firmware_version",
                                             run_info.real_device->firmware_version);
     sdk_version = ResolveIdentityField(run_info, backend_dump, "device.sdk_version",
@@ -320,7 +316,8 @@ bool WriteCameraConfigJson(const core::schema::RunInfo& run_info,
     serial = NormalizeOptionalText(FindConfigValue(backend_dump, "device.serial"));
     transport = NormalizeOptionalText(FindConfigValue(backend_dump, "device.transport"));
     user_id = NormalizeOptionalText(FindConfigValue(backend_dump, "device.user_id"));
-    firmware_version = NormalizeOptionalText(FindConfigValue(backend_dump, "device.firmware_version"));
+    firmware_version =
+        NormalizeOptionalText(FindConfigValue(backend_dump, "device.firmware_version"));
     sdk_version = NormalizeOptionalText(FindConfigValue(backend_dump, "device.sdk_version"));
   }
   const std::optional<std::string> selector =
@@ -402,8 +399,7 @@ bool WriteCameraConfigJson(const core::schema::RunInfo& run_info,
     out_file << ",\"supported\":" << (row.supported ? "true" : "false")
              << ",\"applied\":" << (row.applied ? "true" : "false")
              << ",\"adjusted\":" << (row.adjusted ? "true" : "false")
-             << ",\"missing\":" << (row.missing ? "true" : "false")
-             << ",\"reason\":";
+             << ",\"missing\":" << (row.missing ? "true" : "false") << ",\"reason\":";
     WriteOptionalString(out_file, row.reason);
     out_file << "}";
   }

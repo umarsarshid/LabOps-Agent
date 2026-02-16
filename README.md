@@ -23,6 +23,8 @@ For each run, you get a folder with files like:
   setting readback after apply
 - `camera_config.json` (real backend): engineer-readable camera config report
   with identity, curated node dump, and missing/unsupported keys
+- `config_report.md` (real backend): markdown status table with
+  applied/adjusted/unsupported config outcomes
 - `events.jsonl`: timeline of stream events
 - `metrics.csv` and `metrics.json`: FPS, drops, timing numbers
 - `summary.md`: quick human-readable summary

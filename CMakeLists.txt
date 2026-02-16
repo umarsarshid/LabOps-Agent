@@ -135,6 +135,7 @@ add_library(labops_artifacts
   src/artifacts/bundle_manifest_writer.cpp
   src/artifacts/bundle_zip_writer.cpp
   src/artifacts/camera_config_writer.cpp
+  src/artifacts/config_report_writer.cpp
   src/artifacts/config_verify_writer.cpp
   src/artifacts/kb_draft_writer.cpp
   src/artifacts/html_report_writer.cpp
@@ -194,6 +195,14 @@ add_executable(camera_config_writer_smoke
 target_link_libraries(camera_config_writer_smoke PRIVATE labops_artifacts labops_schema)
 target_compile_features(camera_config_writer_smoke PRIVATE cxx_std_20)
 add_test(NAME camera_config_writer_smoke COMMAND camera_config_writer_smoke)
+
+# Smoke test for human-readable config report artifact contract.
+add_executable(config_report_writer_smoke
+  tests/artifacts/config_report_writer_smoke.cpp
+)
+target_link_libraries(config_report_writer_smoke PRIVATE labops_artifacts labops_schema)
+target_compile_features(config_report_writer_smoke PRIVATE cxx_std_20)
+add_test(NAME config_report_writer_smoke COMMAND config_report_writer_smoke)
 
 # Smoke test for agent experiment-state serialization and artifact writing.
 add_executable(agent_state_writer_smoke

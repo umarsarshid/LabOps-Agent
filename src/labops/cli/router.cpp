@@ -3,6 +3,7 @@
 #include "artifacts/bundle_manifest_writer.hpp"
 #include "artifacts/bundle_zip_writer.hpp"
 #include "artifacts/camera_config_writer.hpp"
+#include "artifacts/config_report_writer.hpp"
 #include "artifacts/config_verify_writer.hpp"
 #include "artifacts/hostprobe_writer.hpp"
 #include "artifacts/html_report_writer.hpp"
@@ -1735,18 +1736,26 @@ bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan&
                                const core::schema::RunInfo& run_info, const fs::path& bundle_dir,
                                backends::BackendConfig& applied_params, fs::path& events_path,
                                fs::path& config_verify_path, fs::path& camera_config_path,
-                               core::logging::Logger& logger, std::string& error) {
+                               fs::path& config_report_path, core::logging::Logger& logger,
+                               std::string& error) {
   config_verify_path.clear();
   camera_config_path.clear();
+  config_report_path.clear();
 
   backends::real_sdk::ApplyParamsResult apply_result;
-  auto write_camera_config = [&](std::string_view collection_error,
-                                 std::string& write_error) -> bool {
+  auto write_human_config_reports = [&](std::string_view collection_error,
+                                        std::string& write_error) -> bool {
     const backends::BackendConfig backend_dump = backend.DumpConfig();
     if (!artifacts::WriteCameraConfigJson(run_info, backend_dump, run_plan.real_params,
                                           apply_result, run_plan.real_apply_mode, collection_error,
                                           bundle_dir, camera_config_path, write_error)) {
       write_error = "failed to write camera_config.json: " + write_error;
+      return false;
+    }
+    if (!artifacts::WriteConfigReportMarkdown(run_info, run_plan.real_params, apply_result,
+                                              run_plan.real_apply_mode, collection_error,
+                                              bundle_dir, config_report_path, write_error)) {
+      write_error = "failed to write config_report.md: " + write_error;
       return false;
     }
     return true;
@@ -1756,7 +1765,7 @@ bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan&
   backends::real_sdk::ParamKeyMap key_map;
   if (!backends::real_sdk::LoadParamKeyMapFromFile(key_map_path, key_map, error)) {
     std::string write_error;
-    if (!write_camera_config(error, write_error)) {
+    if (!write_human_config_reports(error, write_error)) {
       error = std::move(write_error);
       return false;
     }
@@ -1769,7 +1778,7 @@ bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan&
   if (adapter == nullptr) {
     const std::string adapter_error = "real backend node-map adapter initialization failed";
     std::string write_error;
-    if (!write_camera_config(adapter_error, write_error)) {
+    if (!write_human_config_reports(adapter_error, write_error)) {
       error = std::move(write_error);
       return false;
     }
@@ -1785,7 +1794,7 @@ bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan&
       error = "failed to write config_verify.json: " + write_error;
       return false;
     }
-    if (!write_camera_config(error, write_error)) {
+    if (!write_human_config_reports(error, write_error)) {
       error = std::move(write_error);
       return false;
     }
@@ -1831,7 +1840,7 @@ bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan&
     return false;
   }
   std::string write_error;
-  if (!write_camera_config(/*collection_error=*/"", write_error)) {
+  if (!write_human_config_reports(/*collection_error=*/"", write_error)) {
     error = std::move(write_error);
     return false;
   }
@@ -2572,6 +2581,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   fs::path events_path;
   fs::path config_verify_artifact_path;
   fs::path camera_config_artifact_path;
+  fs::path config_report_artifact_path;
   backends::BackendConfig applied_params;
   for (const auto& [key, value] : selected_device_params) {
     applied_params[key] = value;
@@ -2581,7 +2591,8 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   if (run_plan.backend == kBackendRealStub) {
     if (!ApplyRealParamsWithEvents(*backend, run_plan, run_info, bundle_dir, applied_params,
                                    events_path, config_verify_artifact_path,
-                                   camera_config_artifact_path, logger, error)) {
+                                   camera_config_artifact_path, config_report_artifact_path, logger,
+                                   error)) {
       logger.Error("backend config apply failed", {{"error", error}});
       std::cerr << "error: backend config failed: " << error << '\n';
       return kExitFailure;
@@ -2616,6 +2627,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     }
     if (!camera_config_artifact_path.empty()) {
       std::cerr << "info: camera config artifact: " << camera_config_artifact_path.string() << '\n';
+    }
+    if (!config_report_artifact_path.empty()) {
+      std::cerr << "info: config report artifact: " << config_report_artifact_path.string() << '\n';
     }
     std::cerr << "error: backend connect failed: " << error << '\n';
     return kExitBackendConnectFailed;
@@ -2920,6 +2934,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
         if (!camera_config_artifact_path.empty() && fs::exists(camera_config_artifact_path)) {
           bundle_artifact_paths.push_back(camera_config_artifact_path);
         }
+        if (!config_report_artifact_path.empty() && fs::exists(config_report_artifact_path)) {
+          bundle_artifact_paths.push_back(config_report_artifact_path);
+        }
         bundle_artifact_paths.insert(bundle_artifact_paths.end(),
                                      hostprobe_raw_artifact_paths.begin(),
                                      hostprobe_raw_artifact_paths.end());
@@ -2945,6 +2962,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
         }
         if (!camera_config_artifact_path.empty()) {
           std::cout << "camera_config: " << camera_config_artifact_path.string() << '\n';
+        }
+        if (!config_report_artifact_path.empty()) {
+          std::cout << "config_report: " << config_report_artifact_path.string() << '\n';
         }
         std::cout << "artifact: " << run_artifact_path.string() << '\n';
         std::cout << "manifest: " << bundle_manifest_path.string() << '\n';
@@ -3085,6 +3105,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   if (!camera_config_artifact_path.empty() && fs::exists(camera_config_artifact_path)) {
     bundle_artifact_paths.push_back(camera_config_artifact_path);
   }
+  if (!config_report_artifact_path.empty() && fs::exists(config_report_artifact_path)) {
+    bundle_artifact_paths.push_back(config_report_artifact_path);
+  }
   if (options.soak_mode) {
     if (!soak_frame_cache_path.empty() && fs::exists(soak_frame_cache_path)) {
       bundle_artifact_paths.push_back(soak_frame_cache_path);
@@ -3121,6 +3144,8 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
                 config_verify_artifact_path.empty() ? "-" : config_verify_artifact_path.string()},
                {"camera_config",
                 camera_config_artifact_path.empty() ? "-" : camera_config_artifact_path.string()},
+               {"config_report",
+                config_report_artifact_path.empty() ? "-" : config_report_artifact_path.string()},
                {"metrics_json", metrics_json_path.string()},
                {"summary", summary_markdown_path.string()},
                {"report_html", report_html_path.string()}});
@@ -3157,6 +3182,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
   if (!camera_config_artifact_path.empty()) {
     std::cout << "camera_config: " << camera_config_artifact_path.string() << '\n';
+  }
+  if (!config_report_artifact_path.empty()) {
+    std::cout << "config_report: " << config_report_artifact_path.string() << '\n';
   }
   std::cout << "metrics_csv: " << metrics_csv_path.string() << '\n';
   std::cout << "metrics_json: " << metrics_json_path.string() << '\n';

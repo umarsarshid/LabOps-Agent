@@ -236,6 +236,19 @@ void AssertBestEffortRun(const fs::path& scenario_path, const fs::path& out_dir)
       camera_config_json.find("\"unsupported_keys\"") == std::string::npos) {
     Fail("best-effort camera_config.json missing curated node evidence");
   }
+
+  const fs::path config_report_path = bundle / "config_report.md";
+  if (!fs::exists(config_report_path)) {
+    Fail("best-effort run missing config_report.md");
+  }
+  const std::string config_report = ReadFile(config_report_path);
+  if (config_report.find("| Status | Key | Node | Requested | Actual | Notes |") ==
+          std::string::npos ||
+      config_report.find("✅ applied") == std::string::npos ||
+      config_report.find("⚠ adjusted") == std::string::npos ||
+      config_report.find("❌ unsupported") == std::string::npos) {
+    Fail("best-effort config_report.md missing status table rows");
+  }
 }
 
 void AssertStrictRun(const fs::path& scenario_path, const fs::path& out_dir) {
@@ -278,6 +291,16 @@ void AssertStrictRun(const fs::path& scenario_path, const fs::path& out_dir) {
   if (camera_config_json.find("\"unsupported_keys\"") == std::string::npos ||
       camera_config_json.find("\"trigger_mode\"") == std::string::npos) {
     Fail("strict camera_config.json missing unsupported key evidence");
+  }
+
+  const fs::path config_report_path = bundle / "config_report.md";
+  if (!fs::exists(config_report_path)) {
+    Fail("strict run missing config_report.md");
+  }
+  const std::string config_report = ReadFile(config_report_path);
+  if (config_report.find("❌ unsupported") == std::string::npos ||
+      config_report.find("gain") == std::string::npos) {
+    Fail("strict config_report.md missing unsupported status evidence");
   }
 }
 

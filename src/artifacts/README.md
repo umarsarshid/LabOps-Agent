@@ -17,6 +17,8 @@ The project promise is a clean, reproducible evidence packet. This module ensure
   vs actual values and support/apply status per setting.
 - `camera_config.json` real-backend camera config report with identity fields,
   curated node rows, and missing/unsupported key summaries.
+- `config_report.md` real-backend markdown report for quick triage reading with
+  status table rows (`applied`, `adjusted`, `unsupported`).
 - `events.jsonl` append-only run timeline.
 - `metrics.csv` for plotting and spreadsheet workflows.
 - `metrics.json` for machine parsing by agent logic.
@@ -42,6 +44,9 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 - `camera_config_writer.hpp/.cpp`: writes `camera_config.json` for real-backend
   engineer-facing config reporting, including resolved identity, curated
   setting rows, and missing/unsupported key lists.
+- `config_report_writer.hpp/.cpp`: writes `config_report.md` for real-backend
+  human-readable config triage with status icons and requested vs actual table
+  rows.
 - `metrics_writer.hpp/.cpp`: writes canonical metrics artifacts:
   - `metrics.csv` for plotting and spreadsheet workflows
   - `metrics.json` for machine parsing by agent logic

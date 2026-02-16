@@ -48,6 +48,9 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - For real-backend runs, emit `camera_config.json` with resolved identity,
   curated node rows, and missing/unsupported key summaries so triage notes are
   engineer-readable without digging through raw events.
+- For real-backend runs, emit `config_report.md` with a status table
+  (`✅ applied`, `⚠ adjusted`, `❌ unsupported`) so engineers can read config
+  outcomes quickly without opening JSON.
 - Execute sim backend run lifecycle and emit stream trace events.
 - On backend connect failures, still emit `run.json` (when bundle dir is
   already initialized) so early-failure runs preserve run metadata evidence.
@@ -67,7 +70,7 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
   return non-zero when thresholds fail.
 - Emit standardized per-run bundles under `<out>/<run_id>/` including
   `scenario.json`, `run.json`, `config_verify.json` (real backend),
-  `camera_config.json` (real backend),
+  `camera_config.json` (real backend), `config_report.md` (real backend),
   `events.jsonl`, metrics artifacts,
   `summary.md`, `report.html`, `hostprobe.json`
   (with parsed NIC MTU/link hints when available),

@@ -41,7 +41,7 @@ stable interface regardless of real hardware availability.
 - `real_apply_params_smoke.cpp`: validates strict/best-effort real-parameter
   application behavior, including unsupported handling and adjusted value
   reporting plus per-setting readback rows (`requested/actual/supported`) used
-  by both `config_verify.json` and `camera_config.json`.
+  by `config_verify.json`, `camera_config.json`, and `config_report.md`.
 
 ## Connection to the project
 
