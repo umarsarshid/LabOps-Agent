@@ -15,6 +15,8 @@ The project promise is a clean, reproducible evidence packet. This module ensure
   and version fields.
 - `config_verify.json` real-backend apply/readback evidence showing requested
   vs actual values and support/apply status per setting.
+- `camera_config.json` real-backend camera config report with identity fields,
+  curated node rows, and missing/unsupported key summaries.
 - `events.jsonl` append-only run timeline.
 - `metrics.csv` for plotting and spreadsheet workflows.
 - `metrics.json` for machine parsing by agent logic.
@@ -37,6 +39,9 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 - `config_verify_writer.hpp/.cpp`: writes `config_verify.json` for real-backend
   parameter apply verification, including per-setting requested/actual/support
   rows and summary counters.
+- `camera_config_writer.hpp/.cpp`: writes `camera_config.json` for real-backend
+  engineer-facing config reporting, including resolved identity, curated
+  setting rows, and missing/unsupported key lists.
 - `metrics_writer.hpp/.cpp`: writes canonical metrics artifacts:
   - `metrics.csv` for plotting and spreadsheet workflows
   - `metrics.json` for machine parsing by agent logic

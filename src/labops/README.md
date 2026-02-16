@@ -26,7 +26,8 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
   actionable field-level errors when invalid.
 - `labops run <scenario.json> --out <dir> [--device <selector>] [--zip] [--redact] [--soak --checkpoint-interval-ms <ms> [--soak-stop-file <path>] [--resume <checkpoint.json>]] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: emits a per-run bundle under
   `<dir>/<run_id>/` containing `scenario.json`, `run.json`,
-  `config_verify.json` (real backend readback evidence), `events.jsonl`,
+  `config_verify.json` (real backend readback evidence),
+  `camera_config.json` (real backend config report), `events.jsonl`,
   `metrics.csv`, `metrics.json`, `summary.md`, `report.html`,
   `hostprobe.json`, and
   platform NIC raw command outputs (`nic_*.txt`),

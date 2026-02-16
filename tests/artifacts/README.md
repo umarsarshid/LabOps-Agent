@@ -15,6 +15,9 @@ this folder guard against accidental output-shape or file-path regressions.
 - `config_verify_writer_smoke.cpp`: verifies `WriteConfigVerifyJson(...)`
   creates `config_verify.json` with per-setting requested/actual/supported
   rows and summary counters.
+- `camera_config_writer_smoke.cpp`: verifies `WriteCameraConfigJson(...)`
+  creates `camera_config.json` with resolved identity fields, curated node
+  rows, and missing/unsupported key lists.
 - `metrics_writers_smoke.cpp`: verifies `WriteMetricsCsv(...)` and
   `WriteMetricsJson(...)` create both metrics artifacts with expected fields.
 - `html_report_writer_smoke.cpp`: verifies `WriteRunSummaryHtml(...)` creates

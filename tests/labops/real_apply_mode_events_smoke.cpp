@@ -225,6 +225,17 @@ void AssertBestEffortRun(const fs::path& scenario_path, const fs::path& out_dir)
       verify_json.find("\"supported\":true") == std::string::npos) {
     Fail("best-effort config_verify.json missing requested/actual/supported evidence");
   }
+
+  const fs::path camera_config_path = bundle / "camera_config.json";
+  if (!fs::exists(camera_config_path)) {
+    Fail("best-effort run missing camera_config.json");
+  }
+  const std::string camera_config_json = ReadFile(camera_config_path);
+  if (camera_config_json.find("\"curated_nodes\"") == std::string::npos ||
+      camera_config_json.find("\"generic_key\":\"frame_rate\"") == std::string::npos ||
+      camera_config_json.find("\"unsupported_keys\"") == std::string::npos) {
+    Fail("best-effort camera_config.json missing curated node evidence");
+  }
 }
 
 void AssertStrictRun(const fs::path& scenario_path, const fs::path& out_dir) {
@@ -257,6 +268,16 @@ void AssertStrictRun(const fs::path& scenario_path, const fs::path& out_dir) {
       verify_json.find("\"supported\":false") == std::string::npos ||
       verify_json.find("\"applied\":false") == std::string::npos) {
     Fail("strict config_verify.json missing unsupported evidence");
+  }
+
+  const fs::path camera_config_path = bundle / "camera_config.json";
+  if (!fs::exists(camera_config_path)) {
+    Fail("strict run missing camera_config.json");
+  }
+  const std::string camera_config_json = ReadFile(camera_config_path);
+  if (camera_config_json.find("\"unsupported_keys\"") == std::string::npos ||
+      camera_config_json.find("\"trigger_mode\"") == std::string::npos) {
+    Fail("strict camera_config.json missing unsupported key evidence");
   }
 }
 

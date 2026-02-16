@@ -48,15 +48,17 @@ Current high-level write sequence:
 5. optional netem impairment is applied when `--apply-netem` is requested.
 6. for real-backend runs, `config_verify.json` is written after setting apply
    to record requested vs actual vs supported readback evidence.
-7. `events.jsonl` receives lifecycle and frame events.
-8. netem teardown is attempted on run exit when apply succeeded.
-9. `run.json` is written after stream completion (or earlier on certain
+7. for real-backend runs, `camera_config.json` is written as an engineer-facing
+   config report (identity + curated node dump + missing/unsupported keys).
+8. `events.jsonl` receives lifecycle and frame events.
+9. netem teardown is attempted on run exit when apply succeeded.
+10. `run.json` is written after stream completion (or earlier on certain
    backend initialization failures so run metadata is still preserved).
-10. `metrics.csv` and `metrics.json` are written.
-11. `summary.md` is written as a one-page human triage report.
-12. `report.html` is written as a static browser triage report (no JS).
-13. `bundle_manifest.json` is generated from required artifacts.
-14. optional `.zip` archive is created as a sibling of bundle directory.
+11. `metrics.csv` and `metrics.json` are written.
+12. `summary.md` is written as a one-page human triage report.
+13. `report.html` is written as a static browser triage report (no JS).
+14. `bundle_manifest.json` is generated from required artifacts.
+15. optional `.zip` archive is created as a sibling of bundle directory.
 
 ## Directory Layout Contract
 
@@ -70,6 +72,7 @@ Required bundle structure:
     nic_*.txt
     run.json
     config_verify.json   # real-backend runs
+    camera_config.json   # real-backend runs
     events.jsonl
     metrics.csv
     metrics.json
@@ -96,6 +99,7 @@ Optional output:
 | `nic_*.txt` | yes | host probe writer | Raw NIC command outputs (platform-specific command set). |
 | `run.json` | yes | run writer | Captures run identity, immutable config, optional real-device identity/version metadata, and run timestamps. |
 | `config_verify.json` | conditional (real backend) | config verify writer | Captures per-setting requested vs actual vs supported readback evidence after apply. |
+| `camera_config.json` | conditional (real backend) | camera config writer | Captures resolved camera identity plus curated node rows and missing/unsupported key lists for engineer-readable config triage. |
 | `events.jsonl` | yes | event writer | Timeline-level evidence for stream behavior and failures. |
 | `metrics.csv` | yes | metrics writer | Human-readable metrics for spreadsheets and quick plotting. |
 | `metrics.json` | yes | metrics writer | Machine-readable metrics for automation and agent parsing. |
@@ -150,6 +154,29 @@ Field notes:
   - `firmware_version` is included when the SDK/discovery source exposes it
   - `sdk_version` is always captured for real-device runs (`unknown` fallback)
 - `timestamps.*`: UTC with millisecond precision (`YYYY-MM-DDTHH:MM:SS.mmmZ`)
+
+### `camera_config.json`
+
+Purpose:
+
+- provide an engineer-readable config snapshot for real-backend runs
+- capture "what was requested vs what actually applied" in one stable file
+
+Current fields:
+
+- `identity`:
+  - resolved camera identity/version fields (`model`, `serial`, `transport`,
+    `user_id`, `firmware_version`, `sdk_version`)
+  - selector details when available (`selector`, `index`, optional `ip`, `mac`)
+- `curated_nodes`:
+  - fixed key rows for core camera settings (`frame_rate`, `pixel_format`,
+    `exposure`, `gain`, `roi`, `trigger_mode`, `trigger_source`)
+  - each row captures `requested`, `actual`, `supported`, `applied`,
+    `adjusted`, `missing`, and `reason`
+- `missing_keys`: curated keys with no readback row
+- `missing_requested_keys`: requested keys that did not produce readback rows
+- `unsupported_keys`: keys that were unsupported or unapplied
+- `backend_dump`: raw backend config key/value snapshot for low-level context
 
 ### `hostprobe.json`
 

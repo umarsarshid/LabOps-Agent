@@ -27,8 +27,9 @@ This folder is that bridge.
   - performs per-setting readback verification and returns structured
     `requested vs actual vs supported` rows.
   - returns structured applied/unsupported/adjusted results so CLI can emit
-    deterministic config events and `config_verify.json` evidence
-    (`CONFIG_APPLIED`, `CONFIG_UNSUPPORTED`, `CONFIG_ADJUSTED`).
+    deterministic config events plus `config_verify.json` and
+    `camera_config.json` evidence (`CONFIG_APPLIED`, `CONFIG_UNSUPPORTED`,
+    `CONFIG_ADJUSTED`).
 - `maps/param_key_map.json`:
   - default mapping data for first integration keys:
     - `exposure`, `gain`, `pixel_format`, `roi`,

@@ -21,6 +21,8 @@ For each run, you get a folder with files like:
   model/serial/transport plus firmware/SDK version evidence when available)
 - `config_verify.json` (real backend): requested vs actual vs supported
   setting readback after apply
+- `camera_config.json` (real backend): engineer-readable camera config report
+  with identity, curated node dump, and missing/unsupported keys
 - `events.jsonl`: timeline of stream events
 - `metrics.csv` and `metrics.json`: FPS, drops, timing numbers
 - `summary.md`: quick human-readable summary
