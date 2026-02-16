@@ -1,123 +1,85 @@
-# Commit Summary: Refactor real apply-params unsupported handling (strict vs best-effort)
+# Commit Summary
 
-Date: 2026-02-16
+## Commit
+`refactor(cli): consolidate bundle manifest artifact collection`
 
-## Goal
-Reduce repetitive error-handling branches in real parameter apply flow by centralizing unsupported-setting handling into one helper-driven path.
+## What I Implemented
 
-Target:
-- `src/backends/real_sdk/apply_params.cpp`
+I refactored `src/labops/cli/router.cpp` to remove duplicated bundle-manifest path assembly logic in two places:
+- soak pause flow (when a soak run is safely paused)
+- normal/final completion flow (when run finishes)
 
-## Why this change matters
-- `ApplyParams(...)` had many near-identical branches for:
-  - map failure
-  - missing node
-  - parse failures (bool/int/float)
-  - node write failures (bool/int/float/string)
-  - unknown node type
-- Each branch repeated the same sequence:
-  1. create unsupported reason
-  2. fill readback row
-  3. push `result.readback_rows`
-  4. push `result.unsupported`
-  5. strict-mode fail vs best-effort continue
-- Repetition increases drift risk (small inconsistencies in supported/applied/reason/error behavior).
+### Code Changes
 
-## Implementation details
+1. Added helper `AppendArtifactIfPresent(...)`
+- Location: `src/labops/cli/router.cpp`
+- Behavior: appends a path only when it is non-empty and exists on disk.
+- Why: this logic was repeated several times for optional artifacts (`config_verify.json`, `camera_config.json`, `config_report.md`, soak artifacts).
 
-### 1) Added centralized helper for unsupported handling
-File changed:
-- `src/backends/real_sdk/apply_params.cpp`
+2. Added helper `BuildBundleManifestArtifactPaths(...)`
+- Location: `src/labops/cli/router.cpp`
+- Inputs:
+  - required artifact paths (always included)
+  - optional artifact paths (included only if present)
+  - NIC raw artifact paths (`nic_*.txt`)
+- Output: one consolidated vector used for `WriteBundleManifestJson(...)`.
+- Why: pause and completion paths used near-identical artifact collection; centralizing removes drift risk and lowers maintenance cost.
 
-What:
-- Added internal helper:
-  - `RecordUnsupportedParameter(...)`
+3. Replaced duplicated manifest assembly in soak-pause path
+- Old behavior: manually assembled vector + repeated optional checks + manual NIC insert.
+- New behavior: build required list for pause artifacts, pass optional config artifacts to shared helper.
+- Why: guarantees the same optional inclusion policy without repeating condition blocks.
 
-Helper responsibilities:
-- build and append a canonical `ReadbackRow` for unsupported outcomes
-- append `UnsupportedParam` entry
-- enforce strict mode behavior (`error` + return false)
-- allow best-effort behavior (return true, caller continues)
+4. Replaced duplicated manifest assembly in final-completion path
+- Old behavior: manual vector assembly + repeated optional checks + soak-specific optional checks + NIC insert.
+- New behavior:
+  - build one `completion_optional_artifacts` list
+  - append soak artifacts only when `--soak` is enabled
+  - call shared helper for final list construction.
+- Why: one source of truth for manifest artifact inclusion across both execution endings.
 
-Why:
-- One source of truth for strict vs best-effort handling and unsupported evidence emission.
+## Behavior/Contract Impact
 
-### 2) Rewired `ApplyParams(...)` to use helper
-File changed:
-- `src/backends/real_sdk/apply_params.cpp`
+No intended functional behavior change.
+- Required artifacts remain required in each path.
+- Optional artifacts are still included only if the file exists.
+- NIC raw files are still appended to manifest inputs.
 
-What:
-- Replaced repeated unsupported branches with `RecordUnsupportedParameter(...)` calls for:
-  - generic key mapping missing
-  - mapped node unavailable
-  - bool/int/float parse failures
-  - bool/int/float/string node write rejections
-  - unknown node type
-- Introduced `resolved_node_name` optional once per resolved key and reused it in all helper calls.
-- Introduced `node_type` local to avoid repeated `GetType(...)` calls and keep switch/enum checks consistent.
+This is a maintainability/refactor commit to reduce duplication and lower regression risk when artifact contract evolves.
 
-Why:
-- Keeps logic behaviorally equivalent while removing repeated branch code.
-- Makes future policy changes (strict/best-effort behavior) safer and easier.
-
-### 3) Preserved existing behavior contracts
-Behavior intentionally preserved:
-- strict mode fails on first unsupported condition with same error style:
-  - `unsupported parameter '<key>': <reason>`
-- best-effort mode records unsupported rows and continues.
-- supported/applied flags remain aligned to previous semantics:
-  - parse/write failures: `supported=true`, `applied=false`
-  - mapping missing / node missing / unknown type: `supported=false`, `applied=false`
-- backend `SetParam(...)` failure path remains hard-fail (not treated as unsupported).
-
-### 4) Formatting normalization
-File changed:
-- `tests/common/temp_dir.hpp`
-
-What:
-- `clang-format`-only line-wrap normalization discovered by formatter check.
-
-Why:
-- Keeps repository-wide formatter checks green.
-
-## Verification
+## Verification Performed
 
 ### Formatting
-Commands:
-- `CLANG_FORMAT_REQUIRED_MAJOR=21 bash tools/clang_format.sh --check`
-
-Result:
-- Passed.
-
-### Configure
-Commands:
-- `cmake -S . -B tmp/build`
-- `cmake -S . -B tmp/build-real -DLABOPS_ENABLE_REAL_BACKEND=ON`
-
-Result:
-- Both passed.
+- `bash tools/clang_format.sh --check`
+- Result: pass.
 
 ### Build
-Commands:
-- `cmake --build tmp/build`
-- `cmake --build tmp/build-real`
+- `cmake -S . -B build`
+- `cmake --build build`
+- Result: pass.
 
-Result:
-- Both passed.
+### Targeted tests for touched behavior
+- `ctest --test-dir build -R "(run_stream_trace_smoke|bundle_layout_consistency_smoke|soak_checkpoint_resume_smoke|baseline_capture_smoke)" --output-on-failure`
+- Result: 4/4 passed.
 
-### Focused regression tests (real apply flow)
-Commands:
-- `ctest --test-dir tmp/build -R "real_apply_params_smoke|real_apply_mode_events_smoke|real_device_selector_resolution_smoke|run_device_selector_resolution_smoke" --output-on-failure`
-- `ctest --test-dir tmp/build-real -R "real_apply_params_smoke|real_apply_mode_events_smoke|real_device_selector_resolution_smoke|run_device_selector_resolution_smoke" --output-on-failure`
+### Full suite sanity run
+- `ctest --test-dir build --output-on-failure`
+- Result: 54/55 passed.
+- One failing test: `starter_scenarios_e2e_smoke`.
+- Failure reason seen in logs: `labops run scenarios/trigger_roi.json` fails during run-plan parsing with:
+  - `scenario camera.roi must include x, y, width, and height`
+- Notes:
+  - this failure occurs before manifest-writing stage and is unrelated to this manifest-collection refactor.
+  - manual spot-check confirmed:
+    - `./build/labops validate scenarios/trigger_roi.json` passes
+    - `./build/labops run scenarios/trigger_roi.json ...` fails with the same run-plan parser error.
 
-Result:
-- 4/4 passed in each build tree.
+## Why This Refactor Matters
 
-## Behavior impact
-- Intended runtime behavior unchanged.
-- Primary impact is maintainability and consistency of unsupported-handling paths.
+- Prevents pause/final manifest logic from drifting over time.
+- Reduces copy-paste condition blocks, making future artifact additions safer.
+- Keeps manifest behavior explicit while lowering cognitive load in a very large run pipeline function.
 
-## Files touched
-- `src/backends/real_sdk/apply_params.cpp`
-- `tests/common/temp_dir.hpp` (format-only)
+## Files Changed
 
+- `src/labops/cli/router.cpp`
