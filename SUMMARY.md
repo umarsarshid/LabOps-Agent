@@ -1,115 +1,75 @@
-# Commit Summary: Add shared test utilities for assertions, temp dirs, and CLI dispatch
+# Commit Summary: Add reusable CMake smoke-test macro
 
 Date: 2026-02-16
 
 ## Goal
-Reduce repeated test boilerplate by introducing a shared `tests/common/` utility layer for:
-- text assertions
-- temp-directory lifecycle helpers
-- CLI dispatch argv conversion
-
-This directly addresses repetition highlighted in:
-- `tests/labops/compare_diff_smoke.cpp`
-- `tests/agent/agent_state_writer_smoke.cpp`
+Reduce CMake maintenance overhead by replacing repeated smoke-test declaration boilerplate (`add_executable` + `target_link_libraries` + `target_compile_features` + `add_test`) with one shared helper macro.
 
 ## Why this change matters
-- Many smoke tests redefined nearly identical helpers (`Fail`, `AssertContains`, temp-path creation, argv conversion).
-- Repetition increases maintenance cost and creates inconsistent failure messages.
-- Shared helpers make tests easier to read and keep test behavior consistent.
+- The smoke suite had dozens of near-identical CMake blocks.
+- Repetition made updates risky and time-consuming (easy to miss one test when changing compile/link policy).
+- Centralizing the pattern ensures all smoke tests get consistent compile features and test registration.
 
 ## Implementation details
 
-### 1) Added shared test assertion helpers
-File added:
-- `tests/common/assertions.hpp`
-
-What:
-- `Fail(std::string_view)`
-- `AssertContains(std::string_view, std::string_view)`
-- `AssertNotContains(std::string_view, std::string_view)`
-- `ReadFileToString(const std::filesystem::path&)`
-
-Why:
-- Standardizes assertion and file-loading behavior across smoke tests.
-
-### 2) Added shared temp-dir helpers
-File added:
-- `tests/common/temp_dir.hpp`
-
-What:
-- `CreateUniqueTempDir(std::string_view prefix)`
-- `RemovePathBestEffort(const std::filesystem::path&)`
-
-Why:
-- Removes repeated timestamp + temp root + directory create/cleanup code.
-
-### 3) Added shared CLI dispatch helper
-File added:
-- `tests/common/cli_dispatch.hpp`
-
-What:
-- `DispatchArgs(const std::vector<std::string>&)`
-
-Why:
-- Removes repeated `std::vector<char*>` argv conversion before calling
-  `labops::cli::Dispatch`.
-
-### 4) Added shared helper folder documentation
-File added:
-- `tests/common/README.md`
-
-What:
-- Explains helper purpose and function inventory.
-
-Why:
-- Makes onboarding and future reuse straightforward.
-
-### 5) Migrated `compare_diff_smoke` to shared helpers
+### 1) Added a small reusable macro
 File changed:
-- `tests/labops/compare_diff_smoke.cpp`
+- `CMakeLists.txt`
 
 What:
-- Replaced local `Fail` + `AssertContains` with shared versions.
-- Replaced local `DispatchArgs` with shared dispatcher.
-- Replaced manual temp-root creation with `CreateUniqueTempDir(...)`.
-- Replaced local file read boilerplate with `ReadFileToString(...)`.
+- Added `add_labops_smoke_test(...)` macro with arguments:
+  - `NAME`
+  - `SOURCES`
+  - optional `LIBRARIES`
+  - optional `INCLUDE_DIRS`
+- Macro behavior:
+  - validates required args (`NAME`, `SOURCES`)
+  - creates executable
+  - applies include directories (if present)
+  - links libraries (if present)
+  - enforces `cxx_std_20`
+  - registers test via `add_test(NAME ... COMMAND ...)`
 
 Why:
-- This file had all three categories of duplicate boilerplate.
+- Captures the repeated pattern in one place.
+- Prevents future drift in compile/test setup across smoke targets.
 
-### 6) Migrated `agent_state_writer_smoke` to shared helpers
+### 2) Added shared CLI smoke-library list
 File changed:
-- `tests/agent/agent_state_writer_smoke.cpp`
+- `CMakeLists.txt`
 
 What:
-- Replaced local `Fail` + `AssertContains` with shared versions.
-- Replaced fixed temp path with unique temp-root helper.
-- Replaced local file read boilerplate with `ReadFileToString(...)`.
+- Added `LABOPS_CLI_SMOKE_LIBRARIES` list variable containing:
+  - `labops_artifacts`
+  - `labops_backends`
+  - `labops_events`
+  - `labops_metrics`
+  - `labops_scenarios`
+  - `labops_schema`
 
 Why:
-- Keeps this test deterministic while removing repeated setup/assertion code.
+- Many CLI integration smoke tests shared the exact same library set.
+- Reduces repeated long link lines and improves readability.
 
-### 7) Updated test documentation for shared utility usage
-Files changed:
-- `tests/README.md`
-- `tests/labops/README.md`
-- `tests/agent/README.md`
+### 3) Migrated smoke test targets to macro usage
+File changed:
+- `CMakeLists.txt`
 
 What:
-- Added references to `tests/common/` and why it should be used.
+- Replaced all repeated smoke-target blocks with `add_labops_smoke_test(...)` calls.
+- Preserved comments and logical grouping.
+- Preserved special cases:
+  - tests needing `src/labops/cli/router.cpp` include that in `SOURCES`
+  - tests needing `src` include path use `INCLUDE_DIRS src`
+- Left non-smoke targets unchanged:
+  - `labops` executable
+  - `core_unit_tests` Catch2 block
 
 Why:
-- Encourages consistent patterns in future tests.
+- Full adoption gives immediate maintenance benefit.
+- Keeps behavior equivalent while removing repetitive setup code.
 
 ## Verification
-
-### Formatting
-Commands:
-- `CLANG_FORMAT_REQUIRED_MAJOR=21 bash tools/clang_format.sh --fix`
-- `CLANG_FORMAT_REQUIRED_MAJOR=21 bash tools/clang_format.sh --check`
-
-Result:
-- Passed.
 
 ### Configure
 Commands:
@@ -126,27 +86,21 @@ Commands:
 
 Result:
 - Both passed.
+- All smoke executables still build successfully in both trees.
 
-### Targeted tests
+### Targeted smoke runtime checks
 Commands:
-- `ctest --test-dir tmp/build -R "compare_diff_smoke|agent_state_writer_smoke|baseline_capture_smoke" --output-on-failure`
-- `ctest --test-dir tmp/build-real -R "compare_diff_smoke|agent_state_writer_smoke|baseline_capture_smoke" --output-on-failure`
+- `ctest --test-dir tmp/build -R "run_contract_json_smoke|events_jsonl_smoke|run_stream_trace_smoke|compare_diff_smoke|agent_state_writer_smoke|scenario_validation_smoke|list_backends_smoke|netem_option_contract_smoke" --output-on-failure`
+- `ctest --test-dir tmp/build-real -R "run_contract_json_smoke|events_jsonl_smoke|run_stream_trace_smoke|compare_diff_smoke|agent_state_writer_smoke|scenario_validation_smoke|list_backends_smoke|netem_option_contract_smoke" --output-on-failure`
 
 Result:
-- 3/3 passed in each build tree.
+- 8/8 passed in each build tree.
 
 ## Behavior impact
-- No product/runtime behavior changes.
-- Test behavior remains equivalent; helper logic is centralized.
-- This is a maintainability/refactor commit for test infrastructure.
+- No product/runtime logic changes.
+- Build/test behavior is intended to be equivalent.
+- Primary impact is build-definition maintainability and consistency.
 
 ## Files touched
-- `tests/common/assertions.hpp` (new)
-- `tests/common/temp_dir.hpp` (new)
-- `tests/common/cli_dispatch.hpp` (new)
-- `tests/common/README.md` (new)
-- `tests/labops/compare_diff_smoke.cpp`
-- `tests/agent/agent_state_writer_smoke.cpp`
-- `tests/README.md`
-- `tests/labops/README.md`
-- `tests/agent/README.md`
+- `CMakeLists.txt`
+

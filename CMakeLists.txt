@@ -169,514 +169,646 @@ target_link_libraries(labops PRIVATE labops_artifacts labops_backends labops_eve
 # infrastructure is introduced.
 include(CTest)
 enable_testing()
-add_executable(run_contract_json_smoke
-  tests/schema/run_contract_json_smoke.cpp
+
+# Small helper macro to keep smoke-test declarations concise and consistent.
+# It centralizes the common executable -> link -> cxx_std_20 -> add_test flow.
+macro(add_labops_smoke_test)
+  set(options)
+  set(oneValueArgs NAME)
+  set(multiValueArgs SOURCES LIBRARIES INCLUDE_DIRS)
+  cmake_parse_arguments(LABOPS_SMOKE "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+  if(NOT LABOPS_SMOKE_NAME)
+    message(FATAL_ERROR "add_labops_smoke_test requires NAME")
+  endif()
+  if(NOT LABOPS_SMOKE_SOURCES)
+    message(FATAL_ERROR "add_labops_smoke_test(${LABOPS_SMOKE_NAME}) requires SOURCES")
+  endif()
+
+  add_executable(${LABOPS_SMOKE_NAME}
+    ${LABOPS_SMOKE_SOURCES}
+  )
+  if(LABOPS_SMOKE_INCLUDE_DIRS)
+    target_include_directories(${LABOPS_SMOKE_NAME} PRIVATE ${LABOPS_SMOKE_INCLUDE_DIRS})
+  endif()
+  if(LABOPS_SMOKE_LIBRARIES)
+    target_link_libraries(${LABOPS_SMOKE_NAME} PRIVATE ${LABOPS_SMOKE_LIBRARIES})
+  endif()
+  target_compile_features(${LABOPS_SMOKE_NAME} PRIVATE cxx_std_20)
+  add_test(NAME ${LABOPS_SMOKE_NAME} COMMAND ${LABOPS_SMOKE_NAME})
+endmacro()
+
+set(LABOPS_CLI_SMOKE_LIBRARIES
+  labops_artifacts
+  labops_backends
+  labops_events
+  labops_metrics
+  labops_scenarios
+  labops_schema
 )
-target_link_libraries(run_contract_json_smoke PRIVATE labops_schema)
-target_compile_features(run_contract_json_smoke PRIVATE cxx_std_20)
-add_test(NAME run_contract_json_smoke COMMAND run_contract_json_smoke)
+
+# Early smoke-test target that validates the schema contract and JSON output
+# remain stable. This is intentionally lightweight until broader test
+# infrastructure is introduced.
+add_labops_smoke_test(
+  NAME run_contract_json_smoke
+  SOURCES
+    tests/schema/run_contract_json_smoke.cpp
+  LIBRARIES
+    labops_schema
+)
 
 # Smoke test for artifact emission behavior and output path contracts.
-add_executable(run_writer_smoke
-  tests/artifacts/run_writer_smoke.cpp
+add_labops_smoke_test(
+  NAME run_writer_smoke
+  SOURCES
+    tests/artifacts/run_writer_smoke.cpp
+  LIBRARIES
+    labops_artifacts
+    labops_schema
 )
-target_link_libraries(run_writer_smoke PRIVATE labops_artifacts labops_schema)
-target_compile_features(run_writer_smoke PRIVATE cxx_std_20)
-add_test(NAME run_writer_smoke COMMAND run_writer_smoke)
 
 # Smoke test for real-config readback verification artifact contract.
-add_executable(config_verify_writer_smoke
-  tests/artifacts/config_verify_writer_smoke.cpp
+add_labops_smoke_test(
+  NAME config_verify_writer_smoke
+  SOURCES
+    tests/artifacts/config_verify_writer_smoke.cpp
+  LIBRARIES
+    labops_artifacts
+    labops_schema
 )
-target_link_libraries(config_verify_writer_smoke PRIVATE labops_artifacts labops_schema)
-target_compile_features(config_verify_writer_smoke PRIVATE cxx_std_20)
-add_test(NAME config_verify_writer_smoke COMMAND config_verify_writer_smoke)
 
 # Smoke test for real camera-config report artifact contract.
-add_executable(camera_config_writer_smoke
-  tests/artifacts/camera_config_writer_smoke.cpp
+add_labops_smoke_test(
+  NAME camera_config_writer_smoke
+  SOURCES
+    tests/artifacts/camera_config_writer_smoke.cpp
+  LIBRARIES
+    labops_artifacts
+    labops_schema
 )
-target_link_libraries(camera_config_writer_smoke PRIVATE labops_artifacts labops_schema)
-target_compile_features(camera_config_writer_smoke PRIVATE cxx_std_20)
-add_test(NAME camera_config_writer_smoke COMMAND camera_config_writer_smoke)
 
 # Smoke test for human-readable config report artifact contract.
-add_executable(config_report_writer_smoke
-  tests/artifacts/config_report_writer_smoke.cpp
+add_labops_smoke_test(
+  NAME config_report_writer_smoke
+  SOURCES
+    tests/artifacts/config_report_writer_smoke.cpp
+  LIBRARIES
+    labops_artifacts
+    labops_schema
 )
-target_link_libraries(config_report_writer_smoke PRIVATE labops_artifacts labops_schema)
-target_compile_features(config_report_writer_smoke PRIVATE cxx_std_20)
-add_test(NAME config_report_writer_smoke COMMAND config_report_writer_smoke)
 
 # Smoke test for agent experiment-state serialization and artifact writing.
-add_executable(agent_state_writer_smoke
-  tests/agent/agent_state_writer_smoke.cpp
+add_labops_smoke_test(
+  NAME agent_state_writer_smoke
+  SOURCES
+    tests/agent/agent_state_writer_smoke.cpp
+  LIBRARIES
+    labops_agent
 )
-target_link_libraries(agent_state_writer_smoke PRIVATE labops_agent)
-target_compile_features(agent_state_writer_smoke PRIVATE cxx_std_20)
-add_test(NAME agent_state_writer_smoke COMMAND agent_state_writer_smoke)
 
 # Smoke test for in-process agent experiment execution:
 # baseline capture + one variant run without shelling out.
-add_executable(experiment_runner_smoke
-  tests/agent/experiment_runner_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME experiment_runner_smoke
+  SOURCES
+    tests/agent/experiment_runner_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    labops_agent
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(experiment_runner_smoke PRIVATE src)
-target_link_libraries(experiment_runner_smoke PRIVATE labops_agent labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(experiment_runner_smoke PRIVATE cxx_std_20)
-add_test(NAME experiment_runner_smoke COMMAND experiment_runner_smoke)
 
 # Smoke test for clean failure behavior when experiment input paths are invalid.
-add_executable(experiment_runner_failure_smoke
-  tests/agent/experiment_runner_failure_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME experiment_runner_failure_smoke
+  SOURCES
+    tests/agent/experiment_runner_failure_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    labops_agent
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(experiment_runner_failure_smoke PRIVATE src)
-target_link_libraries(experiment_runner_failure_smoke PRIVATE labops_agent labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(experiment_runner_failure_smoke PRIVATE cxx_std_20)
-add_test(NAME experiment_runner_failure_smoke COMMAND experiment_runner_failure_smoke)
 
 # Smoke test for symptom-driven playbook selection and ordered knob output.
-add_executable(playbook_selection_smoke
-  tests/agent/playbook_selection_smoke.cpp
+add_labops_smoke_test(
+  NAME playbook_selection_smoke
+  SOURCES
+    tests/agent/playbook_selection_smoke.cpp
+  LIBRARIES
+    labops_agent
 )
-target_link_libraries(playbook_selection_smoke PRIVATE labops_agent)
-target_compile_features(playbook_selection_smoke PRIVATE cxx_std_20)
-add_test(NAME playbook_selection_smoke COMMAND playbook_selection_smoke)
 
 # Smoke test for one-variable-at-a-time variant generation.
-add_executable(oaat_variant_generator_smoke
-  tests/agent/oaat_variant_generator_smoke.cpp
+add_labops_smoke_test(
+  NAME oaat_variant_generator_smoke
+  SOURCES
+    tests/agent/oaat_variant_generator_smoke.cpp
+  LIBRARIES
+    labops_agent
 )
-target_link_libraries(oaat_variant_generator_smoke PRIVATE labops_agent)
-target_compile_features(oaat_variant_generator_smoke PRIVATE cxx_std_20)
-add_test(NAME oaat_variant_generator_smoke COMMAND oaat_variant_generator_smoke)
 
 # Smoke test for deterministic stop-condition evaluation and explanation.
-add_executable(stop_conditions_smoke
-  tests/agent/stop_conditions_smoke.cpp
+add_labops_smoke_test(
+  NAME stop_conditions_smoke
+  SOURCES
+    tests/agent/stop_conditions_smoke.cpp
+  LIBRARIES
+    labops_agent
 )
-target_link_libraries(stop_conditions_smoke PRIVATE labops_agent)
-target_compile_features(stop_conditions_smoke PRIVATE cxx_std_20)
-add_test(NAME stop_conditions_smoke COMMAND stop_conditions_smoke)
 
 # Smoke test for engineer packet generation with exact artifact and diff links.
-add_executable(engineer_packet_writer_smoke
-  tests/agent/engineer_packet_writer_smoke.cpp
+add_labops_smoke_test(
+  NAME engineer_packet_writer_smoke
+  SOURCES
+    tests/agent/engineer_packet_writer_smoke.cpp
+  LIBRARIES
+    labops_agent
 )
-target_link_libraries(engineer_packet_writer_smoke PRIVATE labops_agent)
-target_compile_features(engineer_packet_writer_smoke PRIVATE cxx_std_20)
-add_test(NAME engineer_packet_writer_smoke COMMAND engineer_packet_writer_smoke)
 
 # Integration smoke test for seeded agent triage on a simulated failure path.
 # Exercises OAAT generation -> run/compare evidence -> stop decision ->
 # engineer packet emission in one deterministic flow.
-add_executable(agent_triage_integration_smoke
-  tests/agent/agent_triage_integration_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME agent_triage_integration_smoke
+  SOURCES
+    tests/agent/agent_triage_integration_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    labops_agent
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(agent_triage_integration_smoke PRIVATE src)
-target_link_libraries(agent_triage_integration_smoke PRIVATE labops_agent labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(agent_triage_integration_smoke PRIVATE cxx_std_20)
-add_test(NAME agent_triage_integration_smoke COMMAND agent_triage_integration_smoke)
 
 # Smoke test for scenario snapshot writer contract.
-add_executable(scenario_writer_smoke
-  tests/artifacts/scenario_writer_smoke.cpp
+add_labops_smoke_test(
+  NAME scenario_writer_smoke
+  SOURCES
+    tests/artifacts/scenario_writer_smoke.cpp
+  LIBRARIES
+    labops_artifacts
 )
-target_link_libraries(scenario_writer_smoke PRIVATE labops_artifacts)
-target_compile_features(scenario_writer_smoke PRIVATE cxx_std_20)
-add_test(NAME scenario_writer_smoke COMMAND scenario_writer_smoke)
 
 # Smoke test for bundle manifest writer contract.
-add_executable(bundle_manifest_writer_smoke
-  tests/artifacts/bundle_manifest_writer_smoke.cpp
+add_labops_smoke_test(
+  NAME bundle_manifest_writer_smoke
+  SOURCES
+    tests/artifacts/bundle_manifest_writer_smoke.cpp
+  LIBRARIES
+    labops_artifacts
 )
-target_link_libraries(bundle_manifest_writer_smoke PRIVATE labops_artifacts)
-target_compile_features(bundle_manifest_writer_smoke PRIVATE cxx_std_20)
-add_test(NAME bundle_manifest_writer_smoke COMMAND bundle_manifest_writer_smoke)
 
 # Smoke test for support-bundle zip writer contract.
-add_executable(bundle_zip_writer_smoke
-  tests/artifacts/bundle_zip_writer_smoke.cpp
+add_labops_smoke_test(
+  NAME bundle_zip_writer_smoke
+  SOURCES
+    tests/artifacts/bundle_zip_writer_smoke.cpp
+  LIBRARIES
+    labops_artifacts
 )
-target_link_libraries(bundle_zip_writer_smoke PRIVATE labops_artifacts)
-target_compile_features(bundle_zip_writer_smoke PRIVATE cxx_std_20)
-add_test(NAME bundle_zip_writer_smoke COMMAND bundle_zip_writer_smoke)
 
 # Smoke test for append-only event log emission.
-add_executable(events_jsonl_smoke
-  tests/events/events_jsonl_smoke.cpp
+add_labops_smoke_test(
+  NAME events_jsonl_smoke
+  SOURCES
+    tests/events/events_jsonl_smoke.cpp
+  LIBRARIES
+    labops_events
 )
-target_link_libraries(events_jsonl_smoke PRIVATE labops_events)
-target_compile_features(events_jsonl_smoke PRIVATE cxx_std_20)
-add_test(NAME events_jsonl_smoke COMMAND events_jsonl_smoke)
 
 # Smoke test validating that sim backend satisfies ICameraBackend contract.
-add_executable(sim_backend_interface_smoke
-  tests/backends/sim_backend_interface_smoke.cpp
+add_labops_smoke_test(
+  NAME sim_backend_interface_smoke
+  SOURCES
+    tests/backends/sim_backend_interface_smoke.cpp
+  LIBRARIES
+    labops_backends
 )
-target_link_libraries(sim_backend_interface_smoke PRIVATE labops_backends)
-target_compile_features(sim_backend_interface_smoke PRIVATE cxx_std_20)
-add_test(NAME sim_backend_interface_smoke COMMAND sim_backend_interface_smoke)
 
 # Smoke test validating sdk_stub compiles without proprietary SDK dependencies
 # and reports actionable "not implemented" behavior.
-add_executable(sdk_stub_backend_smoke
-  tests/backends/sdk_stub_backend_smoke.cpp
+add_labops_smoke_test(
+  NAME sdk_stub_backend_smoke
+  SOURCES
+    tests/backends/sdk_stub_backend_smoke.cpp
+  LIBRARIES
+    labops_backends
 )
-target_link_libraries(sdk_stub_backend_smoke PRIVATE labops_backends)
-target_compile_features(sdk_stub_backend_smoke PRIVATE cxx_std_20)
-add_test(NAME sdk_stub_backend_smoke COMMAND sdk_stub_backend_smoke)
 
 # Smoke test for real-backend factory behavior:
 # enabled builds select the real skeleton, disabled builds fall back to sdk_stub.
-add_executable(real_backend_factory_smoke
-  tests/backends/real_backend_factory_smoke.cpp
+add_labops_smoke_test(
+  NAME real_backend_factory_smoke
+  SOURCES
+    tests/backends/real_backend_factory_smoke.cpp
+  LIBRARIES
+    labops_backends
 )
-target_link_libraries(real_backend_factory_smoke PRIVATE labops_backends)
-target_compile_features(real_backend_factory_smoke PRIVATE cxx_std_20)
-add_test(NAME real_backend_factory_smoke COMMAND real_backend_factory_smoke)
 
 # Smoke test for process-level SDK context RAII behavior:
 # init once across multiple handles and safe shutdown on final release.
-add_executable(sdk_context_smoke
-  tests/backends/sdk_context_smoke.cpp
+add_labops_smoke_test(
+  NAME sdk_context_smoke
+  SOURCES
+    tests/backends/sdk_context_smoke.cpp
+  LIBRARIES
+    labops_backends
 )
-target_link_libraries(sdk_context_smoke PRIVATE labops_backends)
-target_compile_features(sdk_context_smoke PRIVATE cxx_std_20)
-add_test(NAME sdk_context_smoke COMMAND sdk_context_smoke)
 
 # Smoke test for real device enumeration and descriptor normalization.
-add_executable(real_device_enumeration_smoke
-  tests/backends/real_device_enumeration_smoke.cpp
+add_labops_smoke_test(
+  NAME real_device_enumeration_smoke
+  SOURCES
+    tests/backends/real_device_enumeration_smoke.cpp
+  LIBRARIES
+    labops_backends
 )
-target_link_libraries(real_device_enumeration_smoke PRIVATE labops_backends)
-target_compile_features(real_device_enumeration_smoke PRIVATE cxx_std_20)
-add_test(NAME real_device_enumeration_smoke COMMAND real_device_enumeration_smoke)
 
 # Smoke test for selector parsing/resolution against discovered real devices.
-add_executable(real_device_selector_resolution_smoke
-  tests/backends/real_device_selector_resolution_smoke.cpp
+add_labops_smoke_test(
+  NAME real_device_selector_resolution_smoke
+  SOURCES
+    tests/backends/real_device_selector_resolution_smoke.cpp
+  LIBRARIES
+    labops_backends
 )
-target_link_libraries(real_device_selector_resolution_smoke PRIVATE labops_backends)
-target_compile_features(real_device_selector_resolution_smoke PRIVATE cxx_std_20)
-add_test(NAME real_device_selector_resolution_smoke COMMAND real_device_selector_resolution_smoke)
 
 # Smoke test for generic-key node-map adapter query/set contracts.
-add_executable(node_map_adapter_smoke
-  tests/backends/node_map_adapter_smoke.cpp
+add_labops_smoke_test(
+  NAME node_map_adapter_smoke
+  SOURCES
+    tests/backends/node_map_adapter_smoke.cpp
+  LIBRARIES
+    labops_backends
 )
-target_link_libraries(node_map_adapter_smoke PRIVATE labops_backends)
-target_compile_features(node_map_adapter_smoke PRIVATE cxx_std_20)
-add_test(NAME node_map_adapter_smoke COMMAND node_map_adapter_smoke)
 
 # Smoke test for data-driven generic-key -> SDK-node map loading.
-add_executable(param_key_map_smoke
-  tests/backends/param_key_map_smoke.cpp
+add_labops_smoke_test(
+  NAME param_key_map_smoke
+  SOURCES
+    tests/backends/param_key_map_smoke.cpp
+  LIBRARIES
+    labops_backends
 )
-target_link_libraries(param_key_map_smoke PRIVATE labops_backends)
-target_compile_features(param_key_map_smoke PRIVATE cxx_std_20)
-add_test(NAME param_key_map_smoke COMMAND param_key_map_smoke)
 
 # Smoke test for strict vs best-effort real-backend parameter application.
-add_executable(real_apply_params_smoke
-  tests/backends/real_apply_params_smoke.cpp
+add_labops_smoke_test(
+  NAME real_apply_params_smoke
+  SOURCES
+    tests/backends/real_apply_params_smoke.cpp
+  LIBRARIES
+    labops_backends
 )
-target_link_libraries(real_apply_params_smoke PRIVATE labops_backends)
-target_compile_features(real_apply_params_smoke PRIVATE cxx_std_20)
-add_test(NAME real_apply_params_smoke COMMAND real_apply_params_smoke)
 
 # Smoke test for deterministic frame generation and timing envelope.
-add_executable(sim_frame_generator_smoke
-  tests/backends/sim_frame_generator_smoke.cpp
+add_labops_smoke_test(
+  NAME sim_frame_generator_smoke
+  SOURCES
+    tests/backends/sim_frame_generator_smoke.cpp
+  LIBRARIES
+    labops_backends
 )
-target_link_libraries(sim_frame_generator_smoke PRIVATE labops_backends)
-target_compile_features(sim_frame_generator_smoke PRIVATE cxx_std_20)
-add_test(NAME sim_frame_generator_smoke COMMAND sim_frame_generator_smoke)
 
 # Smoke test for scenario-driven fault injection reproducibility.
-add_executable(sim_fault_injection_smoke
-  tests/backends/sim_fault_injection_smoke.cpp
+add_labops_smoke_test(
+  NAME sim_fault_injection_smoke
+  SOURCES
+    tests/backends/sim_fault_injection_smoke.cpp
+  LIBRARIES
+    labops_backends
 )
-target_link_libraries(sim_fault_injection_smoke PRIVATE labops_backends)
-target_compile_features(sim_fault_injection_smoke PRIVATE cxx_std_20)
-add_test(NAME sim_fault_injection_smoke COMMAND sim_fault_injection_smoke)
 
 # Integration smoke test that drives `labops run` and validates stream events.
-add_executable(run_stream_trace_smoke
-  tests/labops/run_stream_trace_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME run_stream_trace_smoke
+  SOURCES
+    tests/labops/run_stream_trace_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(run_stream_trace_smoke PRIVATE src)
-target_link_libraries(run_stream_trace_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(run_stream_trace_smoke PRIVATE cxx_std_20)
-add_test(NAME run_stream_trace_smoke COMMAND run_stream_trace_smoke)
 
 # Integration smoke test for actionable schema validation errors through CLI.
-add_executable(validate_actionable_smoke
-  tests/labops/validate_actionable_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME validate_actionable_smoke
+  SOURCES
+    tests/labops/validate_actionable_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(validate_actionable_smoke PRIVATE src)
-target_link_libraries(validate_actionable_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(validate_actionable_smoke PRIVATE cxx_std_20)
-add_test(NAME validate_actionable_smoke COMMAND validate_actionable_smoke)
 
 # Integration smoke test that verifies deterministic stream traces for a fixed
 # scenario seed (same seed => same first K events after normalizing dynamic fields).
-add_executable(sim_determinism_golden_smoke
-  tests/labops/sim_determinism_golden_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME sim_determinism_golden_smoke
+  SOURCES
+    tests/labops/sim_determinism_golden_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(sim_determinism_golden_smoke PRIVATE src)
-target_link_libraries(sim_determinism_golden_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(sim_determinism_golden_smoke PRIVATE cxx_std_20)
-add_test(NAME sim_determinism_golden_smoke COMMAND sim_determinism_golden_smoke)
 
 # Integration smoke test that runs starter scenarios end-to-end through the
 # CLI and validates core artifact/event outputs for each scenario.
-add_executable(starter_scenarios_e2e_smoke
-  tests/labops/starter_scenarios_e2e_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME starter_scenarios_e2e_smoke
+  SOURCES
+    tests/labops/starter_scenarios_e2e_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(starter_scenarios_e2e_smoke PRIVATE src)
-target_link_libraries(starter_scenarios_e2e_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(starter_scenarios_e2e_smoke PRIVATE cxx_std_20)
-add_test(NAME starter_scenarios_e2e_smoke COMMAND starter_scenarios_e2e_smoke)
 
 # Integration smoke test validating standardized bundle layout:
 # `<out>/<run_id>/...` with required artifact set for each run.
-add_executable(bundle_layout_consistency_smoke
-  tests/labops/bundle_layout_consistency_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME bundle_layout_consistency_smoke
+  SOURCES
+    tests/labops/bundle_layout_consistency_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(bundle_layout_consistency_smoke PRIVATE src)
-target_link_libraries(bundle_layout_consistency_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(bundle_layout_consistency_smoke PRIVATE cxx_std_20)
-add_test(NAME bundle_layout_consistency_smoke COMMAND bundle_layout_consistency_smoke)
 
 # Integration smoke test validating `--zip` behavior:
 # zip is generated only when explicitly requested.
-add_executable(bundle_zip_on_demand_smoke
-  tests/labops/bundle_zip_on_demand_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME bundle_zip_on_demand_smoke
+  SOURCES
+    tests/labops/bundle_zip_on_demand_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(bundle_zip_on_demand_smoke PRIVATE src)
-target_link_libraries(bundle_zip_on_demand_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(bundle_zip_on_demand_smoke PRIVATE cxx_std_20)
-add_test(NAME bundle_zip_on_demand_smoke COMMAND bundle_zip_on_demand_smoke)
 
 # Integration smoke test for `labops baseline capture` contract:
 # writes baseline artifacts directly to `baselines/<scenario_id>/` with metrics.
-add_executable(baseline_capture_smoke
-  tests/labops/baseline_capture_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME baseline_capture_smoke
+  SOURCES
+    tests/labops/baseline_capture_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(baseline_capture_smoke PRIVATE src)
-target_link_libraries(baseline_capture_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(baseline_capture_smoke PRIVATE cxx_std_20)
-add_test(NAME baseline_capture_smoke COMMAND baseline_capture_smoke)
 
 # Integration smoke test for `labops compare`:
 # compares baseline vs run metrics and emits `diff.json` + `diff.md`.
-add_executable(compare_diff_smoke
-  tests/labops/compare_diff_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME compare_diff_smoke
+  SOURCES
+    tests/labops/compare_diff_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(compare_diff_smoke PRIVATE src)
-target_link_libraries(compare_diff_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(compare_diff_smoke PRIVATE cxx_std_20)
-add_test(NAME compare_diff_smoke COMMAND compare_diff_smoke)
 
 # Integration smoke test for scenario threshold enforcement:
 # `labops run` must return non-zero when configured thresholds fail.
-add_executable(run_threshold_failure_smoke
-  tests/labops/run_threshold_failure_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME run_threshold_failure_smoke
+  SOURCES
+    tests/labops/run_threshold_failure_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(run_threshold_failure_smoke PRIVATE src)
-target_link_libraries(run_threshold_failure_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(run_threshold_failure_smoke PRIVATE cxx_std_20)
-add_test(NAME run_threshold_failure_smoke COMMAND run_threshold_failure_smoke)
 
 # Integration smoke test for backend connection failure exit-code contract:
 # selecting `backend: real_stub` should deterministically fail connect and map
 # to the dedicated backend-connect exit code.
-add_executable(run_backend_connect_failure_smoke
-  tests/labops/run_backend_connect_failure_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME run_backend_connect_failure_smoke
+  SOURCES
+    tests/labops/run_backend_connect_failure_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(run_backend_connect_failure_smoke PRIVATE src)
-target_link_libraries(run_backend_connect_failure_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(run_backend_connect_failure_smoke PRIVATE cxx_std_20)
-add_test(NAME run_backend_connect_failure_smoke COMMAND run_backend_connect_failure_smoke)
 
 # Integration smoke test for netem CLI option contracts.
 # Ensures netem execution flags require explicit pairing:
 # - `--apply-netem` requires `--netem-iface <iface>`
 # - `--netem-iface` requires `--apply-netem`
-add_executable(netem_option_contract_smoke
-  tests/labops/netem_option_contract_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME netem_option_contract_smoke
+  SOURCES
+    tests/labops/netem_option_contract_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(netem_option_contract_smoke PRIVATE src)
-target_link_libraries(netem_option_contract_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(netem_option_contract_smoke PRIVATE cxx_std_20)
-add_test(NAME netem_option_contract_smoke COMMAND netem_option_contract_smoke)
 
 # Integration smoke test validating structured logging behavior:
 # - `--log-level` controls emitted verbosity
 # - log lines include run_id for artifact correlation
-add_executable(logging_contract_smoke
-  tests/labops/logging_contract_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME logging_contract_smoke
+  SOURCES
+    tests/labops/logging_contract_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(logging_contract_smoke PRIVATE src)
-target_link_libraries(logging_contract_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(logging_contract_smoke PRIVATE cxx_std_20)
-add_test(NAME logging_contract_smoke COMMAND logging_contract_smoke)
 
 # Integration smoke test for backend availability listing contract.
-add_executable(list_backends_smoke
-  tests/labops/list_backends_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME list_backends_smoke
+  SOURCES
+    tests/labops/list_backends_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(list_backends_smoke PRIVATE src)
-target_link_libraries(list_backends_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(list_backends_smoke PRIVATE cxx_std_20)
-add_test(NAME list_backends_smoke COMMAND list_backends_smoke)
 
 # Integration smoke test for run-time selector resolution via:
 # `labops run ... --device <selector>`
-add_executable(run_device_selector_resolution_smoke
-  tests/labops/run_device_selector_resolution_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME run_device_selector_resolution_smoke
+  SOURCES
+    tests/labops/run_device_selector_resolution_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(run_device_selector_resolution_smoke PRIVATE src)
-target_link_libraries(run_device_selector_resolution_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(run_device_selector_resolution_smoke PRIVATE cxx_std_20)
-add_test(NAME run_device_selector_resolution_smoke COMMAND run_device_selector_resolution_smoke)
 
 # Integration smoke test for real-backend device listing contract.
-add_executable(list_devices_real_backend_smoke
-  tests/labops/list_devices_real_backend_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME list_devices_real_backend_smoke
+  SOURCES
+    tests/labops/list_devices_real_backend_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(list_devices_real_backend_smoke PRIVATE src)
-target_link_libraries(list_devices_real_backend_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(list_devices_real_backend_smoke PRIVATE cxx_std_20)
-add_test(NAME list_devices_real_backend_smoke COMMAND list_devices_real_backend_smoke)
 
 # Integration smoke test for strict vs best-effort real apply-mode event flow.
-add_executable(real_apply_mode_events_smoke
-  tests/labops/real_apply_mode_events_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME real_apply_mode_events_smoke
+  SOURCES
+    tests/labops/real_apply_mode_events_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(real_apply_mode_events_smoke PRIVATE src)
-target_link_libraries(real_apply_mode_events_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(real_apply_mode_events_smoke PRIVATE cxx_std_20)
-add_test(NAME real_apply_mode_events_smoke COMMAND real_apply_mode_events_smoke)
 
 # Integration smoke test for KB draft generation from a run folder.
-add_executable(kb_draft_from_run_folder_smoke
-  tests/labops/kb_draft_from_run_folder_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME kb_draft_from_run_folder_smoke
+  SOURCES
+    tests/labops/kb_draft_from_run_folder_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(kb_draft_from_run_folder_smoke PRIVATE src)
-target_link_libraries(kb_draft_from_run_folder_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(kb_draft_from_run_folder_smoke PRIVATE cxx_std_20)
-add_test(NAME kb_draft_from_run_folder_smoke COMMAND kb_draft_from_run_folder_smoke)
 
 # Integration smoke test for checkpointed soak mode:
 # - periodic checkpoint emission
 # - safe pause at checkpoint boundary
 # - resume from checkpoint without evidence loss
-add_executable(soak_checkpoint_resume_smoke
-  tests/labops/soak_checkpoint_resume_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME soak_checkpoint_resume_smoke
+  SOURCES
+    tests/labops/soak_checkpoint_resume_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(soak_checkpoint_resume_smoke PRIVATE src)
-target_link_libraries(soak_checkpoint_resume_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(soak_checkpoint_resume_smoke PRIVATE cxx_std_20)
-add_test(NAME soak_checkpoint_resume_smoke COMMAND soak_checkpoint_resume_smoke)
 
 # Scenario schema validation smoke tests.
-add_executable(scenario_validation_smoke
-  tests/scenarios/scenario_validation_smoke.cpp
+add_labops_smoke_test(
+  NAME scenario_validation_smoke
+  SOURCES
+    tests/scenarios/scenario_validation_smoke.cpp
+  LIBRARIES
+    labops_scenarios
 )
-target_link_libraries(scenario_validation_smoke PRIVATE labops_scenarios)
-target_compile_features(scenario_validation_smoke PRIVATE cxx_std_20)
-add_test(NAME scenario_validation_smoke COMMAND scenario_validation_smoke)
 
 # Integration smoke test that runs the checked-in baseline scenario through
 # `labops run` and asserts output metrics remain within expected ranges.
-add_executable(sim_baseline_metrics_integration_smoke
-  tests/scenarios/sim_baseline_metrics_integration_smoke.cpp
-  src/labops/cli/router.cpp
+add_labops_smoke_test(
+  NAME sim_baseline_metrics_integration_smoke
+  SOURCES
+    tests/scenarios/sim_baseline_metrics_integration_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
-target_include_directories(sim_baseline_metrics_integration_smoke PRIVATE src)
-target_link_libraries(sim_baseline_metrics_integration_smoke PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
-target_compile_features(sim_baseline_metrics_integration_smoke PRIVATE cxx_std_20)
-add_test(NAME sim_baseline_metrics_integration_smoke COMMAND sim_baseline_metrics_integration_smoke)
 
 # Smoke test for FPS computation and metrics.csv emission.
-add_executable(fps_metrics_smoke
-  tests/metrics/fps_metrics_smoke.cpp
+add_labops_smoke_test(
+  NAME fps_metrics_smoke
+  SOURCES
+    tests/metrics/fps_metrics_smoke.cpp
+  LIBRARIES
+    labops_artifacts
+    labops_metrics
 )
-target_link_libraries(fps_metrics_smoke PRIVATE labops_artifacts labops_metrics)
-target_compile_features(fps_metrics_smoke PRIVATE cxx_std_20)
-add_test(NAME fps_metrics_smoke COMMAND fps_metrics_smoke)
 
 # Artifact smoke test for metrics.csv + metrics.json writer contracts.
-add_executable(metrics_writers_smoke
-  tests/artifacts/metrics_writers_smoke.cpp
+add_labops_smoke_test(
+  NAME metrics_writers_smoke
+  SOURCES
+    tests/artifacts/metrics_writers_smoke.cpp
+  LIBRARIES
+    labops_artifacts
+    labops_metrics
 )
-target_link_libraries(metrics_writers_smoke PRIVATE labops_artifacts labops_metrics)
-target_compile_features(metrics_writers_smoke PRIVATE cxx_std_20)
-add_test(NAME metrics_writers_smoke COMMAND metrics_writers_smoke)
 
 # Artifact smoke test for static HTML report writer contract.
-add_executable(html_report_writer_smoke
-  tests/artifacts/html_report_writer_smoke.cpp
+add_labops_smoke_test(
+  NAME html_report_writer_smoke
+  SOURCES
+    tests/artifacts/html_report_writer_smoke.cpp
+  LIBRARIES
+    labops_artifacts
+    labops_metrics
+    labops_schema
 )
-target_link_libraries(html_report_writer_smoke PRIVATE labops_artifacts labops_metrics labops_schema)
-target_compile_features(html_report_writer_smoke PRIVATE cxx_std_20)
-add_test(NAME html_report_writer_smoke COMMAND html_report_writer_smoke)
 
 # Smoke test validating that timing/jitter metrics reflect injected jitter.
-add_executable(jitter_injection_smoke
-  tests/metrics/jitter_injection_smoke.cpp
+add_labops_smoke_test(
+  NAME jitter_injection_smoke
+  SOURCES
+    tests/metrics/jitter_injection_smoke.cpp
+  LIBRARIES
+    labops_backends
+    labops_metrics
 )
-target_link_libraries(jitter_injection_smoke PRIVATE labops_backends labops_metrics)
-target_compile_features(jitter_injection_smoke PRIVATE cxx_std_20)
-add_test(NAME jitter_injection_smoke COMMAND jitter_injection_smoke)
 
 # Smoke test validating drop metrics match deterministic drop injection knobs.
-add_executable(drop_injection_smoke
-  tests/metrics/drop_injection_smoke.cpp
+add_labops_smoke_test(
+  NAME drop_injection_smoke
+  SOURCES
+    tests/metrics/drop_injection_smoke.cpp
+  LIBRARIES
+    labops_artifacts
+    labops_backends
+    labops_metrics
 )
-target_link_libraries(drop_injection_smoke PRIVATE labops_artifacts labops_backends labops_metrics)
-target_compile_features(drop_injection_smoke PRIVATE cxx_std_20)
-add_test(NAME drop_injection_smoke COMMAND drop_injection_smoke)
 
 # Smoke test for named anomaly heuristics in run-summary highlights.
-add_executable(anomaly_detection_smoke
-  tests/metrics/anomaly_detection_smoke.cpp
+add_labops_smoke_test(
+  NAME anomaly_detection_smoke
+  SOURCES
+    tests/metrics/anomaly_detection_smoke.cpp
+  LIBRARIES
+    labops_metrics
 )
-target_link_libraries(anomaly_detection_smoke PRIVATE labops_metrics)
-target_compile_features(anomaly_detection_smoke PRIVATE cxx_std_20)
-add_test(NAME anomaly_detection_smoke COMMAND anomaly_detection_smoke)
 
 # Smoke test validating that host/user identifiers are redacted from host probe
 # JSON and raw NIC command outputs when redaction is applied.
-add_executable(hostprobe_redaction_smoke
-  tests/hostprobe/redaction_smoke.cpp
+add_labops_smoke_test(
+  NAME hostprobe_redaction_smoke
+  SOURCES
+    tests/hostprobe/redaction_smoke.cpp
+  LIBRARIES
+    labops_hostprobe
 )
-target_link_libraries(hostprobe_redaction_smoke PRIVATE labops_hostprobe)
-target_compile_features(hostprobe_redaction_smoke PRIVATE cxx_std_20)
-add_test(NAME hostprobe_redaction_smoke COMMAND hostprobe_redaction_smoke)
 
 if(LABOPS_ENABLE_CATCH2_TESTS)
   find_package(Catch2 3 QUIET)
