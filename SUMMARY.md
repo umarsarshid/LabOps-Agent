@@ -1,92 +1,118 @@
-# Refactor Audit Follow-up — Shared Device Selector Validation
+# Commit Summary: Unify netem profile path resolution + slug rules
 
 Date: 2026-02-16
 
-## Commit Goal
-Implement the selected refactor (#4): make scenario validation and runtime use the same device selector parser so they cannot drift.
+## Goal
+Remove duplicated netem helper logic that existed in both the CLI run path and scenario validation path, so both paths resolve profile IDs and enforce slug rules the same way.
 
-## What Was Implemented
+## Why this change
+- The same logic was implemented in two places:
+  - `src/labops/cli/router.cpp`
+  - `src/scenarios/validator.cpp`
+- Duplication creates drift risk: one path can silently change while the other path stays old.
+- Netem behavior should be contract-consistent between `labops validate` and `labops run`.
 
-### 1) Scenario validator now reuses runtime selector parser
+## Implementation
 
-File:
-- `src/scenarios/validator.cpp`
+### 1. Added a shared scenarios helper module
+Files added:
+- `src/scenarios/netem_profile_support.hpp`
+- `src/scenarios/netem_profile_support.cpp`
 
-Change:
-- Added include for runtime selector API:
-  - `#include "backends/real_sdk/real_backend_factory.hpp"`
-- Replaced the in-file hand-rolled `device_selector` parsing logic with a call to:
-  - `backends::real_sdk::ParseDeviceSelector(...)`
-- Kept backend compatibility validation in validator:
-  - `device_selector` still requires `backend == "real_stub"`
-
-Why:
-- Before this change, there were two independent parsers (one in validator, one in runtime path).
-- That creates a real drift risk: `labops validate` could pass while `labops run` rejects (or vice versa).
-- Using one parser eliminates split-brain selector behavior.
-
-Behavior impact:
-- Selector syntax/rules now come from the same parser for both validate and run paths.
-- Validation backend requirement remains enforced exactly as before.
-
----
-
-### 2) Error wording alignment for compatibility
-
-File:
-- `src/backends/real_sdk/real_backend_factory.cpp`
-
-Change:
-- Updated empty-selector-value error text from:
-  - `is missing a value`
-- To:
-  - `must provide a non-empty value (missing a value)`
+What was added:
+- `bool IsLowercaseSlug(std::string_view value)`
+- `bool ResolveNetemProfilePath(const std::filesystem::path& scenario_path, std::string_view profile_id, std::filesystem::path& resolved_path)`
 
 Why:
-- Needed to satisfy both existing expectations:
-  - validator smoke checks for `non-empty value`
-  - backend selector smoke checks for `missing a value`
-- This preserves compatibility while still being clearer.
+- Centralizes slug rule and profile-path resolution into one place used by all call sites.
+- Makes future changes one-edit instead of two-edit.
 
----
-
-### 3) Build linkage updated for shared parser usage
-
-File:
+### 2. Wired helper into build target
+File changed:
 - `CMakeLists.txt`
 
-Change:
-- Linked scenarios module against backends module:
-  - `target_link_libraries(labops_scenarios PUBLIC labops_backends)`
+What changed:
+- Added `src/scenarios/netem_profile_support.cpp` to the scenarios library target.
 
 Why:
-- `validator.cpp` now calls `ParseDeviceSelector(...)` implemented in backends.
-- Without this link, scenarios library would not resolve the symbol.
+- Ensures the shared helper is compiled once and linked wherever scenarios functionality is used.
 
-Notes:
-- Build succeeds.
-- Linker reports duplicate static-lib warnings on some test/link targets (`liblabops_backends.a`), but behavior remains correct and tests pass.
+### 3. Replaced local duplicate logic in CLI router
+File changed:
+- `src/labops/cli/router.cpp`
+
+What changed:
+- Included `scenarios/netem_profile_support.hpp`.
+- Removed local static slug/path helper implementations.
+- Updated call sites to use `scenarios::IsLowercaseSlug(...)` and `scenarios::ResolveNetemProfilePath(...)`.
+
+Why:
+- CLI run flow now relies on the same rules as validator flow.
+
+### 4. Replaced local duplicate logic in scenario validator
+File changed:
+- `src/scenarios/validator.cpp`
+
+What changed:
+- Included `scenarios/netem_profile_support.hpp`.
+- Removed local static slug/path helper implementations.
+- Updated validator call sites to use shared helper functions.
+
+Why:
+- Validation flow now shares exactly the same source of truth with run flow.
+
+### 5. Updated module documentation
+File changed:
+- `src/scenarios/README.md`
+
+What changed:
+- Added explanation for `netem_profile_support` and how it connects validate/run behavior.
+
+Why:
+- Helps future engineers quickly find the canonical netem helper location.
 
 ## Verification
 
 ### Formatting
-- `CLANG_FORMAT_REQUIRED_MAJOR=21 bash tools/clang_format.sh --fix`
+Command:
 - `CLANG_FORMAT_REQUIRED_MAJOR=21 bash tools/clang_format.sh --check`
-- Result: pass
 
-### Configure + Build
+Result:
+- Passed.
+
+### Configure
+Commands:
 - `cmake -S . -B tmp/build`
-- `cmake -S . -B tmp/build-real -DLABOPS_ENABLE_REAL_BACKEND=ON`
+
+Result:
+- Passed.
+
+### Build
+Command:
 - `cmake --build tmp/build`
-- `cmake --build tmp/build-real`
-- Result: pass
 
-### Targeted tests (selector + validator focus)
-- `ctest --test-dir tmp/build --output-on-failure -R "scenario_validation_smoke|run_device_selector_resolution_smoke|real_device_selector_resolution_smoke|list_devices_real_backend_smoke|real_apply_mode_events_smoke|validate_actionable_smoke"`
-- `ctest --test-dir tmp/build-real --output-on-failure -R "scenario_validation_smoke|run_device_selector_resolution_smoke|real_device_selector_resolution_smoke|list_devices_real_backend_smoke|real_apply_mode_events_smoke|validate_actionable_smoke"`
-- Result: all pass on both build trees
+Result:
+- Passed.
 
-## Risk Assessment
-- Scope is narrow and intentional.
-- Main risk (behavior drift between validation and runtime) is reduced.
-- Existing selector/validator smokes confirm contract stability.
+### Focused tests for impacted behavior
+Command:
+- `ctest --test-dir tmp/build -R "run_stream_trace_smoke|validate_actionable_smoke|netem_option_contract_smoke|scenario_validation_smoke" --output-on-failure`
+
+Result:
+- 4/4 tests passed.
+
+## Behavior impact
+- No intended functional behavior change.
+- This is a maintenance/refactor improvement:
+  - same rules
+  - one shared implementation
+  - lower risk of future drift.
+
+## Commit contents
+- `CMakeLists.txt`
+- `src/labops/cli/router.cpp`
+- `src/scenarios/README.md`
+- `src/scenarios/validator.cpp`
+- `src/scenarios/netem_profile_support.cpp`
+- `src/scenarios/netem_profile_support.hpp`
+- `SUMMARY.md`

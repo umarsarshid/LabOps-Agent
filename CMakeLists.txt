@@ -97,6 +97,7 @@ endif()
 
 # Scenario loader/validation module.
 add_library(labops_scenarios
+  src/scenarios/netem_profile_support.cpp
   src/scenarios/validator.cpp
 )
 target_include_directories(labops_scenarios PUBLIC src)

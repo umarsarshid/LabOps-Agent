@@ -25,6 +25,7 @@
 #include "hostprobe/system_probe.hpp"
 #include "metrics/anomalies.hpp"
 #include "metrics/fps.hpp"
+#include "scenarios/netem_profile_support.hpp"
 #include "scenarios/validator.hpp"
 
 #include <atomic>
@@ -1012,53 +1013,6 @@ bool BuildRoiParamValue(const std::string& scenario_text, std::string& roi_value
   return true;
 }
 
-bool IsValidSlug(std::string_view value) {
-  if (value.empty()) {
-    return false;
-  }
-  for (const char c : value) {
-    const bool allowed = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
-    if (!allowed) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool ResolveNetemProfilePath(const fs::path& scenario_path, std::string_view profile_id,
-                             fs::path& resolved_path) {
-  resolved_path.clear();
-  if (scenario_path.empty() || profile_id.empty()) {
-    return false;
-  }
-
-  std::error_code ec;
-  const fs::path scenario_absolute = fs::absolute(scenario_path, ec);
-  if (ec) {
-    return false;
-  }
-
-  fs::path cursor = scenario_absolute.parent_path();
-  while (!cursor.empty()) {
-    const fs::path candidate =
-        cursor / "tools" / "netem_profiles" / (std::string(profile_id) + ".json");
-    std::error_code exists_ec;
-    if (fs::exists(candidate, exists_ec) && !exists_ec &&
-        fs::is_regular_file(candidate, exists_ec) && !exists_ec) {
-      resolved_path = candidate;
-      return true;
-    }
-
-    const fs::path parent = cursor.parent_path();
-    if (parent.empty() || parent == cursor) {
-      break;
-    }
-    cursor = parent;
-  }
-
-  return false;
-}
-
 std::string FormatShellDouble(double value) {
   std::ostringstream out;
   out << std::fixed << std::setprecision(3) << value;
@@ -1115,8 +1069,8 @@ bool BuildNetemCommandSuggestions(const std::string& scenario_path, const RunPla
   }
 
   fs::path profile_path;
-  if (!ResolveNetemProfilePath(fs::path(scenario_path), run_plan.netem_profile.value(),
-                               profile_path)) {
+  if (!scenarios::ResolveNetemProfilePath(fs::path(scenario_path), run_plan.netem_profile.value(),
+                                          profile_path)) {
     warning = "netem profile '" + run_plan.netem_profile.value() +
               "' was referenced but no profile file was found under tools/netem_profiles";
     return true;
@@ -1483,7 +1437,7 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
       error = "scenario netem_profile must not be empty";
       return false;
     }
-    if (!IsValidSlug(netem_profile.value())) {
+    if (!scenarios::IsLowercaseSlug(netem_profile.value())) {
       error = "scenario netem_profile must use lowercase slug format [a-z0-9_-]+";
       return false;
     }

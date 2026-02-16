@@ -1,6 +1,7 @@
 #include "scenarios/validator.hpp"
 
 #include "backends/real_sdk/real_backend_factory.hpp"
+#include "scenarios/netem_profile_support.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -403,19 +404,6 @@ bool TryGetNonNegativeInteger(const JsonValue& value, std::uint64_t& out) {
   return true;
 }
 
-bool IsValidSlug(std::string_view value) {
-  if (value.empty()) {
-    return false;
-  }
-  for (char c : value) {
-    const bool allowed = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
-    if (!allowed) {
-      return false;
-    }
-  }
-  return true;
-}
-
 std::string Trim(std::string_view raw) {
   std::size_t begin = 0;
   while (begin < raw.size() && std::isspace(static_cast<unsigned char>(raw[begin])) != 0) {
@@ -433,38 +421,6 @@ std::string ToLower(std::string value) {
   std::transform(value.begin(), value.end(), value.begin(),
                  [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return value;
-}
-
-bool ResolveNetemProfilePath(const fs::path& scenario_path, std::string_view profile_id,
-                             fs::path& resolved_path) {
-  resolved_path.clear();
-  if (scenario_path.empty() || profile_id.empty()) {
-    return false;
-  }
-
-  std::error_code ec;
-  const fs::path scenario_absolute = fs::absolute(scenario_path, ec);
-  if (ec) {
-    return false;
-  }
-  fs::path cursor = scenario_absolute.parent_path();
-  while (!cursor.empty()) {
-    const fs::path candidate =
-        cursor / "tools" / "netem_profiles" / (std::string(profile_id) + ".json");
-    std::error_code ec;
-    if (fs::exists(candidate, ec) && !ec && fs::is_regular_file(candidate, ec) && !ec) {
-      resolved_path = candidate;
-      return true;
-    }
-
-    const fs::path parent = cursor.parent_path();
-    if (parent.empty() || parent == cursor) {
-      break;
-    }
-    cursor = parent;
-  }
-
-  return false;
 }
 
 void ValidateRequiredString(const JsonValue& root, std::string_view key, std::string path,
@@ -840,7 +796,7 @@ void ValidateNetemProfile(const JsonValue& root, const fs::path& scenario_path,
     AddIssue(report, "netem_profile", "must not be empty when provided");
     return;
   }
-  if (!IsValidSlug(profile->string_value)) {
+  if (!IsLowercaseSlug(profile->string_value)) {
     AddIssue(report, "netem_profile", "must use lowercase slug format [a-z0-9_-]+");
     return;
   }
@@ -925,7 +881,7 @@ void ValidateScenarioObject(const JsonValue& root, const fs::path& scenario_path
 
   if (const JsonValue* scenario_id = GetField(root, "scenario_id");
       IsString(scenario_id) && !scenario_id->string_value.empty()) {
-    if (!IsValidSlug(scenario_id->string_value)) {
+    if (!IsLowercaseSlug(scenario_id->string_value)) {
       AddIssue(report, "scenario_id", "must use lowercase slug format [a-z0-9_-]+");
     }
   }
