@@ -191,7 +191,13 @@ std::vector<std::string> BuildPreferredMetricOrder() {
   return {
       "avg_fps",
       "drops_total",
+      "drops_generic_total",
+      "timeouts_total",
+      "incomplete_total",
       "drop_rate_percent",
+      "generic_drop_rate_percent",
+      "timeout_rate_percent",
+      "incomplete_rate_percent",
       "inter_frame_interval_min_us",
       "inter_frame_interval_avg_us",
       "inter_frame_interval_p95_us",

@@ -132,6 +132,27 @@ std::vector<DeltaRow> BuildDeltaRows(const metrics::FpsReport& report,
       .delta = report.drop_rate_percent,
   });
   rows.push_back({
+      .metric = "generic_drop_rate_percent",
+      .unit = "%",
+      .actual = report.generic_drop_rate_percent,
+      .expected = 0.0,
+      .delta = report.generic_drop_rate_percent,
+  });
+  rows.push_back({
+      .metric = "timeout_rate_percent",
+      .unit = "%",
+      .actual = report.timeout_rate_percent,
+      .expected = 0.0,
+      .delta = report.timeout_rate_percent,
+  });
+  rows.push_back({
+      .metric = "incomplete_rate_percent",
+      .unit = "%",
+      .actual = report.incomplete_rate_percent,
+      .expected = 0.0,
+      .delta = report.incomplete_rate_percent,
+  });
+  rows.push_back({
       .metric = "inter_frame_interval_p95_us",
       .unit = "us",
       .actual = report.inter_frame_interval_us.p95_us,
@@ -238,8 +259,20 @@ bool WriteRunSummaryHtml(const core::schema::RunInfo& run_info, const metrics::F
            << report.received_frames_total << "</td><td>count</td></tr>\n"
            << "      <tr><td>dropped_frames_total</td><td class=\"numeric\">"
            << report.dropped_frames_total << "</td><td>count</td></tr>\n"
+           << "      <tr><td>dropped_generic_frames_total</td><td class=\"numeric\">"
+           << report.dropped_generic_frames_total << "</td><td>count</td></tr>\n"
+           << "      <tr><td>timeout_frames_total</td><td class=\"numeric\">"
+           << report.timeout_frames_total << "</td><td>count</td></tr>\n"
+           << "      <tr><td>incomplete_frames_total</td><td class=\"numeric\">"
+           << report.incomplete_frames_total << "</td><td>count</td></tr>\n"
            << "      <tr><td>drop_rate_percent</td><td class=\"numeric\">"
            << FormatDouble(report.drop_rate_percent, 3) << "</td><td>%</td></tr>\n"
+           << "      <tr><td>generic_drop_rate_percent</td><td class=\"numeric\">"
+           << FormatDouble(report.generic_drop_rate_percent, 3) << "</td><td>%</td></tr>\n"
+           << "      <tr><td>timeout_rate_percent</td><td class=\"numeric\">"
+           << FormatDouble(report.timeout_rate_percent, 3) << "</td><td>%</td></tr>\n"
+           << "      <tr><td>incomplete_rate_percent</td><td class=\"numeric\">"
+           << FormatDouble(report.incomplete_rate_percent, 3) << "</td><td>%</td></tr>\n"
            << "      <tr><td>inter_frame_interval_p95_us</td><td class=\"numeric\">"
            << FormatDouble(report.inter_frame_interval_us.p95_us, 3) << "</td><td>us</td></tr>\n"
            << "      <tr><td>inter_frame_jitter_p95_us</td><td class=\"numeric\">"

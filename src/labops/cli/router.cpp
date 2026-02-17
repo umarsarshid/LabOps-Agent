@@ -2717,6 +2717,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   std::cout << "fps: avg=" << fps_report.avg_fps
             << " rolling_samples=" << fps_report.rolling_samples.size() << '\n';
   std::cout << "drops: total=" << fps_report.dropped_frames_total
+            << " generic=" << fps_report.dropped_generic_frames_total
+            << " timeout=" << fps_report.timeout_frames_total
+            << " incomplete=" << fps_report.incomplete_frames_total
             << " rate_percent=" << fps_report.drop_rate_percent << '\n';
   std::cout << "timing_us: interval_avg=" << fps_report.inter_frame_interval_us.avg_us
             << " interval_p95=" << fps_report.inter_frame_interval_us.p95_us

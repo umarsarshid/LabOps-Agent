@@ -151,7 +151,15 @@ bool WriteRunSummaryMarkdown(const core::schema::RunInfo& run_info,
   out_file << "| frames_total | " << report.frames_total << " |\n";
   out_file << "| received_frames_total | " << report.received_frames_total << " |\n";
   out_file << "| dropped_frames_total | " << report.dropped_frames_total << " |\n";
+  out_file << "| dropped_generic_frames_total | " << report.dropped_generic_frames_total << " |\n";
+  out_file << "| timeout_frames_total | " << report.timeout_frames_total << " |\n";
+  out_file << "| incomplete_frames_total | " << report.incomplete_frames_total << " |\n";
   out_file << "| drop_rate_percent | " << FormatDouble(report.drop_rate_percent, 3) << " |\n";
+  out_file << "| generic_drop_rate_percent | " << FormatDouble(report.generic_drop_rate_percent, 3)
+           << " |\n";
+  out_file << "| timeout_rate_percent | " << FormatDouble(report.timeout_rate_percent, 3) << " |\n";
+  out_file << "| incomplete_rate_percent | " << FormatDouble(report.incomplete_rate_percent, 3)
+           << " |\n";
   out_file << "| inter_frame_interval_p95_us | "
            << FormatDouble(report.inter_frame_interval_us.p95_us, 3) << " |\n";
   out_file << "| inter_frame_jitter_p95_us | "

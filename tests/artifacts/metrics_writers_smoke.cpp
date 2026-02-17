@@ -36,7 +36,13 @@ int main() {
   report.frames_total = 90;
   report.received_frames_total = 81;
   report.dropped_frames_total = 9;
+  report.dropped_generic_frames_total = 4;
+  report.timeout_frames_total = 3;
+  report.incomplete_frames_total = 2;
   report.drop_rate_percent = 10.0;
+  report.generic_drop_rate_percent = 4.444444;
+  report.timeout_rate_percent = 3.333333;
+  report.incomplete_rate_percent = 2.222222;
   report.avg_fps = 27.0;
   report.inter_frame_interval_us = {
       .sample_count = 80,
@@ -81,7 +87,13 @@ int main() {
                                 std::istreambuf_iterator<char>());
   AssertContains(csv_content, "avg_fps,,3000,81,27.000000");
   AssertContains(csv_content, "drops_total,,,90,9");
+  AssertContains(csv_content, "drops_generic_total,,,90,4");
+  AssertContains(csv_content, "timeouts_total,,,90,3");
+  AssertContains(csv_content, "incomplete_total,,,90,2");
   AssertContains(csv_content, "drop_rate_percent,,,90,10.000000");
+  AssertContains(csv_content, "generic_drop_rate_percent,,,90,4.444444");
+  AssertContains(csv_content, "timeout_rate_percent,,,90,3.333333");
+  AssertContains(csv_content, "incomplete_rate_percent,,,90,2.222222");
 
   std::ifstream json_input(json_path, std::ios::binary);
   if (!json_input) {
@@ -92,7 +104,13 @@ int main() {
   AssertContains(json_content, "\"avg_window_ms\":3000");
   AssertContains(json_content, "\"received_frames_total\":81");
   AssertContains(json_content, "\"dropped_frames_total\":9");
+  AssertContains(json_content, "\"dropped_generic_frames_total\":4");
+  AssertContains(json_content, "\"timeout_frames_total\":3");
+  AssertContains(json_content, "\"incomplete_frames_total\":2");
   AssertContains(json_content, "\"drop_rate_percent\":10.000000");
+  AssertContains(json_content, "\"generic_drop_rate_percent\":4.444444");
+  AssertContains(json_content, "\"timeout_rate_percent\":3.333333");
+  AssertContains(json_content, "\"incomplete_rate_percent\":2.222222");
   AssertContains(json_content, "\"rolling_fps\":[");
 
   fs::remove_all(out_dir, cleanup_ec);

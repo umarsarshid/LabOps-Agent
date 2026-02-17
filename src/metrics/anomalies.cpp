@@ -158,9 +158,13 @@ void AddLegacySignals(const FpsReport& report, const std::uint32_t configured_fp
   }
 
   if (report.dropped_frames_total > 0U) {
-    anomalies.push_back("Dropped " + std::to_string(report.dropped_frames_total) + " of " +
-                        std::to_string(report.frames_total) + " frames (" +
-                        FormatDouble(report.drop_rate_percent, 2) + "%).");
+    std::string breakdown = "Dropped " + std::to_string(report.dropped_frames_total) + " of " +
+                            std::to_string(report.frames_total) + " frames (" +
+                            FormatDouble(report.drop_rate_percent, 2) + "%).";
+    breakdown += " breakdown: generic=" + std::to_string(report.dropped_generic_frames_total);
+    breakdown += ", timeout=" + std::to_string(report.timeout_frames_total);
+    breakdown += ", incomplete=" + std::to_string(report.incomplete_frames_total) + ".";
+    anomalies.push_back(std::move(breakdown));
   }
 
   if (configured_fps == 0U) {

@@ -305,7 +305,13 @@ Row families:
 
 - `avg_fps`
 - `drops_total`
+- `drops_generic_total`
+- `timeouts_total`
+- `incomplete_total`
 - `drop_rate_percent`
+- `generic_drop_rate_percent`
+- `timeout_rate_percent`
+- `incomplete_rate_percent`
 - `rolling_fps` (one row per rolling sample)
 - `inter_frame_interval_min_us`
 - `inter_frame_interval_avg_us`
@@ -327,7 +333,13 @@ Top-level contract:
 - `frames_total`
 - `received_frames_total`
 - `dropped_frames_total`
+- `dropped_generic_frames_total`
+- `timeout_frames_total`
+- `incomplete_frames_total`
 - `drop_rate_percent`
+- `generic_drop_rate_percent`
+- `timeout_rate_percent`
+- `incomplete_rate_percent`
 - `avg_fps`
 - `inter_frame_interval_us` object:
   - `sample_count`, `min_us`, `avg_us`, `p95_us`
@@ -426,6 +438,12 @@ Inclusion behavior:
 - `frames_total`: total frame samples returned by backend
 - `received_frames_total`: count of non-dropped samples
 - `dropped_frames_total`: count of dropped samples
+- `dropped_generic_frames_total`: dropped samples classified as generic drop
+  (`FRAME_DROPPED`)
+- `timeout_frames_total`: dropped samples classified as timeout
+  (`FRAME_TIMEOUT`)
+- `incomplete_frames_total`: dropped samples classified as incomplete frame
+  (`FRAME_INCOMPLETE`)
 
 ### FPS Metrics
 
@@ -444,9 +462,24 @@ Inclusion behavior:
 ### Drop Metrics
 
 - `drops_total`: equal to `dropped_frames_total`
+- `drops_generic_total`: equal to `dropped_generic_frames_total`
+- `timeouts_total`: equal to `timeout_frames_total`
+- `incomplete_total`: equal to `incomplete_frames_total`
 - `drop_rate_percent`:
   - if `frames_total > 0`:
     - `(dropped_frames_total * 100.0) / frames_total`
+  - else: `0.0`
+- `generic_drop_rate_percent`:
+  - if `frames_total > 0`:
+    - `(dropped_generic_frames_total * 100.0) / frames_total`
+  - else: `0.0`
+- `timeout_rate_percent`:
+  - if `frames_total > 0`:
+    - `(timeout_frames_total * 100.0) / frames_total`
+  - else: `0.0`
+- `incomplete_rate_percent`:
+  - if `frames_total > 0`:
+    - `(incomplete_frames_total * 100.0) / frames_total`
   - else: `0.0`
 
 ### Inter-Frame Timing Metrics
@@ -469,13 +502,16 @@ P95 rule (nearest-rank):
 
 - no frames (`frames_total == 0`)
   - `drop_rate_percent = 0.0`
+  - `generic_drop_rate_percent = 0.0`
+  - `timeout_rate_percent = 0.0`
+  - `incomplete_rate_percent = 0.0`
   - `avg_fps = 0.0`
 - fewer than 2 received frames
   - interval/jitter sample count is `0`
   - interval/jitter values remain zeroed
 - dropped frames
   - excluded from FPS interval calculations
-  - included in drop metrics
+  - included in drop metrics (generic/timeout/incomplete buckets and totals)
 
 ## Operational Verification
 

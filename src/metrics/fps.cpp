@@ -12,6 +12,16 @@ bool IsDropped(const backends::FrameSample& frame) {
   return frame.dropped.has_value() && frame.dropped.value();
 }
 
+backends::FrameOutcome ResolveOutcome(const backends::FrameSample& frame) {
+  // Legacy fixtures may not set `outcome` yet. When dropped=true without an
+  // explicit outcome, classify as generic dropped so historical behavior
+  // remains stable while new categories roll out.
+  if (frame.outcome == backends::FrameOutcome::kReceived && IsDropped(frame)) {
+    return backends::FrameOutcome::kDropped;
+  }
+  return frame.outcome;
+}
+
 TimingStatsUs ComputeTimingStatsUs(std::vector<double> samples_us) {
   TimingStatsUs stats;
   if (samples_us.empty()) {
@@ -51,8 +61,23 @@ bool ComputeFpsReport(const std::vector<backends::FrameSample>& frames,
   std::vector<std::chrono::system_clock::time_point> received_timestamps;
   received_timestamps.reserve(frames.size());
   std::uint64_t dropped_frames_total = 0;
+  std::uint64_t dropped_generic_frames_total = 0;
+  std::uint64_t timeout_frames_total = 0;
+  std::uint64_t incomplete_frames_total = 0;
   for (const auto& frame : frames) {
-    if (IsDropped(frame)) {
+    const backends::FrameOutcome outcome = ResolveOutcome(frame);
+    if (outcome == backends::FrameOutcome::kTimeout) {
+      ++timeout_frames_total;
+      ++dropped_frames_total;
+      continue;
+    }
+    if (outcome == backends::FrameOutcome::kIncomplete) {
+      ++incomplete_frames_total;
+      ++dropped_frames_total;
+      continue;
+    }
+    if (outcome == backends::FrameOutcome::kDropped || IsDropped(frame)) {
+      ++dropped_generic_frames_total;
       ++dropped_frames_total;
       continue;
     }
@@ -67,9 +92,19 @@ bool ComputeFpsReport(const std::vector<backends::FrameSample>& frames,
   report.frames_total = static_cast<std::uint64_t>(frames.size());
   report.received_frames_total = static_cast<std::uint64_t>(received_timestamps.size());
   report.dropped_frames_total = dropped_frames_total;
+  report.dropped_generic_frames_total = dropped_generic_frames_total;
+  report.timeout_frames_total = timeout_frames_total;
+  report.incomplete_frames_total = incomplete_frames_total;
   if (report.frames_total > 0U) {
     report.drop_rate_percent = (static_cast<double>(report.dropped_frames_total) * 100.0) /
                                static_cast<double>(report.frames_total);
+    report.generic_drop_rate_percent =
+        (static_cast<double>(report.dropped_generic_frames_total) * 100.0) /
+        static_cast<double>(report.frames_total);
+    report.timeout_rate_percent = (static_cast<double>(report.timeout_frames_total) * 100.0) /
+                                  static_cast<double>(report.frames_total);
+    report.incomplete_rate_percent = (static_cast<double>(report.incomplete_frames_total) * 100.0) /
+                                     static_cast<double>(report.frames_total);
   }
 
   const double avg_window_seconds = static_cast<double>(avg_window.count()) / 1000.0;

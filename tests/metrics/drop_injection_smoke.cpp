@@ -108,12 +108,22 @@ int main() {
   if (baseline.dropped_frames_total != 0U || baseline.drop_rate_percent != 0.0) {
     Fail("baseline drop metrics should be zero when drop_every_n is disabled");
   }
+  if (baseline.dropped_generic_frames_total != 0U || baseline.timeout_frames_total != 0U ||
+      baseline.incomplete_frames_total != 0U) {
+    Fail("baseline category metrics should be zero when drop injection is disabled");
+  }
 
   if (injected.frames_total != expected_total) {
     Fail("injected total frames mismatch");
   }
   if (injected.dropped_frames_total != expected_dropped) {
     Fail("injected dropped frames mismatch");
+  }
+  if (injected.dropped_generic_frames_total != expected_dropped) {
+    Fail("sim drop injection should map to generic dropped category");
+  }
+  if (injected.timeout_frames_total != 0U || injected.incomplete_frames_total != 0U) {
+    Fail("sim drop injection should not populate timeout/incomplete categories");
   }
   if (injected.received_frames_total != expected_received) {
     Fail("injected received frames mismatch");

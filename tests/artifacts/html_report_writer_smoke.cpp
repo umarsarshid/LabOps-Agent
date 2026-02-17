@@ -51,7 +51,13 @@ int main() {
   report.frames_total = 40;
   report.received_frames_total = 35;
   report.dropped_frames_total = 5;
+  report.dropped_generic_frames_total = 2;
+  report.timeout_frames_total = 2;
+  report.incomplete_frames_total = 1;
   report.drop_rate_percent = 12.5;
+  report.generic_drop_rate_percent = 5.0;
+  report.timeout_rate_percent = 5.0;
+  report.incomplete_rate_percent = 2.5;
   report.avg_fps = 23.3;
   report.inter_frame_interval_us = {
       .sample_count = 34,
@@ -115,6 +121,9 @@ int main() {
   AssertContains(html, "<h2>Top Anomalies</h2>");
   AssertContains(html, "run-html-smoke");
   AssertContains(html, "drop_rate_percent");
+  AssertContains(html, "generic_drop_rate_percent");
+  AssertContains(html, "timeout_rate_percent");
+  AssertContains(html, "incomplete_rate_percent");
   AssertContains(html, "window_end_epoch_ms");
   AssertContains(html, "avg_fps actual=23.3 below minimum=25.0");
 

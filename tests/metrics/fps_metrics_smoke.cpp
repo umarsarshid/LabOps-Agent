@@ -40,6 +40,7 @@ void AssertContains(std::string_view text, std::string_view needle) {
 } // namespace
 
 int main() {
+  using labops::backends::FrameOutcome;
   using labops::backends::FrameSample;
   using labops::metrics::FpsReport;
 
@@ -52,7 +53,18 @@ int main() {
       {.frame_id = 3,
        .timestamp = base + std::chrono::milliseconds(2500),
        .size_bytes = 0,
-       .dropped = true},
+       .dropped = true,
+       .outcome = FrameOutcome::kDropped},
+      {.frame_id = 5,
+       .timestamp = base + std::chrono::milliseconds(2600),
+       .size_bytes = 0,
+       .dropped = true,
+       .outcome = FrameOutcome::kTimeout},
+      {.frame_id = 6,
+       .timestamp = base + std::chrono::milliseconds(2700),
+       .size_bytes = 256,
+       .dropped = true,
+       .outcome = FrameOutcome::kIncomplete},
       {.frame_id = 4, .timestamp = base + std::chrono::milliseconds(2800), .size_bytes = 1024},
   };
 
@@ -66,13 +78,27 @@ int main() {
   if (report.received_frames_total != 4U) {
     Fail("unexpected received frame total");
   }
-  if (report.frames_total != 5U) {
+  if (report.frames_total != 7U) {
     Fail("unexpected total frame count");
   }
-  if (report.dropped_frames_total != 1U) {
+  if (report.dropped_frames_total != 3U) {
     Fail("unexpected dropped frame total");
   }
-  AssertNear(report.drop_rate_percent, 20.0, 1e-9, "unexpected drop rate percent");
+  if (report.dropped_generic_frames_total != 1U) {
+    Fail("unexpected generic drop frame total");
+  }
+  if (report.timeout_frames_total != 1U) {
+    Fail("unexpected timeout frame total");
+  }
+  if (report.incomplete_frames_total != 1U) {
+    Fail("unexpected incomplete frame total");
+  }
+  AssertNear(report.drop_rate_percent, 42.8571428571, 1e-6, "unexpected drop rate percent");
+  AssertNear(report.generic_drop_rate_percent, 14.2857142857, 1e-6,
+             "unexpected generic drop rate percent");
+  AssertNear(report.timeout_rate_percent, 14.2857142857, 1e-6, "unexpected timeout rate percent");
+  AssertNear(report.incomplete_rate_percent, 14.2857142857, 1e-6,
+             "unexpected incomplete rate percent");
   AssertNear(report.avg_fps, 2.0, 1e-9, "unexpected avg_fps");
 
   if (report.rolling_samples.size() != 4U) {
@@ -118,8 +144,14 @@ int main() {
   const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
   AssertContains(content, "metric,window_end_ms,window_ms,frames,fps");
   AssertContains(content, "avg_fps,,2000,4,2.000000");
-  AssertContains(content, "drops_total,,,5,1");
-  AssertContains(content, "drop_rate_percent,,,5,20.000000");
+  AssertContains(content, "drops_total,,,7,3");
+  AssertContains(content, "drops_generic_total,,,7,1");
+  AssertContains(content, "timeouts_total,,,7,1");
+  AssertContains(content, "incomplete_total,,,7,1");
+  AssertContains(content, "drop_rate_percent,,,7,42.857143");
+  AssertContains(content, "generic_drop_rate_percent,,,7,14.285714");
+  AssertContains(content, "timeout_rate_percent,,,7,14.285714");
+  AssertContains(content, "incomplete_rate_percent,,,7,14.285714");
   AssertContains(content, "rolling_fps,");
   AssertContains(content, "inter_frame_interval_avg_us,,,3,600000.000000");
   AssertContains(content, "inter_frame_jitter_p95_us,,,3,200000.000000");
@@ -131,7 +163,13 @@ int main() {
   const std::string json_content((std::istreambuf_iterator<char>(json_in)),
                                  std::istreambuf_iterator<char>());
   AssertContains(json_content, "\"avg_fps\":2.000000");
-  AssertContains(json_content, "\"drop_rate_percent\":20.000000");
+  AssertContains(json_content, "\"dropped_generic_frames_total\":1");
+  AssertContains(json_content, "\"timeout_frames_total\":1");
+  AssertContains(json_content, "\"incomplete_frames_total\":1");
+  AssertContains(json_content, "\"drop_rate_percent\":42.857143");
+  AssertContains(json_content, "\"generic_drop_rate_percent\":14.285714");
+  AssertContains(json_content, "\"timeout_rate_percent\":14.285714");
+  AssertContains(json_content, "\"incomplete_rate_percent\":14.285714");
   AssertContains(json_content, "\"rolling_fps\":[");
 
   fs::remove_all(out_dir, cleanup_ec);

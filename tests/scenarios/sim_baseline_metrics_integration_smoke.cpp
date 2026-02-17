@@ -176,11 +176,17 @@ int main() {
   const auto drop_rate_percent = ParseNumberAfterKey(metrics_json, "drop_rate_percent");
   const auto frames_total = ParseNumberAfterKey(metrics_json, "frames_total");
   const auto dropped_total = ParseNumberAfterKey(metrics_json, "dropped_frames_total");
+  const auto dropped_generic_total =
+      ParseNumberAfterKey(metrics_json, "dropped_generic_frames_total");
+  const auto timeout_total = ParseNumberAfterKey(metrics_json, "timeout_frames_total");
+  const auto incomplete_total = ParseNumberAfterKey(metrics_json, "incomplete_frames_total");
   const auto interval_p95 = ParseNestedNumber(metrics_json, "inter_frame_interval_us", "p95_us");
   const auto jitter_p95 = ParseNestedNumber(metrics_json, "inter_frame_jitter_us", "p95_us");
 
   if (!avg_fps.has_value() || !drop_rate_percent.has_value() || !frames_total.has_value() ||
-      !dropped_total.has_value() || !interval_p95.has_value() || !jitter_p95.has_value()) {
+      !dropped_total.has_value() || !dropped_generic_total.has_value() ||
+      !timeout_total.has_value() || !incomplete_total.has_value() || !interval_p95.has_value() ||
+      !jitter_p95.has_value()) {
     Fail("metrics.json missing one or more required numeric fields");
   }
 
@@ -192,6 +198,9 @@ int main() {
   AssertRange(avg_fps.value(), 29.5, 30.5, "avg_fps");
   AssertRange(drop_rate_percent.value(), 0.0, 0.001, "drop_rate_percent");
   AssertRange(dropped_total.value(), 0.0, 0.001, "dropped_frames_total");
+  AssertRange(dropped_generic_total.value(), 0.0, 0.001, "dropped_generic_frames_total");
+  AssertRange(timeout_total.value(), 0.0, 0.001, "timeout_frames_total");
+  AssertRange(incomplete_total.value(), 0.0, 0.001, "incomplete_frames_total");
   AssertRange(frames_total.value(), 295.0, 305.0, "frames_total");
   AssertRange(interval_p95.value(), 30000.0, 36000.0, "inter_frame_interval_us.p95_us");
   AssertRange(jitter_p95.value(), 0.0, 1000.0, "inter_frame_jitter_us.p95_us");

@@ -68,8 +68,20 @@ bool WriteMetricsCsv(const metrics::FpsReport& report, const fs::path& output_di
            << report.avg_fps << "\n";
 
   out_file << "drops_total,,," << report.frames_total << "," << report.dropped_frames_total << "\n";
+  out_file << "drops_generic_total,,," << report.frames_total << ","
+           << report.dropped_generic_frames_total << "\n";
+  out_file << "timeouts_total,,," << report.frames_total << "," << report.timeout_frames_total
+           << "\n";
+  out_file << "incomplete_total,,," << report.frames_total << "," << report.incomplete_frames_total
+           << "\n";
   out_file << "drop_rate_percent,,," << report.frames_total << "," << report.drop_rate_percent
            << "\n";
+  out_file << "generic_drop_rate_percent,,," << report.frames_total << ","
+           << report.generic_drop_rate_percent << "\n";
+  out_file << "timeout_rate_percent,,," << report.frames_total << "," << report.timeout_rate_percent
+           << "\n";
+  out_file << "incomplete_rate_percent,,," << report.frames_total << ","
+           << report.incomplete_rate_percent << "\n";
 
   for (const auto& sample : report.rolling_samples) {
     out_file << "rolling_fps," << ToEpochMillis(sample.window_end) << ","
@@ -118,7 +130,15 @@ bool WriteMetricsJson(const metrics::FpsReport& report, const fs::path& output_d
            << "  \"frames_total\":" << report.frames_total << ",\n"
            << "  \"received_frames_total\":" << report.received_frames_total << ",\n"
            << "  \"dropped_frames_total\":" << report.dropped_frames_total << ",\n"
+           << "  \"dropped_generic_frames_total\":" << report.dropped_generic_frames_total << ",\n"
+           << "  \"timeout_frames_total\":" << report.timeout_frames_total << ",\n"
+           << "  \"incomplete_frames_total\":" << report.incomplete_frames_total << ",\n"
            << "  \"drop_rate_percent\":" << FormatDouble(report.drop_rate_percent) << ",\n"
+           << "  \"generic_drop_rate_percent\":" << FormatDouble(report.generic_drop_rate_percent)
+           << ",\n"
+           << "  \"timeout_rate_percent\":" << FormatDouble(report.timeout_rate_percent) << ",\n"
+           << "  \"incomplete_rate_percent\":" << FormatDouble(report.incomplete_rate_percent)
+           << ",\n"
            << "  \"avg_fps\":" << FormatDouble(report.avg_fps) << ",\n";
 
   WriteTimingStatsJsonObject(out_file, "inter_frame_interval_us", report.inter_frame_interval_us);

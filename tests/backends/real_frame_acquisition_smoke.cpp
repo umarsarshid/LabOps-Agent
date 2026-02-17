@@ -100,15 +100,24 @@ int main() {
   }
 
   labops::metrics::FpsReport report;
-  if (!labops::metrics::ComputeFpsReport(frames, duration, std::chrono::milliseconds(1'000),
-                                         report, error)) {
+  if (!labops::metrics::ComputeFpsReport(frames, duration, std::chrono::milliseconds(1'000), report,
+                                         error)) {
     Fail("expected fps metrics computation to succeed for real frame samples");
   }
   if (report.frames_total != frames.size()) {
     Fail("fps report total frame count mismatch");
   }
-  if (report.dropped_frames_total == 0U) {
-    Fail("expected non-zero dropped count from timeout/incomplete outcomes");
+  if (report.timeout_frames_total != timeout) {
+    Fail("fps report timeout count mismatch");
+  }
+  if (report.incomplete_frames_total != incomplete) {
+    Fail("fps report incomplete count mismatch");
+  }
+  if (report.dropped_generic_frames_total != 0U) {
+    Fail("real acquisition smoke should not add generic drop category");
+  }
+  if (report.dropped_frames_total != timeout + incomplete) {
+    Fail("fps report dropped total should equal timeout + incomplete");
   }
   if (report.avg_fps <= 0.0) {
     Fail("expected positive avg fps from received frame set");
