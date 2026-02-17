@@ -77,6 +77,7 @@ add_library(labops_backends
   src/backends/real_sdk/real_backend.cpp
   src/backends/real_sdk/real_backend_factory.cpp
   src/backends/real_sdk/sdk_context.cpp
+  src/backends/real_sdk/stream_session.cpp
   src/backends/sdk_stub/real_camera_backend_stub.cpp
   src/backends/sim/scenario_config.cpp
   src/backends/sim/sim_camera_backend.cpp
@@ -424,6 +425,16 @@ add_labops_smoke_test(
   NAME sdk_context_smoke
   SOURCES
     tests/backends/sdk_context_smoke.cpp
+  LIBRARIES
+    labops_backends
+)
+
+# Smoke test for real-backend stream-session lifecycle:
+# safe start/stop flow and idempotent stop semantics.
+add_labops_smoke_test(
+  NAME real_stream_session_smoke
+  SOURCES
+    tests/backends/real_stream_session_smoke.cpp
   LIBRARIES
     labops_backends
 )

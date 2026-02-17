@@ -30,7 +30,9 @@ The project needs one consistent workflow that can run on different camera stack
     in bundle evidence (`config_verify.json`, `camera_config.json`,
     `config_report.md`).
   - `RealBackend` implements `ICameraBackend` with deterministic placeholder
-    behavior until vendor SDK calls are integrated.
+    behavior until vendor SDK frame adapter calls are integrated.
+  - real acquisition lifecycle now runs through a dedicated stream-session RAII
+    guard so start/stop stays safe in error paths and stop remains idempotent.
   - `SdkContext` provides one-time process SDK init/shutdown via RAII so
     startup/teardown are safe across repeated runs and tests.
   - `DeviceInfo` + discovery mapping normalize SDK camera descriptors into

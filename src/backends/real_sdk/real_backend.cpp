@@ -18,6 +18,7 @@ RealBackend::RealBackend() {
       {"backend", "real"},
       {"integration_stage", "skeleton"},
       {"sdk_adapter", "pending_vendor_integration"},
+      {"stream_session", "raii"},
   };
 }
 
@@ -33,12 +34,9 @@ bool RealBackend::Connect(std::string& error) {
     return false;
   }
 
-  // Skeleton keeps connect non-operational until camera session wiring lands.
-  // Release immediately so failed connect attempts do not pin SDK lifetime.
-  sdk_context_.Release();
-  error =
-      "real backend skeleton initialized SDK context but camera session wiring is not implemented";
-  return false;
+  connected_ = true;
+  error.clear();
+  return true;
 }
 
 bool RealBackend::Start(std::string& error) {
@@ -46,23 +44,15 @@ bool RealBackend::Start(std::string& error) {
     error = BuildNotConnectedError("start");
     return false;
   }
-  if (running_) {
-    error = "real backend skeleton is already running";
-    return false;
-  }
-
-  error = "real backend skeleton cannot start stream because SDK adapter is not implemented";
-  return false;
+  return stream_session_.Start(error);
 }
 
 bool RealBackend::Stop(std::string& error) {
-  if (!running_) {
-    error = "real backend skeleton is not running";
+  if (!connected_) {
+    error = BuildNotConnectedError("stop");
     return false;
   }
-
-  error = "real backend skeleton cannot stop stream because no active SDK session exists";
-  return false;
+  return stream_session_.Stop(error);
 }
 
 bool RealBackend::SetParam(const std::string& key, const std::string& value, std::string& error) {
@@ -83,7 +73,7 @@ bool RealBackend::SetParam(const std::string& key, const std::string& value, std
 BackendConfig RealBackend::DumpConfig() const {
   BackendConfig config = params_;
   config["connected"] = connected_ ? "true" : "false";
-  config["running"] = running_ ? "true" : "false";
+  config["running"] = stream_session_.running() ? "true" : "false";
   return config;
 }
 
@@ -99,12 +89,13 @@ std::vector<FrameSample> RealBackend::PullFrames(std::chrono::milliseconds durat
     return {};
   }
 
-  if (!running_) {
+  if (!stream_session_.running()) {
     error = "real backend skeleton cannot pull frames while stream is stopped";
     return {};
   }
 
-  error = "real backend skeleton cannot produce frames because SDK adapter is not implemented";
+  error =
+      "real backend skeleton started acquisition, but frame retrieval adapter is not implemented";
   return {};
 }
 

@@ -2,6 +2,7 @@
 
 #include "backends/camera_backend.hpp"
 #include "backends/real_sdk/sdk_context.hpp"
+#include "backends/real_sdk/stream_session.hpp"
 
 #include <chrono>
 #include <string>
@@ -32,9 +33,9 @@ public:
 
 private:
   SdkContext sdk_context_;
+  StreamSession stream_session_;
   BackendConfig params_;
   bool connected_ = false;
-  bool running_ = false;
 };
 
 } // namespace labops::backends::real_sdk

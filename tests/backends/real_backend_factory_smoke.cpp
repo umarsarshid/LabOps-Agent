@@ -82,20 +82,46 @@ int main() {
   }
 
   std::string error;
-  if (backend->Connect(error)) {
-    Fail("expected CreateRealBackend result to fail connect until SDK adapter is implemented");
-  }
-  if (error.empty()) {
-    Fail("expected actionable connect error from CreateRealBackend result");
-  }
+  if (expected_enabled) {
+    if (!backend->Connect(error)) {
+      Fail("expected real backend connect to succeed when enabled");
+    }
+    if (!backend->Start(error)) {
+      Fail("expected real backend start to succeed when enabled");
+    }
 
-  std::string pull_error;
-  const auto frames = backend->PullFrames(std::chrono::milliseconds(100), pull_error);
-  if (!frames.empty()) {
-    Fail("expected no frames from current real backend implementation");
-  }
-  if (pull_error.empty()) {
-    Fail("expected actionable pull_frames error from current real backend implementation");
+    std::string pull_error;
+    const auto frames = backend->PullFrames(std::chrono::milliseconds(100), pull_error);
+    if (!frames.empty()) {
+      Fail("expected no frames from current real backend implementation");
+    }
+    if (pull_error.empty()) {
+      Fail("expected actionable pull_frames error from current real backend implementation");
+    }
+
+    if (!backend->Stop(error)) {
+      Fail("expected real backend stop to succeed when enabled");
+    }
+    // Idempotent stop prevents double-stop failures in cleanup/error paths.
+    if (!backend->Stop(error)) {
+      Fail("expected real backend stop to be idempotent");
+    }
+  } else {
+    if (backend->Connect(error)) {
+      Fail("expected disabled build to use sdk_stub and fail connect");
+    }
+    if (error.empty()) {
+      Fail("expected actionable connect error from CreateRealBackend result");
+    }
+
+    std::string pull_error;
+    const auto frames = backend->PullFrames(std::chrono::milliseconds(100), pull_error);
+    if (!frames.empty()) {
+      Fail("expected no frames from current real backend implementation");
+    }
+    if (pull_error.empty()) {
+      Fail("expected actionable pull_frames error from current real backend implementation");
+    }
   }
 
   return 0;
