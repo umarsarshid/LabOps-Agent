@@ -20,6 +20,8 @@ As the system grows, many modules need common utilities (errors, clocks, structu
 - `logging/`: shared structured logger with level parsing and run-id context.
 - `errors/`: stable process exit-code contract used by CLI and CI smoke tests.
 - `json_utils.hpp`: shared JSON escaping used by schema/event/artifact writers.
+- `json_dom.hpp`: shared lightweight JSON DOM + parser used by scenario and
+  agent modules to avoid duplicated parser logic.
 - `time_utils.hpp`: shared UTC timestamp formatter with millisecond precision.
 
 ## Guardrails

@@ -1,109 +1,109 @@
 # Commit Summary
 
 ## Commit
-`refactor(soak): extract checkpoint/frame-cache persistence module`
+`refactor(core): unify shared JSON parser for scenarios and agent`
 
 ## What I Implemented
 
-I extracted soak checkpoint and frame-cache persistence logic out of the CLI monolith (`router.cpp`) into a dedicated module so it can be maintained and tested independently.
+I removed duplicated JSON parser implementations from:
+- `src/scenarios/validator.cpp`
+- `src/agent/variant_generator.cpp`
 
-## Why This Change
+and replaced both with one shared parser in:
+- `src/core/json_dom.hpp`
 
-Previously, soak storage behavior (checkpoint JSON writing/loading and frame-cache appends/loads) lived inline inside `src/labops/cli/router.cpp`. That made run-flow changes risky because persistence concerns were tightly coupled to command orchestration.
+## Why This Matters
 
-This refactor separates concerns:
-- `router.cpp` now orchestrates run flow.
-- `labops::soak` now owns durable soak state I/O.
+Before this change, both modules had their own full parser copy. That caused two maintenance problems:
+1. Bug fixes had to be duplicated.
+2. Parser behavior could drift subtly between scenario validation and agent variant generation.
 
-That makes pause/resume logic easier to reason about, safer to modify, and easier to test in isolation.
+Now both modules parse JSON with the same code path, so parser fixes and features are applied once.
 
-## Files Added
+## File-by-File Changes
 
-### `src/labops/soak/checkpoint_store.hpp`
-- Added a dedicated soak persistence API with:
-  - `CheckpointStatus`
-  - `CheckpointState`
-  - `WriteCheckpointJson(...)`
-  - `WriteCheckpointArtifacts(...)`
-  - `LoadCheckpoint(...)`
-  - `AppendFrameCache(...)`
-  - `LoadFrameCache(...)`
-- Why: provide a stable module contract for soak persistence primitives.
+### 1) Added shared parser module
+- **Added**: `src/core/json_dom.hpp`
 
-### `src/labops/soak/checkpoint_store.cpp`
-- Moved and encapsulated the soak persistence implementation:
-  - checkpoint JSON serialization
-  - checkpoint history/latest file writing
-  - checkpoint loading + validation
-  - frame-cache append/load parsing
-- Uses shared `core::EscapeJson(...)` for JSON escaping consistency.
-- Why: remove heavy persistence code from CLI router and keep behavior centralized.
+What it contains:
+- `labops::core::json::Value` (shared lightweight JSON DOM)
+- `labops::core::json::Parser` (shared parser implementation)
+- `Parse(...)` helper wrapper
 
-### `src/labops/soak/README.md`
-- Documented what this module is, why it exists, and how it connects to run flow.
-- Why: improve discoverability for future engineers.
+Parser behavior kept aligned with previous validator parser quality:
+- supports object/array/string/number/bool/null
+- same basic escape behavior
+- explicit unsupported unicode escape error (`\\uXXXX`)
+- line/column parse diagnostics (`parse error at line X, col Y: ...`)
 
-### `tests/labops/soak_checkpoint_store_smoke.cpp`
-- Added module-level smoke test for direct roundtrip verification:
-  - checkpoint write/load
-  - frame-cache append/load
-- Why: prove soak persistence can be verified independently from CLI routing.
+Why:
+- one parser implementation across modules
+- no extra external dependency
+- header-only integration kept build changes minimal
 
-## Files Updated
+### 2) Rewired scenario validator to shared parser
+- **Updated**: `src/scenarios/validator.cpp`
 
-### `src/labops/cli/router.cpp`
-- Removed inline soak persistence block (checkpoint/frame-cache types + functions).
-- Added include for `labops/soak/checkpoint_store.hpp`.
-- Rewired call sites to module functions:
-  - `soak::LoadCheckpoint(...)`
-  - `soak::LoadFrameCache(...)`
-  - `soak::AppendFrameCache(...)`
-  - `soak::WriteCheckpointArtifacts(...)`
-- Updated type usage to `soak::CheckpointState` / `soak::CheckpointStatus`.
-- Why: keep router focused on orchestration and reduce monolithic complexity.
+Changes:
+- Added include: `core/json_dom.hpp`
+- Removed local duplicated `JsonValue` + `JsonParser` implementation
+- Added aliases:
+  - `using JsonValue = core::json::Value;`
+  - `using JsonParser = core::json::Parser;`
 
-### `CMakeLists.txt`
-- Added `labops_soak` library target.
-- Linked `labops` binary against `labops_soak`.
-- Added `labops_soak` to `LABOPS_CLI_SMOKE_LIBRARIES` so router-linked smoke tests resolve module symbols.
-- Added new smoke target: `soak_checkpoint_store_smoke`.
-- Why: make the new module a first-class build/test unit.
+Why:
+- scenario validation now uses the shared parser while keeping existing validator logic and issue reporting flow unchanged.
 
-### `src/labops/README.md`
-- Added note that CLI-owned support modules (e.g., soak persistence) live under `src/labops/` subfolders.
-- Why: keep folder docs aligned with code structure.
+### 3) Rewired OAAT variant generator to shared parser
+- **Updated**: `src/agent/variant_generator.cpp`
 
-## Behavior Impact
+Changes:
+- Added include: `core/json_dom.hpp`
+- Removed local duplicated `JsonValue` + `JsonParser` implementation
+- Added aliases:
+  - `using JsonValue = core::json::Value;`
+  - `using JsonParser = core::json::Parser;`
 
-No intended runtime contract change.
-- Soak pause/resume artifacts remain the same:
-  - `soak_checkpoint.json`
-  - `checkpoints/checkpoint_<n>.json`
-  - `soak_frames.jsonl`
-- Existing CLI flows continue to use same soak semantics, now via module calls.
+Why:
+- agent variant generation now parses with the same implementation as scenario validation, eliminating duplication and divergence.
+
+### 4) Updated core module docs
+- **Updated**: `src/core/README.md`
+
+Added `json_dom.hpp` in current contents section.
+
+Why:
+- keeps module-level documentation accurate for future engineers.
 
 ## Verification Performed
 
 ### Formatting
-- `bash tools/clang_format.sh --check` (tracked files): pass.
-- `clang-format --dry-run --Werror` on new soak files + new smoke test: pass.
+- `bash tools/clang_format.sh --check`
+- Result: **pass**.
 
 ### Build
-- `cmake -S . -B build`: pass.
-- `cmake --build build`: pass.
+- `cmake --build build`
+- Result: **pass**.
 
-### Targeted Tests (refactor scope)
-- `ctest --test-dir build -R "(soak_checkpoint_store_smoke|soak_checkpoint_resume_smoke|run_stream_trace_smoke|bundle_layout_consistency_smoke)" --output-on-failure`
-- Result: 4/4 passed.
+### Targeted tests for changed behavior
+- `ctest --test-dir build -R "(scenario_validation_smoke|oaat_variant_generator_smoke|agent_triage_integration_smoke)" --output-on-failure`
+- Result: **3/3 passed**.
 
-### Full Suite Regression Check
+### Full regression run
 - `ctest --test-dir build --output-on-failure`
-- Result: 55/56 passed.
-- One known unrelated failure remains unchanged:
+- Result: **55/56 passed**.
+- Existing known failure remains unchanged:
   - `starter_scenarios_e2e_smoke`
-  - failing due `trigger_roi.json` run-plan parse error:
-    `scenario camera.roi must include x, y, width, and height`
+  - reason: `trigger_roi.json` run-plan parser issue (`scenario camera.roi must include x, y, width, and height`), unrelated to this shared-parser refactor.
 
-## Result
+## Risk Assessment
 
-The soak persistence subsystem is now a dedicated module with direct test coverage, and CLI run orchestration is slimmer and easier to maintain.
+Risk is low because:
+- this change is scoped to parser code deduplication and direct wiring
+- targeted tests for both consumers (validator + variant generator) pass
+- agent integration smoke also passes
+- no behavior-changing schema logic was altered
+
+## Outcome
+
+The repository now has one shared JSON parser used by both scenario validation and agent variant generation, removing duplicated parser code and reducing long-term maintenance risk.
