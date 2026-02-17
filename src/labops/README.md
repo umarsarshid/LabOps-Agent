@@ -11,6 +11,8 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
 - Process entrypoint (`main.cpp`).
 - Top-level command routing and argument handling.
 - Command-level output and exit code contracts.
+- CLI-owned support modules for run-specific workflows (for example soak
+  checkpoint/frame-cache persistence under `soak/`).
 
 ## Current command contract
 

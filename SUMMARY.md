@@ -1,85 +1,109 @@
 # Commit Summary
 
 ## Commit
-`refactor(cli): consolidate bundle manifest artifact collection`
+`refactor(soak): extract checkpoint/frame-cache persistence module`
 
 ## What I Implemented
 
-I refactored `src/labops/cli/router.cpp` to remove duplicated bundle-manifest path assembly logic in two places:
-- soak pause flow (when a soak run is safely paused)
-- normal/final completion flow (when run finishes)
+I extracted soak checkpoint and frame-cache persistence logic out of the CLI monolith (`router.cpp`) into a dedicated module so it can be maintained and tested independently.
 
-### Code Changes
+## Why This Change
 
-1. Added helper `AppendArtifactIfPresent(...)`
-- Location: `src/labops/cli/router.cpp`
-- Behavior: appends a path only when it is non-empty and exists on disk.
-- Why: this logic was repeated several times for optional artifacts (`config_verify.json`, `camera_config.json`, `config_report.md`, soak artifacts).
+Previously, soak storage behavior (checkpoint JSON writing/loading and frame-cache appends/loads) lived inline inside `src/labops/cli/router.cpp`. That made run-flow changes risky because persistence concerns were tightly coupled to command orchestration.
 
-2. Added helper `BuildBundleManifestArtifactPaths(...)`
-- Location: `src/labops/cli/router.cpp`
-- Inputs:
-  - required artifact paths (always included)
-  - optional artifact paths (included only if present)
-  - NIC raw artifact paths (`nic_*.txt`)
-- Output: one consolidated vector used for `WriteBundleManifestJson(...)`.
-- Why: pause and completion paths used near-identical artifact collection; centralizing removes drift risk and lowers maintenance cost.
+This refactor separates concerns:
+- `router.cpp` now orchestrates run flow.
+- `labops::soak` now owns durable soak state I/O.
 
-3. Replaced duplicated manifest assembly in soak-pause path
-- Old behavior: manually assembled vector + repeated optional checks + manual NIC insert.
-- New behavior: build required list for pause artifacts, pass optional config artifacts to shared helper.
-- Why: guarantees the same optional inclusion policy without repeating condition blocks.
+That makes pause/resume logic easier to reason about, safer to modify, and easier to test in isolation.
 
-4. Replaced duplicated manifest assembly in final-completion path
-- Old behavior: manual vector assembly + repeated optional checks + soak-specific optional checks + NIC insert.
-- New behavior:
-  - build one `completion_optional_artifacts` list
-  - append soak artifacts only when `--soak` is enabled
-  - call shared helper for final list construction.
-- Why: one source of truth for manifest artifact inclusion across both execution endings.
+## Files Added
 
-## Behavior/Contract Impact
+### `src/labops/soak/checkpoint_store.hpp`
+- Added a dedicated soak persistence API with:
+  - `CheckpointStatus`
+  - `CheckpointState`
+  - `WriteCheckpointJson(...)`
+  - `WriteCheckpointArtifacts(...)`
+  - `LoadCheckpoint(...)`
+  - `AppendFrameCache(...)`
+  - `LoadFrameCache(...)`
+- Why: provide a stable module contract for soak persistence primitives.
 
-No intended functional behavior change.
-- Required artifacts remain required in each path.
-- Optional artifacts are still included only if the file exists.
-- NIC raw files are still appended to manifest inputs.
+### `src/labops/soak/checkpoint_store.cpp`
+- Moved and encapsulated the soak persistence implementation:
+  - checkpoint JSON serialization
+  - checkpoint history/latest file writing
+  - checkpoint loading + validation
+  - frame-cache append/load parsing
+- Uses shared `core::EscapeJson(...)` for JSON escaping consistency.
+- Why: remove heavy persistence code from CLI router and keep behavior centralized.
 
-This is a maintainability/refactor commit to reduce duplication and lower regression risk when artifact contract evolves.
+### `src/labops/soak/README.md`
+- Documented what this module is, why it exists, and how it connects to run flow.
+- Why: improve discoverability for future engineers.
+
+### `tests/labops/soak_checkpoint_store_smoke.cpp`
+- Added module-level smoke test for direct roundtrip verification:
+  - checkpoint write/load
+  - frame-cache append/load
+- Why: prove soak persistence can be verified independently from CLI routing.
+
+## Files Updated
+
+### `src/labops/cli/router.cpp`
+- Removed inline soak persistence block (checkpoint/frame-cache types + functions).
+- Added include for `labops/soak/checkpoint_store.hpp`.
+- Rewired call sites to module functions:
+  - `soak::LoadCheckpoint(...)`
+  - `soak::LoadFrameCache(...)`
+  - `soak::AppendFrameCache(...)`
+  - `soak::WriteCheckpointArtifacts(...)`
+- Updated type usage to `soak::CheckpointState` / `soak::CheckpointStatus`.
+- Why: keep router focused on orchestration and reduce monolithic complexity.
+
+### `CMakeLists.txt`
+- Added `labops_soak` library target.
+- Linked `labops` binary against `labops_soak`.
+- Added `labops_soak` to `LABOPS_CLI_SMOKE_LIBRARIES` so router-linked smoke tests resolve module symbols.
+- Added new smoke target: `soak_checkpoint_store_smoke`.
+- Why: make the new module a first-class build/test unit.
+
+### `src/labops/README.md`
+- Added note that CLI-owned support modules (e.g., soak persistence) live under `src/labops/` subfolders.
+- Why: keep folder docs aligned with code structure.
+
+## Behavior Impact
+
+No intended runtime contract change.
+- Soak pause/resume artifacts remain the same:
+  - `soak_checkpoint.json`
+  - `checkpoints/checkpoint_<n>.json`
+  - `soak_frames.jsonl`
+- Existing CLI flows continue to use same soak semantics, now via module calls.
 
 ## Verification Performed
 
 ### Formatting
-- `bash tools/clang_format.sh --check`
-- Result: pass.
+- `bash tools/clang_format.sh --check` (tracked files): pass.
+- `clang-format --dry-run --Werror` on new soak files + new smoke test: pass.
 
 ### Build
-- `cmake -S . -B build`
-- `cmake --build build`
-- Result: pass.
+- `cmake -S . -B build`: pass.
+- `cmake --build build`: pass.
 
-### Targeted tests for touched behavior
-- `ctest --test-dir build -R "(run_stream_trace_smoke|bundle_layout_consistency_smoke|soak_checkpoint_resume_smoke|baseline_capture_smoke)" --output-on-failure`
+### Targeted Tests (refactor scope)
+- `ctest --test-dir build -R "(soak_checkpoint_store_smoke|soak_checkpoint_resume_smoke|run_stream_trace_smoke|bundle_layout_consistency_smoke)" --output-on-failure`
 - Result: 4/4 passed.
 
-### Full suite sanity run
+### Full Suite Regression Check
 - `ctest --test-dir build --output-on-failure`
-- Result: 54/55 passed.
-- One failing test: `starter_scenarios_e2e_smoke`.
-- Failure reason seen in logs: `labops run scenarios/trigger_roi.json` fails during run-plan parsing with:
-  - `scenario camera.roi must include x, y, width, and height`
-- Notes:
-  - this failure occurs before manifest-writing stage and is unrelated to this manifest-collection refactor.
-  - manual spot-check confirmed:
-    - `./build/labops validate scenarios/trigger_roi.json` passes
-    - `./build/labops run scenarios/trigger_roi.json ...` fails with the same run-plan parser error.
+- Result: 55/56 passed.
+- One known unrelated failure remains unchanged:
+  - `starter_scenarios_e2e_smoke`
+  - failing due `trigger_roi.json` run-plan parse error:
+    `scenario camera.roi must include x, y, width, and height`
 
-## Why This Refactor Matters
+## Result
 
-- Prevents pause/final manifest logic from drifting over time.
-- Reduces copy-paste condition blocks, making future artifact additions safer.
-- Keeps manifest behavior explicit while lowering cognitive load in a very large run pipeline function.
-
-## Files Changed
-
-- `src/labops/cli/router.cpp`
+The soak persistence subsystem is now a dedicated module with direct test coverage, and CLI run orchestration is slimmer and easier to maintain.

@@ -113,6 +113,13 @@ add_library(labops_hostprobe
 target_include_directories(labops_hostprobe PUBLIC src)
 target_compile_features(labops_hostprobe PUBLIC cxx_std_20)
 
+# Soak-mode persistence module used by CLI pause/resume orchestration.
+add_library(labops_soak
+  src/labops/soak/checkpoint_store.cpp
+)
+target_include_directories(labops_soak PUBLIC src)
+target_compile_features(labops_soak PUBLIC cxx_std_20)
+
 # Agent-state contracts for experiment planning checkpoints (`agent_state.json`).
 add_library(labops_agent
   src/agent/engineer_packet_writer.cpp
@@ -162,7 +169,7 @@ add_executable(labops
 # Expose `src/` as the include root so includes stay stable as the tree grows.
 target_include_directories(labops PRIVATE src)
 target_compile_features(labops PRIVATE cxx_std_20)
-target_link_libraries(labops PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema)
+target_link_libraries(labops PRIVATE labops_artifacts labops_backends labops_events labops_metrics labops_scenarios labops_schema labops_soak)
 
 # Early smoke-test target that validates the schema contract and JSON output
 # remain stable. This is intentionally lightweight until broader test
@@ -205,6 +212,7 @@ set(LABOPS_CLI_SMOKE_LIBRARIES
   labops_metrics
   labops_scenarios
   labops_schema
+  labops_soak
 )
 
 # Early smoke-test target that validates the schema contract and JSON output
@@ -715,6 +723,15 @@ add_labops_smoke_test(
     src
   LIBRARIES
     ${LABOPS_CLI_SMOKE_LIBRARIES}
+)
+
+# Module-level smoke test for checkpoint/frame-cache persistence primitives.
+add_labops_smoke_test(
+  NAME soak_checkpoint_store_smoke
+  SOURCES
+    tests/labops/soak_checkpoint_store_smoke.cpp
+  LIBRARIES
+    labops_soak
 )
 
 # Scenario schema validation smoke tests.

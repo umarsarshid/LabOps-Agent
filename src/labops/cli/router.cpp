@@ -23,6 +23,7 @@
 #include "events/event_model.hpp"
 #include "events/jsonl_writer.hpp"
 #include "hostprobe/system_probe.hpp"
+#include "labops/soak/checkpoint_store.hpp"
 #include "metrics/anomalies.hpp"
 #include "metrics/fps.hpp"
 #include "scenarios/netem_profile_support.hpp"
@@ -1850,382 +1851,6 @@ bool EvaluateRunThresholds(const RunPlan::Thresholds& thresholds, const metrics:
   return failures.empty();
 }
 
-enum class SoakCheckpointStatus {
-  kRunning,
-  kPaused,
-  kCompleted,
-};
-
-struct SoakCheckpointState {
-  std::string run_id;
-  fs::path scenario_path;
-  fs::path bundle_dir;
-  fs::path frame_cache_path;
-  std::chrono::milliseconds total_duration{0};
-  std::chrono::milliseconds completed_duration{0};
-  std::uint64_t checkpoints_written = 0;
-  std::uint64_t frames_total = 0;
-  std::uint64_t frames_received = 0;
-  std::uint64_t frames_dropped = 0;
-  core::schema::RunTimestamps timestamps{};
-  std::chrono::system_clock::time_point updated_at{};
-  SoakCheckpointStatus status = SoakCheckpointStatus::kRunning;
-  std::string stop_reason;
-};
-
-const char* ToString(SoakCheckpointStatus status) {
-  switch (status) {
-  case SoakCheckpointStatus::kRunning:
-    return "running";
-  case SoakCheckpointStatus::kPaused:
-    return "paused";
-  case SoakCheckpointStatus::kCompleted:
-    return "completed";
-  }
-  return "running";
-}
-
-bool ParseSoakCheckpointStatus(std::string_view text, SoakCheckpointStatus& status) {
-  if (text == "running") {
-    status = SoakCheckpointStatus::kRunning;
-    return true;
-  }
-  if (text == "paused") {
-    status = SoakCheckpointStatus::kPaused;
-    return true;
-  }
-  if (text == "completed") {
-    status = SoakCheckpointStatus::kCompleted;
-    return true;
-  }
-  return false;
-}
-
-std::string EscapeJsonString(std::string_view input) {
-  std::ostringstream out;
-  for (const char ch : input) {
-    switch (ch) {
-    case '"':
-      out << "\\\"";
-      break;
-    case '\\':
-      out << "\\\\";
-      break;
-    case '\b':
-      out << "\\b";
-      break;
-    case '\f':
-      out << "\\f";
-      break;
-    case '\n':
-      out << "\\n";
-      break;
-    case '\r':
-      out << "\\r";
-      break;
-    case '\t':
-      out << "\\t";
-      break;
-    default: {
-      const auto as_unsigned = static_cast<unsigned char>(ch);
-      if (as_unsigned < 0x20U) {
-        out << "\\u" << std::hex << std::setw(4) << std::setfill('0')
-            << static_cast<int>(as_unsigned) << std::dec << std::setfill(' ');
-      } else {
-        out << ch;
-      }
-      break;
-    }
-    }
-  }
-  return out.str();
-}
-
-std::int64_t ToEpochMilliseconds(const std::chrono::system_clock::time_point ts) {
-  return std::chrono::duration_cast<std::chrono::milliseconds>(ts.time_since_epoch()).count();
-}
-
-std::chrono::system_clock::time_point FromEpochMilliseconds(std::uint64_t epoch_ms) {
-  return std::chrono::system_clock::time_point(
-      std::chrono::milliseconds(static_cast<std::int64_t>(epoch_ms)));
-}
-
-bool WriteSoakCheckpointJson(const SoakCheckpointState& state, const fs::path& output_path,
-                             std::string& error) {
-  error.clear();
-  if (state.run_id.empty()) {
-    error = "soak checkpoint run_id cannot be empty";
-    return false;
-  }
-  if (output_path.empty()) {
-    error = "soak checkpoint output path cannot be empty";
-    return false;
-  }
-
-  std::error_code ec;
-  fs::create_directories(output_path.parent_path(), ec);
-  if (ec) {
-    error = "failed to create soak checkpoint directory '" + output_path.parent_path().string() +
-            "': " + ec.message();
-    return false;
-  }
-
-  const std::uint64_t total_ms =
-      static_cast<std::uint64_t>(std::max<std::int64_t>(state.total_duration.count(), 0));
-  const std::uint64_t completed_ms =
-      static_cast<std::uint64_t>(std::max<std::int64_t>(state.completed_duration.count(), 0));
-  const std::uint64_t remaining_ms = completed_ms >= total_ms ? 0U : (total_ms - completed_ms);
-
-  std::ofstream out_file(output_path, std::ios::binary | std::ios::trunc);
-  if (!out_file) {
-    error = "failed to open soak checkpoint output '" + output_path.string() + "'";
-    return false;
-  }
-
-  out_file << "{\n"
-           << "  \"schema_version\": \"1.0\",\n"
-           << "  \"mode\": \"soak\",\n"
-           << "  \"status\": \"" << ToString(state.status) << "\",\n"
-           << "  \"stop_reason\": \"" << EscapeJsonString(state.stop_reason) << "\",\n"
-           << "  \"run_id\": \"" << EscapeJsonString(state.run_id) << "\",\n"
-           << "  \"scenario_path\": \"" << EscapeJsonString(state.scenario_path.string()) << "\",\n"
-           << "  \"bundle_dir\": \"" << EscapeJsonString(state.bundle_dir.string()) << "\",\n"
-           << "  \"frame_cache_path\": \"" << EscapeJsonString(state.frame_cache_path.string())
-           << "\",\n"
-           << "  \"total_duration_ms\": " << total_ms << ",\n"
-           << "  \"completed_duration_ms\": " << completed_ms << ",\n"
-           << "  \"remaining_duration_ms\": " << remaining_ms << ",\n"
-           << "  \"checkpoints_written\": " << state.checkpoints_written << ",\n"
-           << "  \"frames_total\": " << state.frames_total << ",\n"
-           << "  \"frames_received\": " << state.frames_received << ",\n"
-           << "  \"frames_dropped\": " << state.frames_dropped << ",\n"
-           << "  \"created_at_epoch_ms\": " << ToEpochMilliseconds(state.timestamps.created_at)
-           << ",\n"
-           << "  \"started_at_epoch_ms\": " << ToEpochMilliseconds(state.timestamps.started_at)
-           << ",\n"
-           << "  \"finished_at_epoch_ms\": " << ToEpochMilliseconds(state.timestamps.finished_at)
-           << ",\n"
-           << "  \"updated_at_epoch_ms\": " << ToEpochMilliseconds(state.updated_at) << ",\n"
-           << "  \"resume_hint\": \"labops run " << EscapeJsonString(state.scenario_path.string())
-           << " --soak --resume "
-           << EscapeJsonString((state.bundle_dir / "soak_checkpoint.json").string()) << "\"\n"
-           << "}\n";
-  if (!out_file) {
-    error = "failed while writing soak checkpoint output '" + output_path.string() + "'";
-    return false;
-  }
-
-  return true;
-}
-
-bool WriteSoakCheckpointArtifacts(const SoakCheckpointState& state,
-                                  fs::path& latest_checkpoint_path,
-                                  fs::path& history_checkpoint_path, std::string& error) {
-  latest_checkpoint_path = state.bundle_dir / "soak_checkpoint.json";
-  history_checkpoint_path = state.bundle_dir / "checkpoints" /
-                            ("checkpoint_" + std::to_string(state.checkpoints_written) + ".json");
-
-  if (!WriteSoakCheckpointJson(state, latest_checkpoint_path, error)) {
-    return false;
-  }
-  if (!WriteSoakCheckpointJson(state, history_checkpoint_path, error)) {
-    return false;
-  }
-  return true;
-}
-
-bool LoadSoakCheckpoint(const fs::path& checkpoint_path, SoakCheckpointState& state,
-                        std::string& error) {
-  state = SoakCheckpointState{};
-  std::string text;
-  if (!ReadTextFile(checkpoint_path.string(), text, error)) {
-    return false;
-  }
-
-  const auto run_id = FindStringJsonField(text, "run_id");
-  const auto scenario_path = FindStringJsonField(text, "scenario_path");
-  const auto bundle_dir = FindStringJsonField(text, "bundle_dir");
-  const auto frame_cache_path = FindStringJsonField(text, "frame_cache_path");
-  const auto status_text = FindStringJsonField(text, "status");
-  const auto total_duration_ms = FindUnsignedJsonField(text, "total_duration_ms");
-  const auto completed_duration_ms = FindUnsignedJsonField(text, "completed_duration_ms");
-  const auto checkpoints_written = FindUnsignedJsonField(text, "checkpoints_written");
-  const auto frames_total = FindUnsignedJsonField(text, "frames_total");
-  const auto frames_received = FindUnsignedJsonField(text, "frames_received");
-  const auto frames_dropped = FindUnsignedJsonField(text, "frames_dropped");
-  const auto created_at_epoch_ms = FindUnsignedJsonField(text, "created_at_epoch_ms");
-  const auto started_at_epoch_ms = FindUnsignedJsonField(text, "started_at_epoch_ms");
-  const auto finished_at_epoch_ms = FindUnsignedJsonField(text, "finished_at_epoch_ms");
-  const auto updated_at_epoch_ms = FindUnsignedJsonField(text, "updated_at_epoch_ms");
-
-  if (!run_id.has_value() || !scenario_path.has_value() || !bundle_dir.has_value() ||
-      !status_text.has_value() || !total_duration_ms.has_value() ||
-      !completed_duration_ms.has_value() || !checkpoints_written.has_value() ||
-      !frames_total.has_value() || !frames_received.has_value() || !frames_dropped.has_value() ||
-      !created_at_epoch_ms.has_value() || !started_at_epoch_ms.has_value() ||
-      !finished_at_epoch_ms.has_value() || !updated_at_epoch_ms.has_value()) {
-    error = "checkpoint is missing required fields: " + checkpoint_path.string();
-    return false;
-  }
-
-  SoakCheckpointStatus status = SoakCheckpointStatus::kRunning;
-  if (!ParseSoakCheckpointStatus(status_text.value(), status)) {
-    error = "checkpoint has unsupported status value: " + status_text.value();
-    return false;
-  }
-
-  if (completed_duration_ms.value() > total_duration_ms.value()) {
-    error = "checkpoint completed_duration_ms exceeds total_duration_ms";
-    return false;
-  }
-
-  if (run_id->empty() || scenario_path->empty() || bundle_dir->empty()) {
-    error = "checkpoint contains empty required identity fields";
-    return false;
-  }
-
-  state.run_id = *run_id;
-  state.scenario_path = fs::path(*scenario_path);
-  state.bundle_dir = fs::path(*bundle_dir);
-  state.frame_cache_path = frame_cache_path.has_value() && !frame_cache_path->empty()
-                               ? fs::path(*frame_cache_path)
-                               : state.bundle_dir / "soak_frames.jsonl";
-  state.total_duration =
-      std::chrono::milliseconds(static_cast<std::int64_t>(total_duration_ms.value()));
-  state.completed_duration =
-      std::chrono::milliseconds(static_cast<std::int64_t>(completed_duration_ms.value()));
-  state.checkpoints_written = checkpoints_written.value();
-  state.frames_total = frames_total.value();
-  state.frames_received = frames_received.value();
-  state.frames_dropped = frames_dropped.value();
-  state.timestamps.created_at = FromEpochMilliseconds(created_at_epoch_ms.value());
-  state.timestamps.started_at = FromEpochMilliseconds(started_at_epoch_ms.value());
-  state.timestamps.finished_at = FromEpochMilliseconds(finished_at_epoch_ms.value());
-  state.updated_at = FromEpochMilliseconds(updated_at_epoch_ms.value());
-  state.status = status;
-  state.stop_reason = FindStringJsonField(text, "stop_reason").value_or("");
-  return true;
-}
-
-bool FindBoolJsonField(const std::string& text, std::string_view key, bool& value) {
-  const std::string needle = "\"" + std::string(key) + "\"";
-  const std::size_t key_pos = text.find(needle);
-  if (key_pos == std::string::npos) {
-    return false;
-  }
-  const std::size_t colon_pos = text.find(':', key_pos + needle.size());
-  if (colon_pos == std::string::npos) {
-    return false;
-  }
-  std::size_t value_pos = colon_pos + 1;
-  while (value_pos < text.size() &&
-         std::isspace(static_cast<unsigned char>(text[value_pos])) != 0) {
-    ++value_pos;
-  }
-  if (text.compare(value_pos, 4, "true") == 0) {
-    value = true;
-    return true;
-  }
-  if (text.compare(value_pos, 5, "false") == 0) {
-    value = false;
-    return true;
-  }
-  return false;
-}
-
-bool AppendSoakFrameCache(const std::vector<backends::FrameSample>& frames,
-                          const fs::path& frame_cache_path, std::string& error) {
-  error.clear();
-  if (frame_cache_path.empty()) {
-    error = "frame cache path cannot be empty";
-    return false;
-  }
-  std::error_code ec;
-  fs::create_directories(frame_cache_path.parent_path(), ec);
-  if (ec) {
-    error = "failed to create frame cache directory '" + frame_cache_path.parent_path().string() +
-            "': " + ec.message();
-    return false;
-  }
-
-  std::ofstream out_file(frame_cache_path, std::ios::binary | std::ios::app);
-  if (!out_file) {
-    error = "failed to open frame cache file '" + frame_cache_path.string() + "'";
-    return false;
-  }
-
-  for (const auto& frame : frames) {
-    const auto ts_us =
-        std::chrono::duration_cast<std::chrono::microseconds>(frame.timestamp.time_since_epoch())
-            .count();
-    const bool dropped = frame.dropped.has_value() && frame.dropped.value();
-    out_file << "{\"frame_id\":" << frame.frame_id << ",\"ts_epoch_us\":" << ts_us
-             << ",\"size_bytes\":" << frame.size_bytes
-             << ",\"dropped\":" << (dropped ? "true" : "false") << "}\n";
-  }
-
-  if (!out_file) {
-    error = "failed while appending frame cache file '" + frame_cache_path.string() + "'";
-    return false;
-  }
-  return true;
-}
-
-bool LoadSoakFrameCache(const fs::path& frame_cache_path,
-                        std::vector<backends::FrameSample>& frames, std::string& error) {
-  frames.clear();
-  error.clear();
-
-  std::error_code ec;
-  if (!fs::exists(frame_cache_path, ec)) {
-    return true;
-  }
-  if (ec) {
-    error =
-        "failed to access frame cache path '" + frame_cache_path.string() + "': " + ec.message();
-    return false;
-  }
-
-  std::ifstream in_file(frame_cache_path, std::ios::binary);
-  if (!in_file) {
-    error = "failed to open frame cache file '" + frame_cache_path.string() + "'";
-    return false;
-  }
-
-  std::string line;
-  while (std::getline(in_file, line)) {
-    if (line.empty()) {
-      continue;
-    }
-
-    const auto frame_id = FindUnsignedJsonField(line, "frame_id");
-    const auto ts_epoch_us = FindUnsignedJsonField(line, "ts_epoch_us");
-    const auto size_bytes = FindUnsignedJsonField(line, "size_bytes");
-    bool dropped = false;
-    if (!frame_id.has_value() || !ts_epoch_us.has_value() || !size_bytes.has_value() ||
-        !FindBoolJsonField(line, "dropped", dropped)) {
-      error = "invalid frame cache line in '" + frame_cache_path.string() + "'";
-      return false;
-    }
-
-    backends::FrameSample frame;
-    frame.frame_id = frame_id.value();
-    frame.timestamp = std::chrono::system_clock::time_point(
-        std::chrono::microseconds(static_cast<std::int64_t>(ts_epoch_us.value())));
-    frame.size_bytes = static_cast<std::uint32_t>(
-        std::min<std::uint64_t>(size_bytes.value(), std::numeric_limits<std::uint32_t>::max()));
-    frame.dropped = dropped;
-    frames.push_back(frame);
-  }
-
-  if (!in_file.eof() && in_file.fail()) {
-    error = "failed while reading frame cache file '" + frame_cache_path.string() + "'";
-    return false;
-  }
-
-  return true;
-}
-
 std::string ResolveSoakStopReason(const RunOptions& options) {
   if (g_soak_stop_requested.load()) {
     return "signal_interrupt";
@@ -2399,7 +2024,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
 
   const bool is_resume = options.soak_mode && !options.resume_checkpoint_path.empty();
-  SoakCheckpointState resume_checkpoint;
+  soak::CheckpointState resume_checkpoint;
   std::chrono::milliseconds completed_duration{0};
   std::vector<backends::FrameSample> frames;
 
@@ -2412,7 +2037,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   fs::path soak_checkpoint_history_path;
 
   if (is_resume) {
-    if (!LoadSoakCheckpoint(options.resume_checkpoint_path, resume_checkpoint, error)) {
+    if (!soak::LoadCheckpoint(options.resume_checkpoint_path, resume_checkpoint, error)) {
       logger.Error("failed to load soak checkpoint",
                    {{"checkpoint", options.resume_checkpoint_path.string()}, {"error", error}});
       std::cerr << "error: failed to load soak checkpoint: " << error << '\n';
@@ -2428,7 +2053,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
                 << resume_checkpoint.scenario_path.string() << '\n';
       return kExitFailure;
     }
-    if (resume_checkpoint.status == SoakCheckpointStatus::kCompleted) {
+    if (resume_checkpoint.status == soak::CheckpointStatus::kCompleted) {
       logger.Error("resume requested for already completed checkpoint");
       std::cerr << "error: checkpoint is already completed\n";
       return kExitFailure;
@@ -2457,7 +2082,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
                                 ? (bundle_dir / "soak_frames.jsonl")
                                 : resume_checkpoint.frame_cache_path;
 
-    if (!LoadSoakFrameCache(soak_frame_cache_path, frames, error)) {
+    if (!soak::LoadFrameCache(soak_frame_cache_path, frames, error)) {
       logger.Error("failed to load soak frame cache",
                    {{"path", soak_frame_cache_path.string()}, {"error", error}});
       std::cerr << "error: failed to load soak frame cache: " << error << '\n';
@@ -2752,7 +2377,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     }
 
     std::chrono::milliseconds remaining_duration = run_plan.duration - completed_duration;
-    SoakCheckpointState checkpoint_state;
+    soak::CheckpointState checkpoint_state;
     checkpoint_state.run_id = run_info.run_id;
     checkpoint_state.scenario_path = fs::path(options.scenario_path);
     checkpoint_state.bundle_dir = bundle_dir;
@@ -2765,7 +2390,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     checkpoint_state.frames_dropped = dropped_count;
     checkpoint_state.timestamps = run_info.timestamps;
     checkpoint_state.updated_at = std::chrono::system_clock::now();
-    checkpoint_state.status = SoakCheckpointStatus::kRunning;
+    checkpoint_state.status = soak::CheckpointStatus::kRunning;
     checkpoint_state.stop_reason.clear();
 
     while (remaining_duration > std::chrono::milliseconds::zero()) {
@@ -2800,7 +2425,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
       }
 
       if (!normalized_chunk.empty() &&
-          !AppendSoakFrameCache(normalized_chunk, soak_frame_cache_path, error)) {
+          !soak::AppendFrameCache(normalized_chunk, soak_frame_cache_path, error)) {
         logger.Error("failed to append soak frame cache", {{"error", error}});
         stop_if_started();
         std::cerr << "error: failed to append soak frame cache: " << error << '\n';
@@ -2818,11 +2443,11 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
       checkpoint_state.frames_received = received_count;
       checkpoint_state.frames_dropped = dropped_count;
       checkpoint_state.updated_at = std::chrono::system_clock::now();
-      checkpoint_state.status = SoakCheckpointStatus::kRunning;
+      checkpoint_state.status = soak::CheckpointStatus::kRunning;
       checkpoint_state.stop_reason.clear();
       ++checkpoint_state.checkpoints_written;
-      if (!WriteSoakCheckpointArtifacts(checkpoint_state, soak_checkpoint_latest_path,
-                                        soak_checkpoint_history_path, error)) {
+      if (!soak::WriteCheckpointArtifacts(checkpoint_state, soak_checkpoint_latest_path,
+                                          soak_checkpoint_history_path, error)) {
         logger.Error("failed to write soak checkpoint", {{"error", error}});
         stop_if_started();
         std::cerr << "error: failed to write soak checkpoint: " << error << '\n';
@@ -2847,7 +2472,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
 
       const std::string stop_reason = ResolveSoakStopReason(options);
       if (!stop_reason.empty() && remaining_duration > std::chrono::milliseconds::zero()) {
-        checkpoint_state.status = SoakCheckpointStatus::kPaused;
+        checkpoint_state.status = soak::CheckpointStatus::kPaused;
         checkpoint_state.stop_reason = stop_reason;
         checkpoint_state.timestamps.finished_at = std::chrono::system_clock::now();
         checkpoint_state.updated_at = checkpoint_state.timestamps.finished_at;
@@ -2858,8 +2483,8 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
           checkpoint_state.timestamps.finished_at = latest_frame_ts.value();
           checkpoint_state.updated_at = latest_frame_ts.value();
         }
-        if (!WriteSoakCheckpointArtifacts(checkpoint_state, soak_checkpoint_latest_path,
-                                          soak_checkpoint_history_path, error)) {
+        if (!soak::WriteCheckpointArtifacts(checkpoint_state, soak_checkpoint_latest_path,
+                                            soak_checkpoint_history_path, error)) {
           logger.Error("failed to persist paused soak checkpoint", {{"error", error}});
           stop_if_started();
           std::cerr << "error: failed to persist paused soak checkpoint: " << error << '\n';
@@ -2950,7 +2575,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
       }
     }
 
-    checkpoint_state.status = SoakCheckpointStatus::kCompleted;
+    checkpoint_state.status = soak::CheckpointStatus::kCompleted;
     checkpoint_state.stop_reason = "completed";
     checkpoint_state.completed_duration = run_plan.duration;
     checkpoint_state.frames_total = static_cast<std::uint64_t>(frames.size());
@@ -2965,8 +2590,8 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
       checkpoint_state.updated_at = latest_frame_ts.value();
     }
     ++checkpoint_state.checkpoints_written;
-    if (!WriteSoakCheckpointArtifacts(checkpoint_state, soak_checkpoint_latest_path,
-                                      soak_checkpoint_history_path, error)) {
+    if (!soak::WriteCheckpointArtifacts(checkpoint_state, soak_checkpoint_latest_path,
+                                        soak_checkpoint_history_path, error)) {
       logger.Error("failed to write final soak checkpoint", {{"error", error}});
       stop_if_started();
       std::cerr << "error: failed to write final soak checkpoint: " << error << '\n';
