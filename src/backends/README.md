@@ -33,6 +33,8 @@ The project needs one consistent workflow that can run on different camera stack
     behavior until vendor SDK frame adapter calls are integrated.
   - real acquisition lifecycle now runs through a dedicated stream-session RAII
     guard so start/stop stays safe in error paths and stop remains idempotent.
+  - current OSS loop emits deterministic frame outcomes (`received`, `timeout`,
+    `incomplete`) so run artifacts/metrics remain meaningful without hardware.
   - `SdkContext` provides one-time process SDK init/shutdown via RAII so
     startup/teardown are safe across repeated runs and tests.
   - `DeviceInfo` + discovery mapping normalize SDK camera descriptors into

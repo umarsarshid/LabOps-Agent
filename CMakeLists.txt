@@ -439,6 +439,17 @@ add_labops_smoke_test(
     labops_backends
 )
 
+# Smoke test for real-backend single-thread frame acquisition:
+# deterministic per-frame outcomes with metrics-ready samples.
+add_labops_smoke_test(
+  NAME real_frame_acquisition_smoke
+  SOURCES
+    tests/backends/real_frame_acquisition_smoke.cpp
+  LIBRARIES
+    labops_backends
+    labops_metrics
+)
+
 # Smoke test for real device enumeration and descriptor normalization.
 add_labops_smoke_test(
   NAME real_device_enumeration_smoke

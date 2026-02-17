@@ -2229,6 +2229,27 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
 
   auto append_frame_event = [&](const backends::FrameSample& frame) {
     const bool dropped = frame.dropped.has_value() && frame.dropped.value();
+    events::EventType event_type = events::EventType::kFrameReceived;
+    std::string drop_reason;
+    switch (frame.outcome) {
+    case backends::FrameOutcome::kDropped:
+      event_type = events::EventType::kFrameDropped;
+      drop_reason = "sim_fault_injection";
+      break;
+    case backends::FrameOutcome::kTimeout:
+      event_type = events::EventType::kFrameTimeout;
+      drop_reason = "acquisition_timeout";
+      break;
+    case backends::FrameOutcome::kIncomplete:
+      event_type = events::EventType::kFrameIncomplete;
+      drop_reason = "incomplete_frame";
+      break;
+    case backends::FrameOutcome::kReceived:
+    default:
+      event_type = events::EventType::kFrameReceived;
+      break;
+    }
+
     if (!latest_frame_ts.has_value() || frame.timestamp > latest_frame_ts.value()) {
       latest_frame_ts = frame.timestamp;
     }
@@ -2245,12 +2266,10 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
         {"dropped", dropped ? "true" : "false"},
     };
     if (dropped) {
-      payload["reason"] = "sim_fault_injection";
+      payload["reason"] = drop_reason.empty() ? "backend_marked_dropped" : drop_reason;
     }
-
-    return AppendTraceEvent(dropped ? events::EventType::kFrameDropped
-                                    : events::EventType::kFrameReceived,
-                            frame.timestamp, std::move(payload), bundle_dir, events_path, error);
+    return AppendTraceEvent(event_type, frame.timestamp, std::move(payload), bundle_dir,
+                            events_path, error);
   };
 
   ScopedInterruptSignalHandler scoped_signal_handler(options.soak_mode);

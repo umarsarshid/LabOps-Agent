@@ -91,12 +91,12 @@ int main() {
     }
 
     std::string pull_error;
-    const auto frames = backend->PullFrames(std::chrono::milliseconds(100), pull_error);
-    if (!frames.empty()) {
-      Fail("expected no frames from current real backend implementation");
+    const auto frames = backend->PullFrames(std::chrono::milliseconds(1'000), pull_error);
+    if (!pull_error.empty()) {
+      Fail("expected real backend pull_frames to succeed when enabled");
     }
-    if (pull_error.empty()) {
-      Fail("expected actionable pull_frames error from current real backend implementation");
+    if (frames.empty()) {
+      Fail("expected real backend pull_frames to return samples when enabled");
     }
 
     if (!backend->Stop(error)) {

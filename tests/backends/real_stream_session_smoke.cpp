@@ -74,12 +74,12 @@ int main() {
       AssertConfigState(backend, "true", "true");
 
       std::string pull_error;
-      const auto frames = backend.PullFrames(std::chrono::milliseconds(20), pull_error);
-      if (!frames.empty()) {
-        Fail("expected no frames from real backend skeleton");
+      const auto frames = backend.PullFrames(std::chrono::milliseconds(250), pull_error);
+      if (!pull_error.empty()) {
+        Fail("expected real backend pull_frames to succeed while running");
       }
-      if (pull_error.empty()) {
-        Fail("expected actionable pull_frames error while adapter is incomplete");
+      if (frames.empty()) {
+        Fail("expected real backend pull_frames to return samples");
       }
 
       if (!backend.Stop(error)) {

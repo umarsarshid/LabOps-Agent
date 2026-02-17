@@ -5,6 +5,7 @@
 #include "backends/real_sdk/stream_session.hpp"
 
 #include <chrono>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -36,6 +37,8 @@ private:
   StreamSession stream_session_;
   BackendConfig params_;
   bool connected_ = false;
+  std::uint64_t next_frame_id_ = 0;
+  std::chrono::system_clock::time_point stream_start_ts_{};
 };
 
 } // namespace labops::backends::real_sdk

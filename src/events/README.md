@@ -27,6 +27,8 @@ Debugging camera failures requires timeline evidence, not just summary metrics. 
 - `STREAM_STARTED`
 - `FRAME_RECEIVED`
 - `FRAME_DROPPED`
+- `FRAME_TIMEOUT`
+- `FRAME_INCOMPLETE`
 - `STREAM_STOPPED`
 
 ## Key design principle

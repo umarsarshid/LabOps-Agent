@@ -28,6 +28,9 @@ stable interface regardless of real hardware availability.
 - `real_stream_session_smoke.cpp`: validates repeated real-backend
   connect/start/stop cycles, idempotent stop semantics, and SDK-context cleanup
   between runs to prevent lifecycle leaks.
+- `real_frame_acquisition_smoke.cpp`: validates single-thread real-frame pull
+  loop behavior (timestamp progression plus received/timeout/incomplete
+  outcomes) and confirms metrics are computable from real-backend samples.
 - `real_device_enumeration_smoke.cpp`: validates real-device descriptor
   enumeration/mapping into normalized `DeviceInfo` fields (including transport
   normalization and optional IP/MAC/version handling).

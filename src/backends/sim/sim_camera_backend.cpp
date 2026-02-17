@@ -251,6 +251,9 @@ std::vector<FrameSample> SimCameraBackend::PullFrames(std::chrono::milliseconds 
     frame.size_bytes = is_dropped ? 0U : frame_size_bytes;
     if (is_dropped) {
       frame.dropped = true;
+      frame.outcome = FrameOutcome::kDropped;
+    } else {
+      frame.outcome = FrameOutcome::kReceived;
     }
 
     frames.push_back(frame);

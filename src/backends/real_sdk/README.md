@@ -38,11 +38,13 @@ This folder is that bridge.
   - `RealBackend` implements `ICameraBackend`.
   - `connect/start/stop` lifecycle is now wired through SDK/context-safe RAII.
   - stop behavior is idempotent so repeated cleanup paths stay safe.
-  - behavior is still deterministic and frame retrieval is intentionally
-    unimplemented until vendor adapter wiring lands.
+  - includes a deterministic single-thread frame acquisition loop that emits
+    per-frame outcomes (`received`, `timeout`, `incomplete`) in OSS builds.
+  - uses seeded outcome generation so repeated runs produce stable evidence
+    while vendor pull APIs are still being integrated.
   - uses `SdkContext` RAII to guard process-level SDK init/shutdown safely.
-  - returns actionable "not implemented yet" errors where frame adapter calls
-    will land.
+  - keeps lifecycle and timestamp scaffolding aligned with future vendor pull
+    adapter wiring.
 - `stream_session.hpp` / `stream_session.cpp`:
   - encapsulates acquisition start/stop semantics for real backend runs.
   - guarantees best-effort stop in destructor and idempotent explicit stop calls.

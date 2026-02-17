@@ -9,6 +9,18 @@
 
 namespace labops::backends {
 
+// Normalized per-frame acquisition outcome used by event emission.
+//
+// `kDropped` remains the generic bucket used by sim fault injection.
+// Real-backend acquisition can provide richer outcomes (`kTimeout`,
+// `kIncomplete`) while preserving dropped/received metrics behavior.
+enum class FrameOutcome {
+  kReceived = 0,
+  kDropped,
+  kTimeout,
+  kIncomplete,
+};
+
 // Minimal frame representation for backend contract validation.
 //
 // This is intentionally lightweight for milestone scaffolding; richer metadata
@@ -19,6 +31,7 @@ struct FrameSample {
   std::chrono::system_clock::time_point timestamp{};
   std::uint32_t size_bytes = 0;
   std::optional<bool> dropped;
+  FrameOutcome outcome = FrameOutcome::kReceived;
 };
 
 using BackendConfig = std::map<std::string, std::string>;
