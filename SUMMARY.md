@@ -1,109 +1,167 @@
 # Commit Summary
 
 ## Commit
-`refactor(core): unify shared JSON parser for scenarios and agent`
+`feat(metrics): classify timeouts vs incomplete vs drops`
 
 ## What I Implemented
 
-I removed duplicated JSON parser implementations from:
-- `src/scenarios/validator.cpp`
-- `src/agent/variant_generator.cpp`
+This commit splits dropped-frame metrics into three explicit categories so engineers can tell exactly what kind of failure happened:
+- generic drops
+- acquisition timeouts
+- incomplete frames
 
-and replaced both with one shared parser in:
-- `src/core/json_dom.hpp`
+The split is now reflected consistently in:
+- in-memory metrics (`FpsReport`)
+- persisted artifacts (`metrics.csv`, `metrics.json`)
+- human summaries (`summary.md`, `report.html`)
+- anomaly text
+- CLI run output
+- tests and bundle spec docs
 
-## Why This Matters
+## Why This Was Needed
 
-Before this change, both modules had their own full parser copy. That caused two maintenance problems:
-1. Bug fixes had to be duplicated.
-2. Parser behavior could drift subtly between scenario validation and agent variant generation.
+Before this change, all non-received frames were effectively one "drop" bucket. That hid useful triage signal:
+- timeout-heavy runs usually indicate acquisition/transport wait problems
+- incomplete-heavy runs usually indicate payload integrity issues
+- generic drops can reflect simulated fault injection or other non-timeout loss
 
-Now both modules parse JSON with the same code path, so parser fixes and features are applied once.
+Separating these counters makes triage faster and reduces guesswork.
 
-## File-by-File Changes
+## Detailed Changes
 
-### 1) Added shared parser module
-- **Added**: `src/core/json_dom.hpp`
-
-What it contains:
-- `labops::core::json::Value` (shared lightweight JSON DOM)
-- `labops::core::json::Parser` (shared parser implementation)
-- `Parse(...)` helper wrapper
-
-Parser behavior kept aligned with previous validator parser quality:
-- supports object/array/string/number/bool/null
-- same basic escape behavior
-- explicit unsupported unicode escape error (`\\uXXXX`)
-- line/column parse diagnostics (`parse error at line X, col Y: ...`)
-
-Why:
-- one parser implementation across modules
-- no extra external dependency
-- header-only integration kept build changes minimal
-
-### 2) Rewired scenario validator to shared parser
-- **Updated**: `src/scenarios/validator.cpp`
+### 1) Extended metrics contract with explicit category counters/rates
+Files:
+- `src/metrics/fps.hpp`
+- `src/metrics/fps.cpp`
 
 Changes:
-- Added include: `core/json_dom.hpp`
-- Removed local duplicated `JsonValue` + `JsonParser` implementation
-- Added aliases:
-  - `using JsonValue = core::json::Value;`
-  - `using JsonParser = core::json::Parser;`
+- Added new `FpsReport` totals:
+  - `dropped_generic_frames_total`
+  - `timeout_frames_total`
+  - `incomplete_frames_total`
+- Added new `FpsReport` rates:
+  - `generic_drop_rate_percent`
+  - `timeout_rate_percent`
+  - `incomplete_rate_percent`
+- Updated computation logic to classify frames by `FrameOutcome`:
+  - `kTimeout` -> timeout bucket + total dropped
+  - `kIncomplete` -> incomplete bucket + total dropped
+  - `kDropped` -> generic dropped bucket + total dropped
+- Added backward-compatible fallback:
+  - if legacy sample has `outcome=kReceived` but `dropped=true`, classify as generic dropped.
 
 Why:
-- scenario validation now uses the shared parser while keeping existing validator logic and issue reporting flow unchanged.
+- keeps old fixtures/runs working while introducing richer classification for new data.
 
-### 3) Rewired OAAT variant generator to shared parser
-- **Updated**: `src/agent/variant_generator.cpp`
+### 2) Persisted new categories in machine and spreadsheet artifacts
+File:
+- `src/artifacts/metrics_writer.cpp`
 
 Changes:
-- Added include: `core/json_dom.hpp`
-- Removed local duplicated `JsonValue` + `JsonParser` implementation
-- Added aliases:
-  - `using JsonValue = core::json::Value;`
-  - `using JsonParser = core::json::Parser;`
+- `metrics.csv` now includes:
+  - `drops_generic_total`
+  - `timeouts_total`
+  - `incomplete_total`
+  - `generic_drop_rate_percent`
+  - `timeout_rate_percent`
+  - `incomplete_rate_percent`
+- `metrics.json` now includes matching total/rate fields.
 
 Why:
-- agent variant generation now parses with the same implementation as scenario validation, eliminating duplication and divergence.
+- agent and automation need machine-readable category metrics.
+- engineers exporting CSV need category visibility for quick plots.
 
-### 4) Updated core module docs
-- **Updated**: `src/core/README.md`
+### 3) Exposed category metrics in human-facing summaries
+Files:
+- `src/artifacts/run_summary_writer.cpp`
+- `src/artifacts/html_report_writer.cpp`
 
-Added `json_dom.hpp` in current contents section.
+Changes:
+- Added category totals/rates to key metric sections.
+- Added category rate rows to HTML diff table.
 
 Why:
-- keeps module-level documentation accurate for future engineers.
+- one-page summaries should show root-signal metrics without requiring raw JSON inspection.
+
+### 4) Updated anomaly and CLI quick output to include breakdown
+Files:
+- `src/metrics/anomalies.cpp`
+- `src/labops/cli/router.cpp`
+
+Changes:
+- Drop anomaly now prints:
+  - total drop count/rate plus
+  - generic/timeout/incomplete breakdown.
+- run console line (`drops:`) now includes all three category counts.
+
+Why:
+- improves immediate triage signal during live runs and in summary text.
+
+### 5) Kept metric compare output order aligned
+File:
+- `src/artifacts/metrics_diff_writer.cpp`
+
+Changes:
+- Added new category totals/rates to preferred metric ordering.
+
+Why:
+- keeps diffs stable and readable when comparing baseline vs run.
+
+### 6) Updated module and contract docs
+Files:
+- `src/metrics/README.md`
+- `docs/triage_bundle_spec.md`
+
+Changes:
+- documented the new category split in metrics module README.
+- expanded bundle spec metric contract for CSV/JSON fields and formulas.
+
+Why:
+- prevents drift between implementation and expected artifact schema.
+
+### 7) Expanded test coverage for category separation
+Files:
+- `tests/metrics/fps_metrics_smoke.cpp`
+- `tests/metrics/drop_injection_smoke.cpp`
+- `tests/backends/real_frame_acquisition_smoke.cpp`
+- `tests/artifacts/metrics_writers_smoke.cpp`
+- `tests/artifacts/html_report_writer_smoke.cpp`
+- `tests/scenarios/sim_baseline_metrics_integration_smoke.cpp`
+
+Coverage added:
+- mixed-outcome fixture validates total + per-category counters/rates.
+- sim drop injection validates generic bucket only.
+- real acquisition smoke validates timeout/incomplete buckets map correctly.
+- artifact writers include all new fields.
+- baseline integration confirms category fields exist and are zero for clean run.
+
+Why:
+- ensures category split is correct in compute path, serialization path, and integration path.
 
 ## Verification Performed
 
-### Formatting
+### Format
+- `bash tools/clang_format.sh --check` (initially failed)
+- `bash tools/clang_format.sh --fix`
 - `bash tools/clang_format.sh --check`
-- Result: **pass**.
+- Result: pass
 
 ### Build
 - `cmake --build build`
-- Result: **pass**.
+- Result: pass
 
-### Targeted tests for changed behavior
-- `ctest --test-dir build -R "(scenario_validation_smoke|oaat_variant_generator_smoke|agent_triage_integration_smoke)" --output-on-failure`
-- Result: **3/3 passed**.
-
-### Full regression run
+### Tests
 - `ctest --test-dir build --output-on-failure`
-- Result: **55/56 passed**.
-- Existing known failure remains unchanged:
-  - `starter_scenarios_e2e_smoke`
-  - reason: `trigger_roi.json` run-plan parser issue (`scenario camera.roi must include x, y, width, and height`), unrelated to this shared-parser refactor.
+- Result: pass (`58/58`)
 
 ## Risk Assessment
 
-Risk is low because:
-- this change is scoped to parser code deduplication and direct wiring
-- targeted tests for both consumers (validator + variant generator) pass
-- agent integration smoke also passes
-- no behavior-changing schema logic was altered
+Low:
+- additive metric fields and derived formulas
+- no removal of existing fields (`dropped_frames_total`, `drop_rate_percent` remain)
+- legacy compatibility fallback included for older frame samples
+- full smoke suite passed
 
 ## Outcome
 
-The repository now has one shared JSON parser used by both scenario validation and agent variant generation, removing duplicated parser code and reducing long-term maintenance risk.
+LabOps now reports dropped frame causes separately (generic vs timeout vs incomplete) across compute, artifact, and summary layers, so engineers can triage failures with much better signal and less ambiguity.
