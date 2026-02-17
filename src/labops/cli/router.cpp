@@ -19,6 +19,7 @@
 #include "backends/sim/scenario_config.hpp"
 #include "backends/sim/sim_camera_backend.hpp"
 #include "core/errors/exit_codes.hpp"
+#include "core/json_dom.hpp"
 #include "core/schema/run_contract.hpp"
 #include "events/event_model.hpp"
 #include "events/jsonl_writer.hpp"
@@ -66,6 +67,9 @@ namespace {
 
 constexpr std::string_view kBackendSim = "sim";
 constexpr std::string_view kBackendRealStub = "real_stub";
+
+using JsonValue = core::json::Value;
+using JsonParser = core::json::Parser;
 
 // Keep local names for readability while using one shared core contract.
 constexpr int kExitSuccess = core::errors::ToInt(core::errors::ExitCode::kSuccess);
@@ -714,190 +718,96 @@ bool ResolveMetricsCsvPath(const fs::path& input_path, fs::path& metrics_csv_pat
   return false;
 }
 
-// Lightweight numeric field extraction for milestone wiring.
-// This intentionally supports only unsigned integer fields.
-std::optional<std::uint64_t> FindUnsignedJsonField(const std::string& text, std::string_view key) {
-  const std::string needle = "\"" + std::string(key) + "\"";
-  const std::size_t key_pos = text.find(needle);
-  if (key_pos == std::string::npos) {
-    return std::nullopt;
+const JsonValue* FindObjectMember(const JsonValue& object_value, std::string_view key) {
+  if (object_value.type != JsonValue::Type::kObject) {
+    return nullptr;
   }
-
-  const std::size_t colon_pos = text.find(':', key_pos + needle.size());
-  if (colon_pos == std::string::npos) {
-    return std::nullopt;
+  const auto it = object_value.object_value.find(std::string(key));
+  if (it == object_value.object_value.end()) {
+    return nullptr;
   }
-
-  std::size_t value_pos = colon_pos + 1;
-  while (value_pos < text.size() &&
-         std::isspace(static_cast<unsigned char>(text[value_pos])) != 0) {
-    ++value_pos;
-  }
-
-  const std::size_t start = value_pos;
-  while (value_pos < text.size() &&
-         std::isdigit(static_cast<unsigned char>(text[value_pos])) != 0) {
-    ++value_pos;
-  }
-
-  if (start == value_pos) {
-    return std::nullopt;
-  }
-
-  std::uint64_t parsed = 0;
-  const auto* begin = text.data() + static_cast<std::ptrdiff_t>(start);
-  const auto* end = text.data() + static_cast<std::ptrdiff_t>(value_pos);
-  const auto [ptr, ec] = std::from_chars(begin, end, parsed);
-  if (ec != std::errc() || ptr != end) {
-    return std::nullopt;
-  }
-
-  return parsed;
+  return &it->second;
 }
 
-// Lightweight floating-point field extraction for threshold wiring.
-// Supports JSON number forms:
-// - 123
-// - 123.45
-// - 1.23e+3
-std::optional<double> FindNumberJsonField(const std::string& text, std::string_view key) {
-  const std::string needle = "\"" + std::string(key) + "\"";
-  const std::size_t key_pos = text.find(needle);
-  if (key_pos == std::string::npos) {
-    return std::nullopt;
-  }
-
-  const std::size_t colon_pos = text.find(':', key_pos + needle.size());
-  if (colon_pos == std::string::npos) {
-    return std::nullopt;
-  }
-
-  std::size_t value_pos = colon_pos + 1;
-  while (value_pos < text.size() &&
-         std::isspace(static_cast<unsigned char>(text[value_pos])) != 0) {
-    ++value_pos;
-  }
-
-  const std::size_t start = value_pos;
-  if (value_pos < text.size() && (text[value_pos] == '+' || text[value_pos] == '-')) {
-    ++value_pos;
-  }
-
-  bool has_digits = false;
-  while (value_pos < text.size() &&
-         std::isdigit(static_cast<unsigned char>(text[value_pos])) != 0) {
-    ++value_pos;
-    has_digits = true;
-  }
-
-  if (value_pos < text.size() && text[value_pos] == '.') {
-    ++value_pos;
-    while (value_pos < text.size() &&
-           std::isdigit(static_cast<unsigned char>(text[value_pos])) != 0) {
-      ++value_pos;
-      has_digits = true;
+const JsonValue* FindJsonPath(const JsonValue& root, std::initializer_list<std::string_view> path) {
+  const JsonValue* cursor = &root;
+  for (const std::string_view key : path) {
+    cursor = FindObjectMember(*cursor, key);
+    if (cursor == nullptr) {
+      return nullptr;
     }
   }
-
-  if (!has_digits) {
-    return std::nullopt;
-  }
-
-  if (value_pos < text.size() && (text[value_pos] == 'e' || text[value_pos] == 'E')) {
-    ++value_pos;
-    if (value_pos < text.size() && (text[value_pos] == '+' || text[value_pos] == '-')) {
-      ++value_pos;
-    }
-
-    std::size_t exponent_digits = 0;
-    while (value_pos < text.size() &&
-           std::isdigit(static_cast<unsigned char>(text[value_pos])) != 0) {
-      ++value_pos;
-      ++exponent_digits;
-    }
-    if (exponent_digits == 0U) {
-      return std::nullopt;
-    }
-  }
-
-  const std::string value_text = text.substr(start, value_pos - start);
-  char* parse_end = nullptr;
-  const double parsed = std::strtod(value_text.c_str(), &parse_end);
-  if (parse_end == nullptr || *parse_end != '\0') {
-    return std::nullopt;
-  }
-  if (!std::isfinite(parsed)) {
-    return std::nullopt;
-  }
-
-  return parsed;
+  return cursor;
 }
 
-// Lightweight string extraction for top-level milestone wiring.
-// Supports common JSON string escapes used in scenario/profile metadata.
-std::optional<std::string> FindStringJsonField(const std::string& text, std::string_view key) {
-  const std::string needle = "\"" + std::string(key) + "\"";
-  const std::size_t key_pos = text.find(needle);
-  if (key_pos == std::string::npos) {
-    return std::nullopt;
+// Run parsing keeps support for both canonical schema paths and historical
+// flat fixture keys so old smoke tests and internal scripts continue to work.
+const JsonValue* FindScenarioField(const JsonValue& root,
+                                   std::initializer_list<std::string_view> canonical_path,
+                                   std::initializer_list<std::string_view> legacy_path = {}) {
+  if (const JsonValue* value = FindJsonPath(root, canonical_path); value != nullptr) {
+    return value;
+  }
+  if (legacy_path.size() == 0U) {
+    return nullptr;
+  }
+  return FindJsonPath(root, legacy_path);
+}
+
+bool TryGetNonNegativeInteger(const JsonValue& value, std::uint64_t& out) {
+  if (value.type != JsonValue::Type::kNumber) {
+    return false;
+  }
+  if (!std::isfinite(value.number_value) || value.number_value < 0.0) {
+    return false;
+  }
+  const double floored = std::floor(value.number_value);
+  if (floored != value.number_value ||
+      floored > static_cast<double>(std::numeric_limits<std::uint64_t>::max())) {
+    return false;
+  }
+  out = static_cast<std::uint64_t>(floored);
+  return true;
+}
+
+bool TryGetFiniteNumber(const JsonValue& value, double& out) {
+  if (value.type != JsonValue::Type::kNumber || !std::isfinite(value.number_value)) {
+    return false;
+  }
+  out = value.number_value;
+  return true;
+}
+
+bool BuildRoiParamValue(const JsonValue& roi, std::string& roi_value, std::string& error) {
+  roi_value.clear();
+  error.clear();
+  if (roi.type != JsonValue::Type::kObject) {
+    error = "scenario camera.roi must include x, y, width, and height";
+    return false;
   }
 
-  const std::size_t colon_pos = text.find(':', key_pos + needle.size());
-  if (colon_pos == std::string::npos) {
-    return std::nullopt;
-  }
-
-  std::size_t value_pos = colon_pos + 1;
-  while (value_pos < text.size() &&
-         std::isspace(static_cast<unsigned char>(text[value_pos])) != 0) {
-    ++value_pos;
-  }
-  if (value_pos >= text.size() || text[value_pos] != '"') {
-    return std::nullopt;
-  }
-  ++value_pos;
-
-  std::string parsed;
-  while (value_pos < text.size()) {
-    const char c = text[value_pos++];
-    if (c == '"') {
-      return parsed;
+  auto read_required_non_negative_integer = [&](std::string_view key, std::uint64_t& parsed_value) {
+    const JsonValue* value = FindObjectMember(roi, key);
+    if (value == nullptr) {
+      return false;
     }
-    if (c == '\\') {
-      if (value_pos >= text.size()) {
-        return std::nullopt;
-      }
-      const char esc = text[value_pos++];
-      switch (esc) {
-      case '"':
-      case '\\':
-      case '/':
-        parsed.push_back(esc);
-        break;
-      case 'b':
-        parsed.push_back('\b');
-        break;
-      case 'f':
-        parsed.push_back('\f');
-        break;
-      case 'n':
-        parsed.push_back('\n');
-        break;
-      case 'r':
-        parsed.push_back('\r');
-        break;
-      case 't':
-        parsed.push_back('\t');
-        break;
-      default:
-        return std::nullopt;
-      }
-      continue;
-    }
-    parsed.push_back(c);
+    return TryGetNonNegativeInteger(*value, parsed_value);
+  };
+
+  std::uint64_t x = 0;
+  std::uint64_t y = 0;
+  std::uint64_t width = 0;
+  std::uint64_t height = 0;
+  if (!read_required_non_negative_integer("x", x) || !read_required_non_negative_integer("y", y) ||
+      !read_required_non_negative_integer("width", width) ||
+      !read_required_non_negative_integer("height", height)) {
+    error = "scenario camera.roi must include x, y, width, and height";
+    return false;
   }
 
-  return std::nullopt;
+  roi_value = "x=" + std::to_string(x) + ",y=" + std::to_string(y) +
+              ",width=" + std::to_string(width) + ",height=" + std::to_string(height);
+  return true;
 }
 
 std::string FormatCompactDouble(double value) {
@@ -928,92 +838,6 @@ void UpsertRealParam(std::vector<backends::real_sdk::ApplyParamInput>& params, s
                                                        .requested_value = std::move(value)});
 }
 
-bool ExtractJsonObjectField(std::string_view text, std::string_view key, std::string& object_text) {
-  object_text.clear();
-  const std::string needle = "\"" + std::string(key) + "\"";
-  const std::size_t key_pos = text.find(needle);
-  if (key_pos == std::string_view::npos) {
-    return false;
-  }
-
-  const std::size_t colon_pos = text.find(':', key_pos + needle.size());
-  if (colon_pos == std::string_view::npos) {
-    return false;
-  }
-
-  std::size_t cursor = colon_pos + 1;
-  while (cursor < text.size() && std::isspace(static_cast<unsigned char>(text[cursor])) != 0) {
-    ++cursor;
-  }
-  if (cursor >= text.size() || text[cursor] != '{') {
-    return false;
-  }
-
-  const std::size_t start = cursor;
-  std::size_t depth = 0;
-  bool in_string = false;
-  bool escaped = false;
-  for (; cursor < text.size(); ++cursor) {
-    const char c = text[cursor];
-    if (in_string) {
-      if (escaped) {
-        escaped = false;
-      } else if (c == '\\') {
-        escaped = true;
-      } else if (c == '"') {
-        in_string = false;
-      }
-      continue;
-    }
-
-    if (c == '"') {
-      in_string = true;
-      continue;
-    }
-    if (c == '{') {
-      ++depth;
-      continue;
-    }
-    if (c == '}') {
-      if (depth == 0U) {
-        return false;
-      }
-      --depth;
-      if (depth == 0U) {
-        object_text = std::string(text.substr(start, cursor - start + 1));
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-bool BuildRoiParamValue(const std::string& scenario_text, std::string& roi_value,
-                        std::string& error) {
-  roi_value.clear();
-  error.clear();
-
-  std::string roi_object;
-  if (!ExtractJsonObjectField(scenario_text, "roi", roi_object)) {
-    return false;
-  }
-
-  const auto x = FindUnsignedJsonField(roi_object, "x");
-  const auto y = FindUnsignedJsonField(roi_object, "y");
-  const auto width = FindUnsignedJsonField(roi_object, "width");
-  const auto height = FindUnsignedJsonField(roi_object, "height");
-  if (!x.has_value() || !y.has_value() || !width.has_value() || !height.has_value()) {
-    error = "scenario camera.roi must include x, y, width, and height";
-    return false;
-  }
-
-  roi_value = "x=" + std::to_string(x.value()) + ",y=" + std::to_string(y.value()) +
-              ",width=" + std::to_string(width.value()) +
-              ",height=" + std::to_string(height.value());
-  return true;
-}
-
 std::string FormatShellDouble(double value) {
   std::ostringstream out;
   out << std::fixed << std::setprecision(3) << value;
@@ -1036,16 +860,29 @@ bool LoadNetemProfileDefinition(const fs::path& profile_path, NetemProfileDefini
     return false;
   }
 
+  JsonValue profile_root;
+  JsonParser parser(profile_text);
+  std::string parse_error;
+  if (!parser.Parse(profile_root, parse_error)) {
+    error = "invalid netem profile JSON: " + parse_error;
+    return false;
+  }
+  if (profile_root.type != JsonValue::Type::kObject) {
+    error = "netem profile root must be a JSON object";
+    return false;
+  }
+
   auto read_non_negative_number = [&](std::string_view key, double& target) {
-    const auto value = FindNumberJsonField(profile_text, key);
-    if (!value.has_value()) {
+    const JsonValue* value = FindScenarioField(profile_root, {"netem", key}, {key});
+    if (value == nullptr) {
       return true;
     }
-    if (!std::isfinite(value.value()) || value.value() < 0.0) {
+    double parsed = 0.0;
+    if (!TryGetFiniteNumber(*value, parsed) || parsed < 0.0) {
       error = "netem profile field must be a non-negative number for key: " + std::string(key);
       return false;
     }
-    target = value.value();
+    target = parsed;
     return true;
   };
 
@@ -1256,9 +1093,64 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
     return false;
   }
 
-  auto assign_u32 = [&](std::string_view key, std::uint32_t& target,
+  JsonValue scenario_root;
+  JsonParser parser(scenario_text);
+  std::string parse_error;
+  if (!parser.Parse(scenario_root, parse_error)) {
+    error = "invalid scenario JSON: " + parse_error;
+    return false;
+  }
+  if (scenario_root.type != JsonValue::Type::kObject) {
+    error = "scenario root must be a JSON object";
+    return false;
+  }
+
+  // Keep run-path behavior backwards compatible with old fixtures:
+  // if a field is present but has an unexpected type, we treat it as unset.
+  // `labops validate` remains the authoritative strict schema gate.
+  auto read_u64 =
+      [&](std::initializer_list<std::string_view> canonical_path,
+          std::initializer_list<std::string_view> legacy_path) -> std::optional<std::uint64_t> {
+    const JsonValue* value = FindScenarioField(scenario_root, canonical_path, legacy_path);
+    if (value == nullptr) {
+      return std::nullopt;
+    }
+    std::uint64_t parsed = 0;
+    if (!TryGetNonNegativeInteger(*value, parsed)) {
+      return std::nullopt;
+    }
+    return parsed;
+  };
+
+  auto read_number =
+      [&](std::initializer_list<std::string_view> canonical_path,
+          std::initializer_list<std::string_view> legacy_path) -> std::optional<double> {
+    const JsonValue* value = FindScenarioField(scenario_root, canonical_path, legacy_path);
+    if (value == nullptr) {
+      return std::nullopt;
+    }
+    double parsed = 0.0;
+    if (!TryGetFiniteNumber(*value, parsed)) {
+      return std::nullopt;
+    }
+    return parsed;
+  };
+
+  auto read_string =
+      [&](std::initializer_list<std::string_view> canonical_path,
+          std::initializer_list<std::string_view> legacy_path) -> std::optional<std::string> {
+    const JsonValue* value = FindScenarioField(scenario_root, canonical_path, legacy_path);
+    if (value == nullptr || value->type != JsonValue::Type::kString) {
+      return std::nullopt;
+    }
+    return value->string_value;
+  };
+
+  auto assign_u32 = [&](std::string_view key,
+                        std::initializer_list<std::string_view> canonical_path,
+                        std::initializer_list<std::string_view> legacy_path, std::uint32_t& target,
                         std::uint32_t max_value = std::numeric_limits<std::uint32_t>::max()) {
-    const auto value = FindUnsignedJsonField(scenario_text, key);
+    const auto value = read_u64(canonical_path, legacy_path);
     if (!value.has_value()) {
       return true;
     }
@@ -1270,8 +1162,10 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
     return true;
   };
 
-  auto assign_u64 = [&](std::string_view key, std::uint64_t& target) {
-    const auto value = FindUnsignedJsonField(scenario_text, key);
+  auto assign_u64 = [&](std::initializer_list<std::string_view> canonical_path,
+                        std::initializer_list<std::string_view> legacy_path,
+                        std::uint64_t& target) {
+    const auto value = read_u64(canonical_path, legacy_path);
     if (!value.has_value()) {
       return true;
     }
@@ -1279,56 +1173,60 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
     return true;
   };
 
-  auto assign_non_negative_double = [&](std::string_view key, std::optional<double>& target,
-                                        bool percent_0_to_100 = false) {
-    const auto value = FindNumberJsonField(scenario_text, key);
-    if (!value.has_value()) {
-      return true;
-    }
+  auto assign_non_negative_double =
+      [&](std::string_view key, std::initializer_list<std::string_view> canonical_path,
+          std::initializer_list<std::string_view> legacy_path, std::optional<double>& target,
+          bool percent_0_to_100 = false) {
+        const auto value = read_number(canonical_path, legacy_path);
+        if (!value.has_value()) {
+          return true;
+        }
 
-    const double parsed = value.value();
-    if (!std::isfinite(parsed) || parsed < 0.0) {
-      error = "scenario threshold must be a non-negative number for key: " + std::string(key);
-      return false;
-    }
-    if (percent_0_to_100 && parsed > 100.0) {
-      error = "scenario threshold must be in range [0,100] for key: " + std::string(key);
-      return false;
-    }
-    target = parsed;
-    return true;
-  };
+        const double parsed = value.value();
+        if (!std::isfinite(parsed) || parsed < 0.0) {
+          error = "scenario threshold must be a non-negative number for key: " + std::string(key);
+          return false;
+        }
+        if (percent_0_to_100 && parsed > 100.0) {
+          error = "scenario threshold must be in range [0,100] for key: " + std::string(key);
+          return false;
+        }
+        target = parsed;
+        return true;
+      };
 
-  auto assign_non_negative_integer_threshold = [&](std::string_view key,
-                                                   std::optional<std::uint64_t>& target) {
-    const auto value = FindNumberJsonField(scenario_text, key);
-    if (!value.has_value()) {
-      return true;
-    }
+  auto assign_non_negative_integer_threshold =
+      [&](std::string_view key, std::initializer_list<std::string_view> canonical_path,
+          std::initializer_list<std::string_view> legacy_path,
+          std::optional<std::uint64_t>& target) {
+        const auto value = read_number(canonical_path, legacy_path);
+        if (!value.has_value()) {
+          return true;
+        }
 
-    const double parsed = value.value();
-    if (!std::isfinite(parsed) || parsed < 0.0) {
-      error = "scenario threshold must be a non-negative integer for key: " + std::string(key);
-      return false;
-    }
-    const double floored = std::floor(parsed);
-    if (floored != parsed ||
-        floored > static_cast<double>(std::numeric_limits<std::uint64_t>::max())) {
-      error = "scenario threshold must be a non-negative integer for key: " + std::string(key);
-      return false;
-    }
-    target = static_cast<std::uint64_t>(floored);
-    return true;
-  };
+        const double parsed = value.value();
+        if (!std::isfinite(parsed) || parsed < 0.0) {
+          error = "scenario threshold must be a non-negative integer for key: " + std::string(key);
+          return false;
+        }
+        const double floored = std::floor(parsed);
+        if (floored != parsed ||
+            floored > static_cast<double>(std::numeric_limits<std::uint64_t>::max())) {
+          error = "scenario threshold must be a non-negative integer for key: " + std::string(key);
+          return false;
+        }
+        target = static_cast<std::uint64_t>(floored);
+        return true;
+      };
 
-  if (const auto duration_ms = FindUnsignedJsonField(scenario_text, "duration_ms");
+  if (const auto duration_ms = read_u64({"duration", "duration_ms"}, {"duration_ms"});
       duration_ms.has_value()) {
     if (duration_ms.value() == 0U) {
       error = "scenario duration_ms must be greater than 0";
       return false;
     }
     plan.duration = std::chrono::milliseconds(static_cast<std::int64_t>(duration_ms.value()));
-  } else if (const auto duration_s = FindUnsignedJsonField(scenario_text, "duration_s");
+  } else if (const auto duration_s = read_u64({"duration", "duration_s"}, {"duration_s"});
              duration_s.has_value()) {
     if (duration_s.value() == 0U) {
       error = "scenario duration_s must be greater than 0";
@@ -1338,7 +1236,7 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
         std::chrono::seconds(static_cast<std::int64_t>(duration_s.value())));
   }
 
-  if (const auto backend = FindStringJsonField(scenario_text, "backend"); backend.has_value()) {
+  if (const auto backend = read_string({"backend"}, {}); backend.has_value()) {
     if (*backend != kBackendSim && *backend != kBackendRealStub) {
       error = "scenario backend must be one of: sim, real_stub";
       return false;
@@ -1346,47 +1244,53 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
     plan.backend = *backend;
   }
 
-  if (const auto apply_mode = FindStringJsonField(scenario_text, "apply_mode");
-      apply_mode.has_value()) {
+  if (const auto apply_mode = read_string({"apply_mode"}, {}); apply_mode.has_value()) {
     if (!backends::real_sdk::ParseParamApplyMode(apply_mode.value(), plan.real_apply_mode, error)) {
       return false;
     }
   }
 
-  const auto requested_fps = FindUnsignedJsonField(scenario_text, "fps");
-  const auto pixel_format = FindStringJsonField(scenario_text, "pixel_format");
-  const auto exposure_us = FindUnsignedJsonField(scenario_text, "exposure_us");
-  const auto gain_db = FindNumberJsonField(scenario_text, "gain_db");
-  const auto trigger_mode = FindStringJsonField(scenario_text, "trigger_mode");
-  const auto trigger_source = FindStringJsonField(scenario_text, "trigger_source");
+  const auto requested_fps = read_u64({"camera", "fps"}, {"fps"});
+  const auto pixel_format = read_string({"camera", "pixel_format"}, {"pixel_format"});
+  const auto exposure_us = read_u64({"camera", "exposure_us"}, {"exposure_us"});
+  const auto gain_db = read_number({"camera", "gain_db"}, {"gain_db"});
+  const auto trigger_mode = read_string({"camera", "trigger_mode"}, {"trigger_mode"});
+  const auto trigger_source = read_string({"camera", "trigger_source"}, {"trigger_source"});
   std::string roi_value;
-  const bool has_roi = ExtractJsonObjectField(scenario_text, "roi", roi_value);
-  if (has_roi && !BuildRoiParamValue(scenario_text, roi_value, error)) {
+  const JsonValue* roi_object = FindScenarioField(scenario_root, {"camera", "roi"}, {"roi"});
+  const bool has_roi = roi_object != nullptr;
+  if (has_roi && !BuildRoiParamValue(*roi_object, roi_value, error)) {
     return false;
   }
 
-  if (!assign_u32("fps", plan.sim_config.fps)) {
+  if (!assign_u32("fps", {"camera", "fps"}, {"fps"}, plan.sim_config.fps)) {
     return false;
   }
-  if (!assign_u32("jitter_us", plan.sim_config.jitter_us)) {
+  if (!assign_u32("jitter_us", {"sim_faults", "jitter_us"}, {"jitter_us"},
+                  plan.sim_config.jitter_us)) {
     return false;
   }
-  if (!assign_u64("seed", plan.sim_config.seed)) {
+  if (!assign_u64({"sim_faults", "seed"}, {"seed"}, plan.sim_config.seed)) {
     return false;
   }
-  if (!assign_u32("frame_size_bytes", plan.sim_config.frame_size_bytes)) {
+  if (!assign_u32("frame_size_bytes", {"camera", "frame_size_bytes"}, {"frame_size_bytes"},
+                  plan.sim_config.frame_size_bytes)) {
     return false;
   }
-  if (!assign_u32("drop_every_n", plan.sim_config.drop_every_n)) {
+  if (!assign_u32("drop_every_n", {"sim_faults", "drop_every_n"}, {"drop_every_n"},
+                  plan.sim_config.drop_every_n)) {
     return false;
   }
-  if (!assign_u32("drop_percent", plan.sim_config.faults.drop_percent, 100U)) {
+  if (!assign_u32("drop_percent", {"sim_faults", "drop_percent"}, {"drop_percent"},
+                  plan.sim_config.faults.drop_percent, 100U)) {
     return false;
   }
-  if (!assign_u32("burst_drop", plan.sim_config.faults.burst_drop)) {
+  if (!assign_u32("burst_drop", {"sim_faults", "burst_drop"}, {"burst_drop"},
+                  plan.sim_config.faults.burst_drop)) {
     return false;
   }
-  if (!assign_u32("reorder", plan.sim_config.faults.reorder)) {
+  if (!assign_u32("reorder", {"sim_faults", "reorder"}, {"reorder"},
+                  plan.sim_config.faults.reorder)) {
     return false;
   }
 
@@ -1412,28 +1316,32 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
     UpsertRealParam(plan.real_params, "roi", roi_value);
   }
 
-  if (!assign_non_negative_double("min_avg_fps", plan.thresholds.min_avg_fps)) {
+  if (!assign_non_negative_double("min_avg_fps", {"thresholds", "min_avg_fps"}, {"min_avg_fps"},
+                                  plan.thresholds.min_avg_fps)) {
     return false;
   }
-  if (!assign_non_negative_double("max_drop_rate_percent", plan.thresholds.max_drop_rate_percent,
+  if (!assign_non_negative_double("max_drop_rate_percent", {"thresholds", "max_drop_rate_percent"},
+                                  {"max_drop_rate_percent"}, plan.thresholds.max_drop_rate_percent,
                                   /*percent_0_to_100=*/true)) {
     return false;
   }
-  if (!assign_non_negative_double("max_inter_frame_interval_p95_us",
-                                  plan.thresholds.max_inter_frame_interval_p95_us)) {
+  if (!assign_non_negative_double(
+          "max_inter_frame_interval_p95_us", {"thresholds", "max_inter_frame_interval_p95_us"},
+          {"max_inter_frame_interval_p95_us"}, plan.thresholds.max_inter_frame_interval_p95_us)) {
     return false;
   }
-  if (!assign_non_negative_double("max_inter_frame_jitter_p95_us",
-                                  plan.thresholds.max_inter_frame_jitter_p95_us)) {
+  if (!assign_non_negative_double(
+          "max_inter_frame_jitter_p95_us", {"thresholds", "max_inter_frame_jitter_p95_us"},
+          {"max_inter_frame_jitter_p95_us"}, plan.thresholds.max_inter_frame_jitter_p95_us)) {
     return false;
   }
-  if (!assign_non_negative_integer_threshold("max_disconnect_count",
-                                             plan.thresholds.max_disconnect_count)) {
+  if (!assign_non_negative_integer_threshold(
+          "max_disconnect_count", {"thresholds", "max_disconnect_count"}, {"max_disconnect_count"},
+          plan.thresholds.max_disconnect_count)) {
     return false;
   }
 
-  if (const auto netem_profile = FindStringJsonField(scenario_text, "netem_profile");
-      netem_profile.has_value()) {
+  if (const auto netem_profile = read_string({"netem_profile"}, {}); netem_profile.has_value()) {
     if (netem_profile->empty()) {
       error = "scenario netem_profile must not be empty";
       return false;
@@ -1445,7 +1353,7 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
     plan.netem_profile = netem_profile.value();
   }
 
-  if (const auto device_selector = FindStringJsonField(scenario_text, "device_selector");
+  if (const auto device_selector = read_string({"device_selector"}, {});
       device_selector.has_value()) {
     if (device_selector->empty()) {
       error = "scenario device_selector must not be empty";
