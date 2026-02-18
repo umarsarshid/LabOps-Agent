@@ -131,6 +131,21 @@ std::optional<std::string> FindCaseInsensitiveEnumValue(const std::vector<std::s
   return std::nullopt;
 }
 
+std::string JoinEnumValues(const std::vector<std::string>& values) {
+  if (values.empty()) {
+    return "(none)";
+  }
+
+  std::string joined;
+  for (std::size_t i = 0; i < values.size(); ++i) {
+    if (i != 0U) {
+      joined += ", ";
+    }
+    joined += values[i];
+  }
+  return joined;
+}
+
 bool TryReadNodeValueAsString(INodeMapAdapter& node_adapter, std::string_view node_name,
                               std::string& actual_value, std::string& error) {
   actual_value.clear();
@@ -455,12 +470,24 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
       std::string normalized_value = input.requested_value;
       if (node_type == NodeValueType::kEnumeration) {
         const std::vector<std::string> allowed = node_adapter.ListEnumValues(node_name);
-        const std::optional<std::string> canonical =
-            FindCaseInsensitiveEnumValue(allowed, input.requested_value);
-        if (canonical.has_value() && canonical.value() != input.requested_value) {
-          normalized_value = canonical.value();
-          applied.adjusted = true;
-          applied.adjustment_reason = "normalized enumeration value casing";
+        if (!allowed.empty()) {
+          const std::optional<std::string> canonical =
+              FindCaseInsensitiveEnumValue(allowed, input.requested_value);
+          if (!canonical.has_value()) {
+            const std::string reason = "value '" + input.requested_value +
+                                       "' is not supported for key '" + node_name +
+                                       "' (allowed: " + JoinEnumValues(allowed) + ")";
+            if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
+                                            /*supported=*/true, reason, mode, result, error)) {
+              return false;
+            }
+            continue;
+          }
+          if (canonical.value() != input.requested_value) {
+            normalized_value = canonical.value();
+            applied.adjusted = true;
+            applied.adjustment_reason = "normalized enumeration value casing";
+          }
         }
       }
 

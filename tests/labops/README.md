@@ -81,11 +81,13 @@ This keeps each test focused on contract verification instead of setup code.
   both real-enabled and real-disabled builds.
 - `real_apply_mode_events_smoke.cpp`: verifies real-backend `apply_mode`
   behavior:
-  `best_effort` records unsupported settings and continues (emitting
+  `best_effort` records unsupported settings and continues (including enum
+  violations like unsupported `pixel_format` values) while emitting
   `CONFIG_UNSUPPORTED`, `CONFIG_ADJUSTED`, and `CONFIG_APPLIED`) plus writes
   `config_verify.json`, `camera_config.json`, and `config_report.md` with
   requested/actual/supported evidence, while
-  `strict` fails early on unsupported settings and does not emit
+  `strict` fails early on unsupported settings (including unsupported
+  enum values) and does not emit
   `CONFIG_APPLIED` (but still writes both config evidence artifacts).
 - `kb_draft_from_run_folder_smoke.cpp`: verifies `labops kb draft --run <dir>`
   generates `kb_draft.md` from `engineer_packet.md` with populated run-context,

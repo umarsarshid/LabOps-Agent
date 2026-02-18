@@ -154,7 +154,8 @@ bool ContainsType(const std::vector<std::string>& types, std::string_view needle
   return false;
 }
 
-void WriteScenario(const fs::path& path, std::string_view apply_mode) {
+void WriteScenario(const fs::path& path, std::string_view apply_mode,
+                   std::string_view pixel_format) {
   std::ofstream out(path, std::ios::binary);
   if (!out) {
     Fail("failed to open scenario path");
@@ -167,8 +168,7 @@ void WriteScenario(const fs::path& path, std::string_view apply_mode) {
       << "  \"duration\": { \"duration_ms\": 250 },\n"
       << "  \"camera\": {\n"
       << "    \"fps\": 1000,\n"
-      << "    \"pixel_format\": \"mono8\",\n"
-      << "    \"gain_db\": 5.0\n"
+      << "    \"pixel_format\": \"" << pixel_format << "\"\n"
       << "  },\n"
       << "  \"thresholds\": {\n"
       << "    \"min_avg_fps\": 1.0\n"
@@ -220,10 +220,12 @@ void AssertBestEffortRun(const fs::path& scenario_path, const fs::path& out_dir)
   if (verify_json.find("\"requested_count\"") == std::string::npos ||
       verify_json.find("\"supported_count\"") == std::string::npos ||
       verify_json.find("\"generic_key\":\"frame_rate\"") == std::string::npos ||
+      verify_json.find("\"generic_key\":\"pixel_format\"") == std::string::npos ||
       verify_json.find("\"requested\":\"1000\"") == std::string::npos ||
       verify_json.find("\"actual\":\"240\"") == std::string::npos ||
+      verify_json.find("allowed: mono8, mono12, rgb8") == std::string::npos ||
       verify_json.find("\"supported\":true") == std::string::npos) {
-    Fail("best-effort config_verify.json missing requested/actual/supported evidence");
+    Fail("best-effort config_verify.json missing pixel-format enum evidence");
   }
 
   const fs::path camera_config_path = bundle / "camera_config.json";
@@ -233,6 +235,7 @@ void AssertBestEffortRun(const fs::path& scenario_path, const fs::path& out_dir)
   const std::string camera_config_json = ReadFile(camera_config_path);
   if (camera_config_json.find("\"curated_nodes\"") == std::string::npos ||
       camera_config_json.find("\"generic_key\":\"frame_rate\"") == std::string::npos ||
+      camera_config_json.find("\"generic_key\":\"pixel_format\"") == std::string::npos ||
       camera_config_json.find("\"unsupported_keys\"") == std::string::npos) {
     Fail("best-effort camera_config.json missing curated node evidence");
   }
@@ -246,8 +249,10 @@ void AssertBestEffortRun(const fs::path& scenario_path, const fs::path& out_dir)
           std::string::npos ||
       config_report.find("✅ applied") == std::string::npos ||
       config_report.find("⚠ adjusted") == std::string::npos ||
+      config_report.find("pixel_format") == std::string::npos ||
+      config_report.find("allowed: mono8, mono12, rgb8") == std::string::npos ||
       config_report.find("❌ unsupported") == std::string::npos) {
-    Fail("best-effort config_report.md missing status table rows");
+    Fail("best-effort config_report.md missing pixel-format unsupported status evidence");
   }
 }
 
@@ -277,10 +282,10 @@ void AssertStrictRun(const fs::path& scenario_path, const fs::path& out_dir) {
     Fail("strict run missing config_verify.json");
   }
   const std::string verify_json = ReadFile(verify_path);
-  if (verify_json.find("\"generic_key\":\"gain\"") == std::string::npos ||
-      verify_json.find("\"supported\":false") == std::string::npos ||
+  if (verify_json.find("\"generic_key\":\"pixel_format\"") == std::string::npos ||
+      verify_json.find("\"supported\":true") == std::string::npos ||
       verify_json.find("\"applied\":false") == std::string::npos) {
-    Fail("strict config_verify.json missing unsupported evidence");
+    Fail("strict config_verify.json missing pixel-format unsupported evidence");
   }
 
   const fs::path camera_config_path = bundle / "camera_config.json";
@@ -289,7 +294,7 @@ void AssertStrictRun(const fs::path& scenario_path, const fs::path& out_dir) {
   }
   const std::string camera_config_json = ReadFile(camera_config_path);
   if (camera_config_json.find("\"unsupported_keys\"") == std::string::npos ||
-      camera_config_json.find("\"trigger_mode\"") == std::string::npos) {
+      camera_config_json.find("\"pixel_format\"") == std::string::npos) {
     Fail("strict camera_config.json missing unsupported key evidence");
   }
 
@@ -299,8 +304,9 @@ void AssertStrictRun(const fs::path& scenario_path, const fs::path& out_dir) {
   }
   const std::string config_report = ReadFile(config_report_path);
   if (config_report.find("❌ unsupported") == std::string::npos ||
-      config_report.find("gain") == std::string::npos) {
-    Fail("strict config_report.md missing unsupported status evidence");
+      config_report.find("pixel_format") == std::string::npos ||
+      config_report.find("allowed: mono8, mono12, rgb8") == std::string::npos) {
+    Fail("strict config_report.md missing pixel-format unsupported status evidence");
   }
 }
 
@@ -325,8 +331,8 @@ int main() {
     Fail("failed to create temp root");
   }
 
-  WriteScenario(best_effort_scenario, "best_effort");
-  WriteScenario(strict_scenario, "strict");
+  WriteScenario(best_effort_scenario, "best_effort", "yuv422");
+  WriteScenario(strict_scenario, "strict", "yuv422");
   WriteLimitedParamKeyMap(map_override);
 
   const std::string map_override_text = map_override.string();

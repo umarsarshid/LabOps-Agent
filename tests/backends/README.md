@@ -49,7 +49,8 @@ stable interface regardless of real hardware availability.
   application behavior, including unsupported handling and adjusted value
   reporting plus per-setting readback rows (`requested/actual/supported`) used
   by `config_verify.json`, `camera_config.json`, and `config_report.md`,
-  including numeric range guards for `exposure` and `gain`.
+  including numeric range guards for `exposure`/`gain` and enum validation
+  for `pixel_format`.
 
 ## Connection to the project
 

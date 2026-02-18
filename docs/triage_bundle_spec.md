@@ -200,6 +200,8 @@ Current sections:
 - config status table:
   - columns: `Status`, `Key`, `Node`, `Requested`, `Actual`, `Notes`
   - each row is one config key outcome with explicit status icon/text
+  - enum validation failures (for example unsupported `pixel_format`) include
+    allowed enum values in `Notes`
   - exposure/gain rows include unit/range hints in `Notes`:
     - exposure: `us`, validated range `[5, 10000000]`
     - gain: `dB`, validated range `[0, 48]`

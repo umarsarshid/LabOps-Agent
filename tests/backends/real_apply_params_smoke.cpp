@@ -233,6 +233,71 @@ int main() {
     }
   }
 
+  // Enumeration validation should use node-map enum entries so unsupported
+  // pixel formats produce actionable strict-mode errors.
+  {
+    RecordingBackend backend;
+    std::unique_ptr<labops::backends::real_sdk::INodeMapAdapter> adapter =
+        CreateDefaultNodeMapAdapter();
+    ApplyParamsResult result;
+    if (ApplyParams(backend, key_map, *adapter,
+                    {
+                        ApplyParamInput{"pixel_format", "yuv422"},
+                    },
+                    ParamApplyMode::kStrict, result, error)) {
+      Fail("strict apply should fail for unsupported pixel_format value");
+    }
+
+    AssertContains(error, "unsupported parameter 'pixel_format'");
+    AssertContains(error, "allowed: mono8, mono12, rgb8");
+    if (result.applied.size() != 0U || result.unsupported.size() != 1U ||
+        result.readback_rows.size() != 1U) {
+      Fail("strict pixel_format enum failure should produce one unsupported readback row");
+    }
+    if (result.readback_rows[0].generic_key != "pixel_format" ||
+        !result.readback_rows[0].supported || result.readback_rows[0].applied ||
+        result.readback_rows[0].reason.find("allowed: mono8, mono12, rgb8") == std::string::npos) {
+      Fail("strict pixel_format readback evidence is incorrect");
+    }
+  }
+
+  // Best-effort mode should keep supported params and report unsupported enum
+  // values without aborting the entire apply step.
+  {
+    RecordingBackend backend;
+    std::unique_ptr<labops::backends::real_sdk::INodeMapAdapter> adapter =
+        CreateDefaultNodeMapAdapter();
+    ApplyParamsResult result;
+    if (!ApplyParams(backend, key_map, *adapter,
+                     {
+                         ApplyParamInput{"frame_rate", "60"},
+                         ApplyParamInput{"pixel_format", "yuv422"},
+                     },
+                     ParamApplyMode::kBestEffort, result, error)) {
+      Fail("best-effort pixel_format apply unexpectedly failed: " + error);
+    }
+
+    if (result.applied.size() != 1U || result.unsupported.size() != 1U ||
+        result.readback_rows.size() != 2U) {
+      Fail("best-effort pixel_format apply should keep one applied and one unsupported row");
+    }
+
+    bool saw_applied_frame_rate = false;
+    bool saw_unsupported_pixel_format = false;
+    for (const auto& row : result.readback_rows) {
+      if (row.generic_key == "frame_rate" && row.applied && row.actual_value == "60") {
+        saw_applied_frame_rate = true;
+      }
+      if (row.generic_key == "pixel_format" && row.supported && !row.applied &&
+          row.reason.find("allowed: mono8, mono12, rgb8") != std::string::npos) {
+        saw_unsupported_pixel_format = true;
+      }
+    }
+    if (!saw_applied_frame_rate || !saw_unsupported_pixel_format) {
+      Fail("best-effort pixel_format readback rows missing expected applied/unsupported evidence");
+    }
+  }
+
   std::cout << "real_apply_params_smoke: ok\n";
   return 0;
 }
