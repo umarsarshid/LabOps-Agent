@@ -73,6 +73,7 @@ target_compile_features(labops_events PUBLIC cxx_std_20)
 # development and CI.
 add_library(labops_backends
   src/backends/real_sdk/apply_params.cpp
+  src/backends/real_sdk/error_mapper.cpp
   src/backends/real_sdk/node_map_adapter.cpp
   src/backends/real_sdk/param_key_map.cpp
   src/backends/real_sdk/real_backend.cpp
@@ -511,6 +512,15 @@ add_labops_smoke_test(
   NAME real_transport_counters_smoke
   SOURCES
     tests/backends/real_transport_counters_smoke.cpp
+  LIBRARIES
+    labops_backends
+)
+
+# Smoke test for stable/actionable real-backend error classification.
+add_labops_smoke_test(
+  NAME real_error_mapper_smoke
+  SOURCES
+    tests/backends/real_error_mapper_smoke.cpp
   LIBRARIES
     labops_backends
 )

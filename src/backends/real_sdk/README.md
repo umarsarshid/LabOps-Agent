@@ -82,6 +82,12 @@ This folder is that bridge.
   - uses `SdkContext` RAII to guard process-level SDK init/shutdown safely.
   - keeps lifecycle and timestamp scaffolding aligned with future vendor pull
     adapter wiring.
+- `error_mapper.hpp` / `error_mapper.cpp`:
+  - maps raw real-backend/SDK-style failures to stable codes
+    (`REAL_DEVICE_BUSY`, `REAL_TIMEOUT`, etc.).
+  - adds one-line actionable guidance so run/list-devices failures stay useful
+    without requiring engineers to interpret vendor-specific strings.
+  - keeps routing logic stable even if SDK wording changes over time.
 - `transport_counters.hpp` / `transport_counters.cpp`:
   - collects transport-layer counters from backend/SDK dump keys in
     best-effort mode.

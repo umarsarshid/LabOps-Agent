@@ -61,6 +61,9 @@ stable interface regardless of real hardware availability.
   collection alias handling for real runs (`resends`, `packet_errors`,
   `dropped_packets`) so missing/invalid SDK values become explicit
   not-available evidence rather than run failures.
+- `real_error_mapper_smoke.cpp`: validates real-backend error classification
+  into stable codes plus actionable text so routing/UX can remain consistent
+  even if SDK/vendor wording changes.
 
 ## Connection to the project
 

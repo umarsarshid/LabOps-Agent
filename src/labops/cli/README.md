@@ -31,6 +31,9 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
     (`model`, `serial`, `user_id`, `transport`, optional `ip`/`mac`,
     optional `firmware_version`/`sdk_version`) from real-backend descriptor
     mapping.
+  - translates discovery failures into stable/actionable real-backend error
+    codes (for example `REAL_DEVICE_NOT_FOUND`, `REAL_TIMEOUT`,
+    `REAL_SDK_UNAVAILABLE`).
 - Route scenario validation through schema loader with actionable errors.
 - Parse and validate scenario-level `device_selector` plus CLI `--device`
   overrides; resolve selectors deterministically (serial/user_id with optional
@@ -57,6 +60,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Execute sim backend run lifecycle and emit stream trace events.
 - On backend connect failures, still emit `run.json` (when bundle dir is
   already initialized) so early-failure runs preserve run metadata evidence.
+- For real-backend run failures (`connect/start/pull/stop`), include stable
+  error codes plus actionable guidance while preserving raw detail text.
 - Compute and write run metrics (`metrics.csv` + `metrics.json`) for FPS,
   drop, and timing/jitter reporting.
 - Generate one-page `summary.md` per run with pass/fail, key metrics, and top

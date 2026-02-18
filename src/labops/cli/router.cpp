@@ -15,6 +15,7 @@
 #include "artifacts/scenario_writer.hpp"
 #include "backends/camera_backend.hpp"
 #include "backends/real_sdk/apply_params.hpp"
+#include "backends/real_sdk/error_mapper.hpp"
 #include "backends/real_sdk/real_backend_factory.hpp"
 #include "backends/real_sdk/transport_counters.hpp"
 #include "backends/sim/scenario_config.hpp"
@@ -1698,6 +1699,21 @@ bool IsLikelyDisconnectError(std::string_view error_text) {
          normalized.find("link down") != std::string::npos;
 }
 
+struct RealFailureDetails {
+  std::string code;
+  std::string actionable_message;
+  std::string formatted_message;
+};
+
+RealFailureDetails MapRealFailure(std::string_view operation, std::string_view raw_error) {
+  const auto mapped = backends::real_sdk::MapRealBackendError(operation, raw_error);
+  RealFailureDetails details;
+  details.code = std::string(backends::real_sdk::ToStableErrorCode(mapped.code));
+  details.actionable_message = mapped.actionable_message;
+  details.formatted_message = backends::real_sdk::FormatRealBackendError(operation, raw_error);
+  return details;
+}
+
 bool TryReconnectAfterDisconnect(backends::ICameraBackend& backend, std::uint32_t max_attempts,
                                  std::uint32_t& attempts_used, core::logging::Logger& logger,
                                  std::string& error) {
@@ -1710,25 +1726,31 @@ bool TryReconnectAfterDisconnect(backends::ICameraBackend& backend, std::uint32_
     ++attempts_used;
     std::string connect_error;
     if (!backend.Connect(connect_error)) {
+      const RealFailureDetails mapped = MapRealFailure("connect", connect_error);
       logger.Warn("reconnect attempt connect failed",
                   {{"attempt", std::to_string(attempt)},
                    {"attempts_used_total", std::to_string(attempts_used)},
                    {"max_attempts_for_disconnect", std::to_string(max_attempts)},
+                   {"error_code", mapped.code},
+                   {"error_action", mapped.actionable_message},
                    {"error", connect_error}});
-      error = connect_error;
+      error = mapped.formatted_message;
       continue;
     }
 
     std::string start_error;
     if (!backend.Start(start_error)) {
+      const RealFailureDetails mapped = MapRealFailure("start", start_error);
       logger.Warn("reconnect attempt start failed",
                   {{"attempt", std::to_string(attempt)},
                    {"attempts_used_total", std::to_string(attempts_used)},
                    {"max_attempts_for_disconnect", std::to_string(max_attempts)},
+                   {"error_code", mapped.code},
+                   {"error_action", mapped.actionable_message},
                    {"error", start_error}});
       std::string stop_error;
       (void)backend.Stop(stop_error);
-      error = start_error;
+      error = mapped.formatted_message;
       continue;
     }
 
@@ -2319,8 +2341,18 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
 
   if (!backend->Connect(error)) {
-    logger.Error("backend connect failed",
-                 {{"backend", run_info.config.backend}, {"error", error}});
+    std::optional<RealFailureDetails> mapped_connect_error;
+    if (run_plan.backend == kBackendRealStub) {
+      mapped_connect_error = MapRealFailure("connect", error);
+      logger.Error("backend connect failed",
+                   {{"backend", run_info.config.backend},
+                    {"error_code", mapped_connect_error->code},
+                    {"error_action", mapped_connect_error->actionable_message},
+                    {"error", error}});
+    } else {
+      logger.Error("backend connect failed",
+                   {{"backend", run_info.config.backend}, {"error", error}});
+    }
     run_info.timestamps.finished_at = std::chrono::system_clock::now();
     if (run_plan.backend == kBackendRealStub) {
       // Capture whatever transport counters are currently exposed so connect
@@ -2349,7 +2381,12 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     if (!sdk_log_artifact_path.empty() && fs::exists(sdk_log_artifact_path)) {
       std::cerr << "info: sdk log artifact: " << sdk_log_artifact_path.string() << '\n';
     }
-    std::cerr << "error: backend connect failed: " << error << '\n';
+    if (mapped_connect_error.has_value()) {
+      std::cerr << "error: backend connect failed: " << mapped_connect_error->formatted_message
+                << '\n';
+    } else {
+      std::cerr << "error: backend connect failed: " << error << '\n';
+    }
     return kExitBackendConnectFailed;
   }
   logger.Info("backend connected", {{"backend", run_info.config.backend}});
@@ -2383,8 +2420,16 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
 
   if (!backend->Start(error)) {
-    logger.Error("backend start failed", {{"error", error}});
-    std::cerr << "error: backend start failed: " << error << '\n';
+    if (run_plan.backend == kBackendRealStub) {
+      const RealFailureDetails mapped_start_error = MapRealFailure("start", error);
+      logger.Error("backend start failed", {{"error_code", mapped_start_error.code},
+                                            {"error_action", mapped_start_error.actionable_message},
+                                            {"error", error}});
+      std::cerr << "error: backend start failed: " << mapped_start_error.formatted_message << '\n';
+    } else {
+      logger.Error("backend start failed", {{"error", error}});
+      std::cerr << "error: backend start failed: " << error << '\n';
+    }
     return kExitFailure;
   }
   logger.Info("stream started", {{"fps", std::to_string(run_plan.sim_config.fps)},
@@ -2582,9 +2627,14 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
             break;
           }
 
-          logger.Error("backend pull_frames failed", {{"error", error}});
+          const RealFailureDetails mapped_pull_error = MapRealFailure("pull_frames", error);
+          logger.Error("backend pull_frames failed",
+                       {{"error_code", mapped_pull_error.code},
+                        {"error_action", mapped_pull_error.actionable_message},
+                        {"error", error}});
           stop_if_started();
-          std::cerr << "error: backend pull_frames failed: " << error << '\n';
+          std::cerr << "error: backend pull_frames failed: " << mapped_pull_error.formatted_message
+                    << '\n';
           return kExitFailure;
         }
 
@@ -2650,6 +2700,17 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
           std::min(options.checkpoint_interval, remaining_duration);
       std::vector<backends::FrameSample> chunk_frames = backend->PullFrames(chunk_duration, error);
       if (!error.empty()) {
+        if (run_plan.backend == kBackendRealStub) {
+          const RealFailureDetails mapped_pull_error = MapRealFailure("pull_frames", error);
+          logger.Error("backend pull_frames failed",
+                       {{"error_code", mapped_pull_error.code},
+                        {"error_action", mapped_pull_error.actionable_message},
+                        {"error", error}});
+          stop_if_started();
+          std::cerr << "error: backend pull_frames failed: " << mapped_pull_error.formatted_message
+                    << '\n';
+          return kExitFailure;
+        }
         logger.Error("backend pull_frames failed", {{"error", error}});
         stop_if_started();
         std::cerr << "error: backend pull_frames failed: " << error << '\n';
@@ -2859,8 +2920,16 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
 
   if (!backend->Stop(error)) {
-    logger.Error("backend stop failed", {{"error", error}});
-    std::cerr << "error: backend stop failed: " << error << '\n';
+    if (run_plan.backend == kBackendRealStub) {
+      const RealFailureDetails mapped_stop_error = MapRealFailure("stop", error);
+      logger.Error("backend stop failed", {{"error_code", mapped_stop_error.code},
+                                           {"error_action", mapped_stop_error.actionable_message},
+                                           {"error", error}});
+      std::cerr << "error: backend stop failed: " << mapped_stop_error.formatted_message << '\n';
+    } else {
+      logger.Error("backend stop failed", {{"error", error}});
+      std::cerr << "error: backend stop failed: " << error << '\n';
+    }
     return kExitFailure;
   }
   stream_started = false;
@@ -3270,7 +3339,9 @@ int CommandListDevices(const std::vector<std::string_view>& args) {
 
   std::vector<backends::real_sdk::DeviceInfo> devices;
   if (!backends::real_sdk::EnumerateConnectedDevices(devices, error)) {
-    std::cerr << "error: DEVICE_DISCOVERY_FAILED: " << error << '\n';
+    const RealFailureDetails mapped_discovery_error = MapRealFailure("device_discovery", error);
+    std::cerr << "error: DEVICE_DISCOVERY_FAILED: " << mapped_discovery_error.formatted_message
+              << '\n';
     return kExitFailure;
   }
 
