@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -37,7 +38,10 @@ private:
   StreamSession stream_session_;
   BackendConfig params_;
   bool connected_ = false;
+  bool simulated_disconnect_latched_ = false;
   std::uint64_t next_frame_id_ = 0;
+  std::uint64_t pull_calls_ = 0;
+  std::optional<std::uint64_t> disconnect_after_pull_calls_;
   std::chrono::system_clock::time_point stream_start_ts_{};
 };
 

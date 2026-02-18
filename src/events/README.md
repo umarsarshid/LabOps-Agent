@@ -32,6 +32,7 @@ Debugging camera failures requires timeline evidence, not just summary metrics. 
 - `FRAME_DROPPED`
 - `FRAME_TIMEOUT`
 - `FRAME_INCOMPLETE`
+- `DEVICE_DISCONNECTED`
 - `TRANSPORT_ANOMALY` (optional, heuristic-driven)
 - `STREAM_STOPPED`
 

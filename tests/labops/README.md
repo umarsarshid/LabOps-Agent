@@ -29,6 +29,11 @@ This keeps each test focused on contract verification instead of setup code.
   partial bundle (`run.json`, `events.jsonl`, `metrics.*`, `summary.md`,
   `report.html`, `bundle_manifest.json`) with `STREAM_STOPPED` reason
   `signal_interrupt`.
+- `run_reconnect_policy_smoke.cpp`: forces deterministic mid-stream disconnect
+  behavior in the OSS real backend via fixture env var, verifies
+  `DEVICE_DISCONNECTED` is emitted, verifies reconnect attempts are bounded,
+  and verifies retry exhaustion still flushes a complete failure bundle with
+  `STREAM_STOPPED` reason `device_disconnect`.
 - `validate_actionable_smoke.cpp`: drives `labops validate` and verifies
   invalid schema output includes actionable field-level error paths and the
   schema-invalid exit code contract.

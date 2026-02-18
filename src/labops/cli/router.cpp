@@ -1653,6 +1653,63 @@ std::string ToLowerAscii(std::string value) {
   return value;
 }
 
+bool IsLikelyDisconnectError(std::string_view error_text) {
+  if (error_text.empty()) {
+    return false;
+  }
+  const std::string normalized = ToLowerAscii(std::string(error_text));
+  return normalized.find("disconnect") != std::string::npos ||
+         normalized.find("connection lost") != std::string::npos ||
+         normalized.find("link down") != std::string::npos;
+}
+
+bool TryReconnectAfterDisconnect(backends::ICameraBackend& backend, std::uint32_t max_attempts,
+                                 std::uint32_t& attempts_used, core::logging::Logger& logger,
+                                 std::string& error) {
+  if (max_attempts == 0U) {
+    error = "reconnect attempts exhausted";
+    return false;
+  }
+
+  for (std::uint32_t attempt = 1; attempt <= max_attempts; ++attempt) {
+    ++attempts_used;
+    std::string connect_error;
+    if (!backend.Connect(connect_error)) {
+      logger.Warn("reconnect attempt connect failed",
+                  {{"attempt", std::to_string(attempt)},
+                   {"attempts_used_total", std::to_string(attempts_used)},
+                   {"max_attempts_for_disconnect", std::to_string(max_attempts)},
+                   {"error", connect_error}});
+      error = connect_error;
+      continue;
+    }
+
+    std::string start_error;
+    if (!backend.Start(start_error)) {
+      logger.Warn("reconnect attempt start failed",
+                  {{"attempt", std::to_string(attempt)},
+                   {"attempts_used_total", std::to_string(attempts_used)},
+                   {"max_attempts_for_disconnect", std::to_string(max_attempts)},
+                   {"error", start_error}});
+      std::string stop_error;
+      (void)backend.Stop(stop_error);
+      error = start_error;
+      continue;
+    }
+
+    logger.Info("reconnect attempt succeeded",
+                {{"attempt", std::to_string(attempt)},
+                 {"attempts_used_total", std::to_string(attempts_used)}});
+    error.clear();
+    return true;
+  }
+
+  if (error.empty()) {
+    error = "reconnect attempts exhausted";
+  }
+  return false;
+}
+
 bool IsGigETransport(const core::schema::RunInfo& run_info) {
   if (!run_info.real_device.has_value()) {
     return false;
@@ -2382,6 +2439,10 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   ScopedInterruptSignalHandler scoped_signal_handler;
   bool interrupted_by_signal = false;
   std::chrono::milliseconds non_soak_completed_duration = run_plan.duration;
+  constexpr std::uint32_t kReconnectRetryLimit = 3;
+  bool disconnect_failure = false;
+  std::uint32_t reconnect_attempts_used = 0;
+  std::string disconnect_failure_error;
   if (!options.soak_mode) {
     if (run_plan.backend != kBackendRealStub) {
       const std::vector<backends::FrameSample> pulled_frames =
@@ -2419,6 +2480,61 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
         const std::vector<backends::FrameSample> pulled_frames =
             backend->PullFrames(chunk_duration, error);
         if (!error.empty()) {
+          if (IsLikelyDisconnectError(error)) {
+            const std::string disconnect_error = error;
+            const std::uint32_t reconnect_attempts_remaining =
+                reconnect_attempts_used >= kReconnectRetryLimit
+                    ? 0U
+                    : (kReconnectRetryLimit - reconnect_attempts_used);
+            logger.Warn(
+                "device disconnected during stream",
+                {{"error", disconnect_error},
+                 {"reconnect_attempts_used_total", std::to_string(reconnect_attempts_used)},
+                 {"reconnect_attempts_remaining", std::to_string(reconnect_attempts_remaining)},
+                 {"reconnect_retry_limit", std::to_string(kReconnectRetryLimit)}});
+            if (!AppendTraceEvent(
+                    events::EventType::kDeviceDisconnected, std::chrono::system_clock::now(),
+                    {
+                        {"run_id", run_info.run_id},
+                        {"scenario_id", run_info.config.scenario_id},
+                        {"error", disconnect_error},
+                        {"reconnect_attempts_used_total", std::to_string(reconnect_attempts_used)},
+                        {"reconnect_attempts_remaining",
+                         std::to_string(reconnect_attempts_remaining)},
+                        {"reconnect_retry_limit", std::to_string(kReconnectRetryLimit)},
+                    },
+                    bundle_dir, events_path, error)) {
+              logger.Error("failed to append DEVICE_DISCONNECTED event", {{"error", error}});
+              stop_if_started();
+              std::cerr << "error: failed to append DEVICE_DISCONNECTED event: " << error << '\n';
+              return kExitFailure;
+            }
+
+            if (reconnect_attempts_remaining == 0U) {
+              disconnect_failure = true;
+              disconnect_failure_error =
+                  "device disconnect detected but reconnect budget is exhausted";
+              break;
+            }
+
+            error.clear();
+            std::string reconnect_error;
+            if (TryReconnectAfterDisconnect(*backend, reconnect_attempts_remaining,
+                                            reconnect_attempts_used, logger, reconnect_error)) {
+              continue;
+            }
+
+            disconnect_failure = true;
+            disconnect_failure_error = reconnect_error.empty() ? disconnect_error : reconnect_error;
+            logger.Error(
+                "reconnect attempts exhausted after disconnect",
+                {{"disconnect_error", disconnect_error},
+                 {"reconnect_error", disconnect_failure_error},
+                 {"reconnect_attempts_used_total", std::to_string(reconnect_attempts_used)},
+                 {"reconnect_retry_limit", std::to_string(kReconnectRetryLimit)}});
+            break;
+          }
+
           logger.Error("backend pull_frames failed", {{"error", error}});
           stop_if_started();
           std::cerr << "error: backend pull_frames failed: " << error << '\n';
@@ -2446,6 +2562,12 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
         logger.Warn("interrupt received; finalizing run with partial duration",
                     {{"completed_duration_ms", std::to_string(non_soak_completed_duration.count())},
                      {"requested_duration_ms", std::to_string(run_plan.duration.count())}});
+      } else if (disconnect_failure) {
+        logger.Warn("device disconnect handling exhausted retries; finalizing partial run",
+                    {{"completed_duration_ms", std::to_string(non_soak_completed_duration.count())},
+                     {"requested_duration_ms", std::to_string(run_plan.duration.count())},
+                     {"reconnect_attempts_used_total", std::to_string(reconnect_attempts_used)},
+                     {"reconnect_retry_limit", std::to_string(kReconnectRetryLimit)}});
       }
     }
   } else {
@@ -2701,7 +2823,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
 
   std::string stream_stop_reason = options.soak_mode ? "soak_completed" : "completed";
-  if (!options.soak_mode && interrupted_by_signal) {
+  if (!options.soak_mode && disconnect_failure) {
+    stream_stop_reason = "device_disconnect";
+  } else if (!options.soak_mode && interrupted_by_signal) {
     stream_stop_reason = "signal_interrupt";
   }
   std::map<std::string, std::string> stream_stopped_payload = {
@@ -2711,10 +2835,18 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
       {"frames_dropped", std::to_string(dropped_count)},
       {"reason", stream_stop_reason},
   };
-  if (!options.soak_mode && interrupted_by_signal) {
+  if (!options.soak_mode && (interrupted_by_signal || disconnect_failure)) {
     stream_stopped_payload["requested_duration_ms"] = std::to_string(run_plan.duration.count());
     stream_stopped_payload["completed_duration_ms"] =
         std::to_string(non_soak_completed_duration.count());
+  }
+  if (!options.soak_mode && disconnect_failure) {
+    stream_stopped_payload["reconnect_attempts_used_total"] =
+        std::to_string(reconnect_attempts_used);
+    stream_stopped_payload["reconnect_retry_limit"] = std::to_string(kReconnectRetryLimit);
+    if (!disconnect_failure_error.empty()) {
+      stream_stopped_payload["disconnect_error"] = disconnect_failure_error;
+    }
   }
 
   if (!AppendTraceEvent(events::EventType::kStreamStopped, run_info.timestamps.finished_at,
@@ -2739,7 +2871,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
 
   std::chrono::milliseconds metrics_duration = run_plan.duration;
-  if (!options.soak_mode && interrupted_by_signal) {
+  if (!options.soak_mode && (interrupted_by_signal || disconnect_failure)) {
     metrics_duration = non_soak_completed_duration;
     if (metrics_duration <= std::chrono::milliseconds::zero()) {
       metrics_duration = std::chrono::milliseconds(1);
@@ -2776,6 +2908,14 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   if (interrupted_by_signal) {
     thresholds_passed = false;
     threshold_failures.push_back("run interrupted by signal before requested duration completed");
+  } else if (disconnect_failure) {
+    thresholds_passed = false;
+    std::string disconnect_failure_text =
+        "device disconnected mid-run and reconnect attempts were exhausted";
+    if (!disconnect_failure_error.empty()) {
+      disconnect_failure_text += ": " + disconnect_failure_error;
+    }
+    threshold_failures.push_back(disconnect_failure_text);
   } else {
     thresholds_passed = EvaluateRunThresholds(run_plan.thresholds, fps_report, threshold_failures);
   }
@@ -2940,10 +3080,21 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
             << " jitter_p95=" << fps_report.inter_frame_jitter_us.p95_us << '\n';
   std::cout << "frames: total=" << frames.size() << " received=" << received_count
             << " dropped=" << dropped_count << '\n';
-  std::cout << "run_status: " << (interrupted_by_signal ? "interrupted" : "completed") << '\n';
+  std::string run_status = "completed";
+  if (disconnect_failure) {
+    run_status = "failed_device_disconnect";
+  } else if (interrupted_by_signal) {
+    run_status = "interrupted";
+  }
+  std::cout << "run_status: " << run_status << '\n';
   if (!options.soak_mode && interrupted_by_signal) {
     std::cout << "completed_duration_ms: " << non_soak_completed_duration.count() << '\n';
     std::cout << "requested_duration_ms: " << run_plan.duration.count() << '\n';
+  } else if (!options.soak_mode && disconnect_failure) {
+    std::cout << "completed_duration_ms: " << non_soak_completed_duration.count() << '\n';
+    std::cout << "requested_duration_ms: " << run_plan.duration.count() << '\n';
+    std::cout << "reconnect_attempts_used_total: " << reconnect_attempts_used << '\n';
+    std::cout << "reconnect_retry_limit: " << kReconnectRetryLimit << '\n';
   }
 
   if (interrupted_by_signal) {
@@ -2954,6 +3105,22 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
                  {"completed_duration_ms", std::to_string(non_soak_completed_duration.count())},
                  {"requested_duration_ms", std::to_string(run_plan.duration.count())}});
     std::cerr << "warning: run interrupted by Ctrl+C; finalized partial artifact bundle\n";
+    return kExitFailure;
+  }
+  if (disconnect_failure) {
+    logger.Error("run failed after device disconnect and reconnect exhaustion",
+                 {{"frames_total", std::to_string(frames.size())},
+                  {"frames_received", std::to_string(received_count)},
+                  {"frames_dropped", std::to_string(dropped_count)},
+                  {"completed_duration_ms", std::to_string(non_soak_completed_duration.count())},
+                  {"requested_duration_ms", std::to_string(run_plan.duration.count())},
+                  {"reconnect_attempts_used_total", std::to_string(reconnect_attempts_used)},
+                  {"reconnect_retry_limit", std::to_string(kReconnectRetryLimit)},
+                  {"error", disconnect_failure_error.empty() ? "-" : disconnect_failure_error}});
+    std::cerr << "error: run failed after device disconnect; reconnect attempts exhausted\n";
+    if (!disconnect_failure_error.empty()) {
+      std::cerr << "error: disconnect detail: " << disconnect_failure_error << '\n';
+    }
     return kExitFailure;
   }
 

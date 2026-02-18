@@ -308,6 +308,8 @@ Current event types in run flow:
 - `FRAME_DROPPED`
 - `FRAME_TIMEOUT`
 - `FRAME_INCOMPLETE`
+- `DEVICE_DISCONNECTED` (emitted when pull loop detects mid-stream disconnect
+  and enters reconnect policy)
 - `TRANSPORT_ANOMALY` (optional heuristic event when real transport counters
   exceed thresholds)
 - `STREAM_STOPPED`

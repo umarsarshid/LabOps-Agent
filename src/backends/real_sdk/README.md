@@ -72,6 +72,10 @@ This folder is that bridge.
     per-frame outcomes (`received`, `timeout`, `incomplete`) in OSS builds.
   - uses seeded outcome generation so repeated runs produce stable evidence
     while vendor pull APIs are still being integrated.
+  - includes deterministic disconnect fixture hook
+    (`LABOPS_REAL_DISCONNECT_AFTER_PULLS`) that latches device-unavailable
+    state after N pull calls so reconnect-policy behavior can be validated
+    without physically unplugging hardware.
   - uses `SdkContext` RAII to guard process-level SDK init/shutdown safely.
   - keeps lifecycle and timestamp scaffolding aligned with future vendor pull
     adapter wiring.

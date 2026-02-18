@@ -26,6 +26,8 @@ std::string ToJson(EventType event_type) {
     return "FRAME_TIMEOUT";
   case EventType::kFrameIncomplete:
     return "FRAME_INCOMPLETE";
+  case EventType::kDeviceDisconnected:
+    return "DEVICE_DISCONNECTED";
   case EventType::kTransportAnomaly:
     return "TRANSPORT_ANOMALY";
   case EventType::kStreamStopped:

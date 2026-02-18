@@ -53,6 +53,10 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
   `STREAM_STOPPED` event with reason `signal_interrupt`, flushes all core run
   artifacts (`run.json`, `events.jsonl`, `metrics.*`, `summary.md`,
   `report.html`, `bundle_manifest.json`), and exits non-zero;
+  for real-backend runs, treats mid-stream disconnects as retryable failures:
+  emits `DEVICE_DISCONNECTED`, retries reconnect with a bounded budget, and if
+  retries are exhausted still flushes a complete failure bundle with
+  `STREAM_STOPPED` reason `device_disconnect`;
   evaluates configured scenario thresholds against computed metrics; returns
   non-zero when thresholds fail; and reports output paths.
 - `labops baseline capture <scenario.json> [--redact] [--device <selector>] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: captures a scenario baseline into

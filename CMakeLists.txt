@@ -558,6 +558,20 @@ add_labops_smoke_test(
     ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
 
+# Integration smoke test validating reconnect policy for mid-stream device loss:
+# emit DEVICE_DISCONNECTED, retry with bounded budget, and still flush a full
+# failure bundle when retries are exhausted.
+add_labops_smoke_test(
+  NAME run_reconnect_policy_smoke
+  SOURCES
+    tests/labops/run_reconnect_policy_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
+)
+
 # Integration smoke test for actionable schema validation errors through CLI.
 add_labops_smoke_test(
   NAME validate_actionable_smoke

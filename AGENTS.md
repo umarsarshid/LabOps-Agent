@@ -33,9 +33,9 @@ Long-term goal:
 - autonomous triage loop that changes one variable at a time and ships an
   engineer packet with repro steps, evidence, likely cause, and next actions.
 
-## Current Snapshot (as of February 14, 2026)
+## Current Snapshot (as of February 18, 2026)
 
-- Latest commit before current work: `ebb7723` (`feat(agent): add deterministic stop-condition evaluator`)
+- Latest commit before current work: `635bf25` (`chore: commit summary and update agent handoff policy`)
 - Milestones completed:
   - Milestone 0: repo/build/style/CI foundation
   - Milestone 1: CLI skeleton + output contracts
@@ -46,9 +46,11 @@ Long-term goal:
   - Milestone 6: baseline capture + compare diff outputs + threshold pass/fail
   - Milestone 7: done (hostprobe + NIC hints + redaction)
   - Milestone 8: done (netem profiles, suggestions, guarded execution)
-  - Milestone 9: in progress (agent-mode foundations)
+  - Milestone 9: done (agent-mode foundation + packet/report flow)
+  - Milestone R0-R8: done (real backend build gates, selection, params, frame loop, transport counters/anomalies)
+  - Milestone R9: in progress (robustness; reconnect policy now implemented)
 - Latest known test status:
-  - full smoke suite passing after `0046` plus failure-path smoke
+  - `ctest --test-dir build --output-on-failure` passing (`62/62`)
 
 ## Confirmed Working Commands
 

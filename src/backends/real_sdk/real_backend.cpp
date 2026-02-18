@@ -4,6 +4,8 @@
 #include <charconv>
 #include <cmath>
 #include <cstdlib>
+#include <optional>
+#include <string>
 #include <string_view>
 
 namespace labops::backends::real_sdk {
@@ -41,6 +43,22 @@ bool ParseUInt64(std::string_view raw, std::uint64_t& parsed) {
   const char* end = begin + raw.size();
   const auto [ptr, ec] = std::from_chars(begin, end, parsed);
   return ec == std::errc() && ptr == end;
+}
+
+std::optional<std::uint64_t> ReadOptionalUint64Env(const char* name) {
+  if (name == nullptr || *name == '\0') {
+    return std::nullopt;
+  }
+  const char* raw = std::getenv(name);
+  if (raw == nullptr || *raw == '\0') {
+    return std::nullopt;
+  }
+
+  std::uint64_t parsed = 0;
+  if (!ParseUInt64(raw, parsed) || parsed == 0U) {
+    return std::nullopt;
+  }
+  return parsed;
 }
 
 bool ParseFiniteDouble(std::string_view raw, double& parsed) {
@@ -179,11 +197,23 @@ RealBackend::RealBackend() {
       {"FrameIncompletePercent", "1.0"},
       {"FrameSeed", "1"},
   };
+
+  disconnect_after_pull_calls_ = ReadOptionalUint64Env("LABOPS_REAL_DISCONNECT_AFTER_PULLS");
+  if (disconnect_after_pull_calls_.has_value()) {
+    params_["simulate_disconnect_after_pull_calls"] =
+        std::to_string(disconnect_after_pull_calls_.value());
+  }
 }
 
 bool RealBackend::Connect(std::string& error) {
   if (connected_) {
     error = "real backend skeleton is already connected";
+    return false;
+  }
+  if (simulated_disconnect_latched_) {
+    // Once the fixture disconnect trips, keep connect failing so run-level
+    // reconnect policy can exercise retry exhaustion deterministically.
+    error = "device unavailable after disconnect";
     return false;
   }
 
@@ -207,13 +237,18 @@ bool RealBackend::Start(std::string& error) {
     return false;
   }
 
-  next_frame_id_ = 0;
-  stream_start_ts_ = std::chrono::system_clock::now();
+  if (next_frame_id_ == 0U) {
+    stream_start_ts_ = std::chrono::system_clock::now();
+  }
   error.clear();
   return true;
 }
 
 bool RealBackend::Stop(std::string& error) {
+  if (!connected_ && !stream_session_.running()) {
+    error.clear();
+    return true;
+  }
   if (!connected_) {
     error = BuildNotConnectedError("stop");
     return false;
@@ -262,6 +297,19 @@ std::vector<FrameSample> RealBackend::PullFrames(std::chrono::milliseconds durat
 
   if (duration == std::chrono::milliseconds::zero()) {
     error.clear();
+    return {};
+  }
+
+  ++pull_calls_;
+  if (disconnect_after_pull_calls_.has_value() &&
+      pull_calls_ >= disconnect_after_pull_calls_.value()) {
+    // Simulate a mid-stream device detach in OSS builds so reconnect policy can
+    // be tested without physical unplug events.
+    std::string stop_error;
+    (void)stream_session_.Stop(stop_error);
+    simulated_disconnect_latched_ = true;
+    connected_ = false;
+    error = "device disconnected during acquisition";
     return {};
   }
 

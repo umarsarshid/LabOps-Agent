@@ -10,7 +10,8 @@ contract and append-only JSONL writer behavior from regressions.
 ## Current contents
 
 - `events_jsonl_smoke.cpp`: verifies append behavior and required keys in
-  `events.jsonl` lines.
+  `events.jsonl` lines, including lifecycle-critical event type serialization
+  (`DEVICE_DISCONNECTED`, `TRANSPORT_ANOMALY`).
 - `transport_anomaly_smoke.cpp`: verifies optional transport-counter anomaly
   heuristics trigger findings only when counters are available and exceed
   thresholds.
