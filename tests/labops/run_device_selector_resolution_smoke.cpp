@@ -179,6 +179,8 @@ int main() {
                   << "  },\n"
                   << "  \"camera\": {\n"
                   << "    \"fps\": 30,\n"
+                  << "    \"exposure_us\": 8000,\n"
+                  << "    \"gain_db\": 6.5,\n"
                   << "    \"trigger_mode\": \"free_run\"\n"
                   << "  },\n"
                   << "  \"thresholds\": {\n"
@@ -236,6 +238,10 @@ int main() {
     const std::string verify_json = ReadFile(config_verify_path);
     AssertContains(verify_json, "\"requested_count\"");
     AssertContains(verify_json, "\"generic_key\":\"frame_rate\"");
+    AssertContains(verify_json, "\"generic_key\":\"exposure\"");
+    AssertContains(verify_json, "\"generic_key\":\"gain\"");
+    AssertContains(verify_json, "\"actual\":\"8000\"");
+    AssertContains(verify_json, "\"actual\":\"6.5\"");
     AssertContains(verify_json, "\"supported\":true");
 
     const std::string camera_config_json = ReadFile(camera_config_path);
@@ -250,6 +256,10 @@ int main() {
     const std::string config_report = ReadFile(config_report_path);
     AssertContains(config_report, "| Status | Key | Node | Requested | Actual | Notes |");
     AssertContains(config_report, "frame_rate");
+    AssertContains(config_report, "exposure");
+    AssertContains(config_report, "gain");
+    AssertContains(config_report, "units: us; validated range: [5, 10000000]");
+    AssertContains(config_report, "units: dB; validated range: [0, 48]");
     AssertContains(config_report, "✅ applied");
   } else {
     if (exit_code != labops::core::errors::ToInt(labops::core::errors::ExitCode::kFailure)) {

@@ -24,6 +24,9 @@ This folder is that bridge.
 - `apply_params.hpp` / `apply_params.cpp`:
   - bridges scenario generic keys to SDK node names using `ParamKeyMap`.
   - validates/coerces values via `NodeMapAdapter` in strict or best-effort mode.
+  - includes first practical numeric knob guards for real triage tickets:
+    - `exposure` (`ExposureTime`) clamped/validated to `[5, 10000000]` (us)
+    - `gain` (`Gain`) clamped/validated to `[0, 48]` (dB)
   - performs per-setting readback verification and returns structured
     `requested vs actual vs supported` rows.
   - returns structured applied/unsupported/adjusted results so CLI can emit

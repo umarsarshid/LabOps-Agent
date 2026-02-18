@@ -125,6 +125,8 @@ int main() {
     if (!ApplyParams(backend, key_map, *adapter,
                      {
                          ApplyParamInput{"frame_rate", "1000"},
+                         ApplyParamInput{"exposure", "20000000"},
+                         ApplyParamInput{"gain", "-2"},
                          ApplyParamInput{"pixel_format", "mono8"},
                          ApplyParamInput{"unknown_knob", "1"},
                      },
@@ -132,18 +134,22 @@ int main() {
       Fail("best-effort apply unexpectedly failed: " + error);
     }
 
-    if (result.applied.size() != 2U) {
-      Fail("best-effort apply should keep 2 supported parameters");
+    if (result.applied.size() != 4U) {
+      Fail("best-effort apply should keep 4 supported parameters");
     }
     if (result.unsupported.size() != 1U) {
       Fail("best-effort apply should record 1 unsupported parameter");
     }
-    if (result.readback_rows.size() != 3U) {
+    if (result.readback_rows.size() != 5U) {
       Fail("best-effort apply should capture readback rows for all requested settings");
     }
 
     bool saw_adjusted_frame_rate = false;
+    bool saw_adjusted_exposure = false;
+    bool saw_adjusted_gain = false;
     bool saw_adjusted_readback = false;
+    bool saw_exposure_readback = false;
+    bool saw_gain_readback = false;
     for (const auto& applied : result.applied) {
       if (applied.generic_key == "frame_rate") {
         if (!applied.adjusted) {
@@ -154,6 +160,24 @@ int main() {
         }
         saw_adjusted_frame_rate = true;
       }
+      if (applied.generic_key == "exposure") {
+        if (!applied.adjusted) {
+          Fail("expected exposure to be marked adjusted");
+        }
+        if (applied.applied_value != "10000000") {
+          Fail("expected exposure to be clamped to 10000000");
+        }
+        saw_adjusted_exposure = true;
+      }
+      if (applied.generic_key == "gain") {
+        if (!applied.adjusted) {
+          Fail("expected gain to be marked adjusted");
+        }
+        if (applied.applied_value != "0") {
+          Fail("expected gain to be clamped to 0");
+        }
+        saw_adjusted_gain = true;
+      }
     }
     for (const auto& row : result.readback_rows) {
       if (row.generic_key == "frame_rate") {
@@ -162,17 +186,47 @@ int main() {
         }
         saw_adjusted_readback = true;
       }
+      if (row.generic_key == "exposure") {
+        if (!row.supported || !row.applied || !row.adjusted || row.actual_value != "10000000") {
+          Fail("best-effort readback for exposure is incorrect");
+        }
+        saw_exposure_readback = true;
+      }
+      if (row.generic_key == "gain") {
+        if (!row.supported || !row.applied || !row.adjusted || row.actual_value != "0") {
+          Fail("best-effort readback for gain is incorrect");
+        }
+        saw_gain_readback = true;
+      }
     }
     if (!saw_adjusted_frame_rate) {
       Fail("expected adjusted frame_rate result entry");
     }
+    if (!saw_adjusted_exposure) {
+      Fail("expected adjusted exposure result entry");
+    }
+    if (!saw_adjusted_gain) {
+      Fail("expected adjusted gain result entry");
+    }
     if (!saw_adjusted_readback) {
       Fail("expected adjusted frame_rate readback entry");
+    }
+    if (!saw_exposure_readback) {
+      Fail("expected adjusted exposure readback entry");
+    }
+    if (!saw_gain_readback) {
+      Fail("expected adjusted gain readback entry");
     }
 
     const auto dumped = backend.DumpConfig();
     if (dumped.find("AcquisitionFrameRate") == dumped.end()) {
       Fail("expected backend to receive mapped AcquisitionFrameRate node");
+    }
+    if (dumped.find("ExposureTime") == dumped.end()) {
+      Fail("expected backend to receive mapped ExposureTime node");
+    }
+    if (dumped.find("Gain") == dumped.end()) {
+      Fail("expected backend to receive mapped Gain node");
     }
     if (dumped.find("PixelFormat") == dumped.end()) {
       Fail("expected backend to receive mapped PixelFormat node");

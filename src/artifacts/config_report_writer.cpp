@@ -77,6 +77,32 @@ std::string NormalizeCellValue(const std::string& value) {
   return value;
 }
 
+std::optional<std::string> BuildKeyUnitAndRangeNote(std::string_view generic_key) {
+  // Exposure and gain are high-touch knobs in camera triage tickets.
+  // Keep unit/range hints inline so engineers can sanity-check values without
+  // cross-referencing schema docs during first-pass review.
+  if (generic_key == "exposure") {
+    return "units: us; validated range: [5, 10000000]";
+  }
+  if (generic_key == "gain") {
+    return "units: dB; validated range: [0, 48]";
+  }
+  return std::nullopt;
+}
+
+void AppendKeyUnitAndRangeNote(std::string_view generic_key, std::string& notes) {
+  const std::optional<std::string> key_note = BuildKeyUnitAndRangeNote(generic_key);
+  if (!key_note.has_value()) {
+    return;
+  }
+
+  if (notes.empty() || notes == "-") {
+    notes = key_note.value();
+    return;
+  }
+  notes += "; " + key_note.value();
+}
+
 ReportStatus ClassifyReportStatus(const backends::real_sdk::ReadbackRow& row) {
   if (!row.supported || !row.applied) {
     return ReportStatus::kUnsupported;
@@ -155,6 +181,8 @@ BuildReportRows(const std::vector<backends::real_sdk::ApplyParamInput>& requeste
     if (requested_it != requested_by_key.end() && !requested_it->second.empty()) {
       row.requested = requested_it->second;
     }
+
+    AppendKeyUnitAndRangeNote(row.generic_key, row.notes);
 
     rows.push_back(std::move(row));
   }

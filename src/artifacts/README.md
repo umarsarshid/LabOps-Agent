@@ -18,7 +18,8 @@ The project promise is a clean, reproducible evidence packet. This module ensure
 - `camera_config.json` real-backend camera config report with identity fields,
   curated node rows, and missing/unsupported key summaries.
 - `config_report.md` real-backend markdown report for quick triage reading with
-  status table rows (`applied`, `adjusted`, `unsupported`).
+  status table rows (`applied`, `adjusted`, `unsupported`) plus unit/range
+  hints for key numeric knobs (for example exposure/gain).
 - `events.jsonl` append-only run timeline.
 - `metrics.csv` for plotting and spreadsheet workflows.
 - `metrics.json` for machine parsing by agent logic.

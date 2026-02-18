@@ -47,6 +47,8 @@ int main() {
 
   std::vector<labops::backends::real_sdk::ApplyParamInput> requested_params = {
       {.generic_key = "frame_rate", .requested_value = "1000"},
+      {.generic_key = "exposure", .requested_value = "20000000"},
+      {.generic_key = "gain", .requested_value = "-2"},
       {.generic_key = "pixel_format", .requested_value = "mono8"},
       {.generic_key = "trigger_mode", .requested_value = "on"},
   };
@@ -60,7 +62,27 @@ int main() {
       .supported = true,
       .applied = true,
       .adjusted = true,
-      .reason = "clamped from 1000 to 240",
+      .reason = "clamped from 1000 to 240 (allowed range [1, 240])",
+  });
+  apply_result.readback_rows.push_back({
+      .generic_key = "exposure",
+      .node_name = "ExposureTime",
+      .requested_value = "20000000",
+      .actual_value = "10000000",
+      .supported = true,
+      .applied = true,
+      .adjusted = true,
+      .reason = "clamped from 20000000 to 10000000 (allowed range [5, 10000000])",
+  });
+  apply_result.readback_rows.push_back({
+      .generic_key = "gain",
+      .node_name = "Gain",
+      .requested_value = "-2",
+      .actual_value = "0",
+      .supported = true,
+      .applied = true,
+      .adjusted = true,
+      .reason = "clamped from -2 to 0 (allowed range [0, 48])",
   });
   apply_result.readback_rows.push_back({
       .generic_key = "pixel_format",
@@ -109,9 +131,13 @@ int main() {
   AssertContains(markdown, "⚠ adjusted");
   AssertContains(markdown, "❌ unsupported");
   AssertContains(markdown, "- ✅ applied: 1");
-  AssertContains(markdown, "- ⚠ adjusted: 1");
+  AssertContains(markdown, "- ⚠ adjusted: 3");
   AssertContains(markdown, "- ❌ unsupported: 1");
   AssertContains(markdown, "frame_rate");
+  AssertContains(markdown, "exposure");
+  AssertContains(markdown, "gain");
+  AssertContains(markdown, "units: us; validated range: [5, 10000000]");
+  AssertContains(markdown, "units: dB; validated range: [0, 48]");
   AssertContains(markdown, "trigger_mode");
 
   fs::remove_all(out_dir, ec);

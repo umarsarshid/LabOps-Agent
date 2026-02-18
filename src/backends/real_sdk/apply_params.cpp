@@ -49,6 +49,12 @@ std::string FormatDouble(double value) {
   return text;
 }
 
+std::string FormatRangeText(const NodeNumericRange& range) {
+  const std::string min_text = range.min.has_value() ? FormatDouble(range.min.value()) : "-inf";
+  const std::string max_text = range.max.has_value() ? FormatDouble(range.max.value()) : "+inf";
+  return "[" + min_text + ", " + max_text + "]";
+}
+
 bool ParseBool(std::string_view raw, bool& parsed) {
   const std::string normalized = ToLower(Trim(raw));
   if (normalized == "true" || normalized == "1" || normalized == "on") {
@@ -109,7 +115,8 @@ bool ClampWithRange(double& value, const NodeNumericRange& range, std::string& r
     return false;
   }
 
-  reason = "clamped from " + FormatDouble(requested) + " to " + FormatDouble(value);
+  reason = "clamped from " + FormatDouble(requested) + " to " + FormatDouble(value) +
+           " (allowed range " + FormatRangeText(range) + ")";
   return true;
 }
 
