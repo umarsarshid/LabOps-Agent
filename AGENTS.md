@@ -97,6 +97,14 @@ Follow these exactly when continuing commit-by-commit delivery:
    exists, and how it connects to the project.
 7. Keep detailed, granular writeups in `SUMMARY.md`, overwrite it each time.
 8. `SUMMARY.md` must be committed with each commit.
+9. Keep commit messages short and clean:
+   - use one concise subject line (prefer `type(scope): intent`)
+   - avoid long multi-paragraph commit bodies unless user explicitly asks
+   - examples:
+     - `feat(real): add sdk log capture`
+     - `chore(real): fix clang formatting`
+10. Run clang-format verification before committing:
+    - `bash tools/clang_format.sh --check`
 
 ## Core Files To Read First
 
