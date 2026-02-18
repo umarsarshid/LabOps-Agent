@@ -1,21 +1,35 @@
-# SUMMARY — docs update: future agent behavior
+# SUMMARY — docs(agent): expand AGENTS handoff
+
+## Goal
+Make `AGENTS.md` significantly more comprehensive so future coding agents can pick up work quickly and consistently without re-discovery.
 
 ## What was implemented
-- Updated `AGENTS.md` under **User Workflow Requirements** to explicitly require:
-  - short, clean commit messages
-  - concise single-line subjects (prefer `type(scope): intent`)
-  - avoiding long commit bodies unless the user asks
-  - running `bash tools/clang_format.sh --check` before commit
+- Reworked `AGENTS.md` into a fuller operations/handoff guide with clear sections:
+  - project purpose and real-world framing
+  - current status snapshot (recent commits + latest suite status)
+  - architecture map by `src/` area
+  - backend reality/limitations for `sim` vs `real_stub`
+  - artifact contract (core, context, soak, optional files)
+  - command cookbook (build, style, run, baseline, compare, kb)
+  - strict user workflow rules (implementation -> verify -> commit)
+  - definition-of-done checklist per commit
+  - targeted test surface references
+  - environment quirks and read-first file order
+  - next-likely-work roadmap and guardrails
 
 ## Why
-- Recent commits became too long/noisy in message format.
-- This makes future handoffs and git history easier to scan.
-- It prevents formatting regressions from reaching CI.
+- Previous handoff was useful but still left implicit context spread across the repo.
+- A stronger AGENTS file reduces onboarding time for the next agent and improves consistency in commits, testing, and communication style.
+- Explicit checklists reduce regressions and process drift.
 
 ## Verification
-- Reviewed `AGENTS.md` to confirm new rules are present in the workflow list.
-- Confirmed wording includes concrete examples for desired commit style.
+- Confirmed key new sections exist in `AGENTS.md`.
+- Confirmed user-required style constraints are preserved:
+  - short commit messages
+  - no commit numbers in message subjects
+  - plain-language updates with implementation/verify/commit summary
+- Docs-only change; no runtime code path affected.
 
-## Commit scope
-- Docs/process-only change.
-- No runtime code behavior changed.
+## Files changed
+- `AGENTS.md`
+- `SUMMARY.md`

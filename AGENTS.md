@@ -1,142 +1,223 @@
 # LabOps Agent Handoff
 
-This file helps the next coding agent continue work without re-discovery.
+This file is the operational guide for the next coding agent.
+Use it to continue work quickly without re-discovery.
 
-## Project Purpose
+## 1) What This Project Is
 
-`labops` is a C++ CLI for repeatable camera test runs. Current capabilities:
-- scenario validation
-- deterministic sim streaming with fault injection
-- run artifact generation (`scenario.json`, `run.json`, `events.jsonl`)
-- metrics generation (`metrics.csv`, `metrics.json`)
-- one-page run summary generation (`summary.md`)
-- host system snapshot generation (`hostprobe.json`)
-- NIC raw command evidence (`nic_*.txt`) + parsed highlights in host probe
-  (including MTU/link hints when available)
-- optional identifier redaction in host evidence via `--redact`
-- scenario-level `netem_profile` references validated against
-  `tools/netem_profiles/*.json` presets (definition-only stage)
-- optional manual netem apply/show/teardown command suggestions in
-  `summary.md` when `netem_profile` is configured
-- optional Linux netem execution path (`--apply-netem --netem-iface <iface>`)
-  with guaranteed teardown attempt on exit after successful apply
-- agent experiment-state model plus `agent_state.json` serializer/writer
-- in-process `ExperimentRunner` foundation for baseline + one-variant flow
-- symptom-driven playbook framework for ordered knob selection
-- one-variable-at-a-time scenario variant generator (`out/agent_runs`)
-- deterministic stop-condition evaluator (reason + explanation)
-- engineer packet generator (`engineer_packet.md` with evidence links)
-- bundle manifest generation (`bundle_manifest.json`)
-- optional support bundle zip (`--zip`)
-- optional SDK/backend log capture (`--sdk-log` -> `sdk_log.txt`)
+`labops` is a C++ CLI for repeatable camera testing and triage.
+
+At a high level it can:
+- validate a scenario
+- run a stream test (sim backend now, real backend integration path in progress)
+- collect evidence artifacts (events, metrics, config, host/network evidence)
+- compare runs against baselines
+- run rule-based agent triage flows (OAAT style)
+- generate engineer-facing packets/reports
 
 Long-term goal:
-- autonomous triage loop that changes one variable at a time and ships an
-  engineer packet with repro steps, evidence, likely cause, and next actions.
+- autonomous triage loop that changes one variable at a time and produces a
+  high-quality engineer packet with repro steps, evidence, likely cause, and
+  next actions.
 
-## Current Snapshot (as of February 18, 2026)
+## 2) Current Status Snapshot (as of Feb 18, 2026)
 
-- Latest commit before current work: `3ec4b35` (`feat(real): add reconnect policy for mid-stream disconnects`)
-- Milestones completed:
-  - Milestone 0: repo/build/style/CI foundation
-  - Milestone 1: CLI skeleton + output contracts
-  - Milestone 2: sim backend + deterministic/fault-injected stream runs
-  - Milestone 3: metrics (fps/drop/jitter) + metrics artifacts
-  - Milestone 4: scenario schema, loader/validator, scenario->backend apply
-  - Milestone 5: bundle layout, manifest, optional zip, bundle docs
-  - Milestone 6: baseline capture + compare diff outputs + threshold pass/fail
-  - Milestone 7: done (hostprobe + NIC hints + redaction)
-  - Milestone 8: done (netem profiles, suggestions, guarded execution)
-  - Milestone 9: done (agent-mode foundation + packet/report flow)
-  - Milestone R0-R8: done (real backend build gates, selection, params, frame loop, transport counters/anomalies)
-  - Milestone R9: in progress (robustness; reconnect policy now implemented)
-- Latest known test status:
-  - `ctest --test-dir build --output-on-failure` passing (`63/63`)
+Recent commits:
+- `4465235` `docs(agent): tighten commit style rules`
+- `c242372` `chore(real): fix clang formatting`
+- `089fbdd` `chore(real): harden error mapping and actionable messages`
+- `61e4a0a` `feat(real): add optional sdk log capture`
 
-## Confirmed Working Commands
+Milestone maturity:
+- Milestone 0-9: completed
+- Real-backend track (R0-R8): completed foundation and runtime wiring
+- Real-backend robustness (R9): in progress
+
+Latest known suite status:
+- `ctest --test-dir build --output-on-failure` passing (`64/64`)
+
+## 3) Architecture Map (Where Things Live)
+
+- `src/labops/cli/`
+  - command routing (`run`, `validate`, `compare`, `baseline`, `kb`, etc.)
+  - high-level run orchestration
+- `src/core/`
+  - schema contracts, exit codes, logging primitives
+- `src/events/`
+  - event model + JSONL writing + anomaly events
+- `src/metrics/`
+  - FPS/drop/jitter computations and anomaly heuristics
+- `src/artifacts/`
+  - all run outputs (`run.json`, `metrics.*`, summary/report files, bundle manifest)
+- `src/scenarios/`
+  - schema validation and scenario parsing/compatibility
+- `src/backends/sim/`
+  - deterministic simulation backend + fault injection
+- `src/backends/real_sdk/`
+  - real-backend integration path (non-proprietary scaffolding)
+  - param bridge, selector logic, stream/session lifecycle, transport counters
+  - stable error mapping (`REAL_*` codes)
+- `src/backends/sdk_stub/`
+  - fallback backend behavior when real SDK is unavailable
+- `src/hostprobe/`
+  - host and NIC evidence collection + redaction path
+- `src/agent/`
+  - experiment state, playbooks, variant generation, stop conditions, packet generation
+- `src/labops/soak/`
+  - checkpoint and resume persistence support
+
+## 4) Backend Reality (Important)
+
+Supported run backends in scenario:
+- `sim`
+- `real_stub`
+
+Real backend notes:
+- Build flag controls real enablement: `LABOPS_ENABLE_REAL_BACKEND`
+- Real discovery and selector resolution exist
+- Real session/frame loop path exists in OSS-compatible form
+- Proprietary SDK-specific wiring is intentionally not committed here
+
+Interpretation:
+- The system is already useful for repeatable workflow validation and triage-flow
+  behavior in sim and scaffolded real paths.
+- Full production hardware behavior depends on vendor SDK integration in
+  environment-specific code.
+
+## 5) Artifact Contract (Run Output)
+
+Typical bundle path:
+- `<out>/<run_id>/...`
+
+Core artifacts:
+- `scenario.json`
+- `run.json`
+- `events.jsonl`
+- `metrics.csv`
+- `metrics.json`
+- `summary.md`
+- `report.html`
+- `bundle_manifest.json`
+
+Context artifacts:
+- `hostprobe.json`
+- `nic_*.txt`
+- `config_verify.json` (real apply/readback path)
+- `camera_config.json` (real config dump)
+- `config_report.md` (human-readable config status table)
+- `sdk_log.txt` (if `--sdk-log`)
+- optional `<run_id>.zip` (if `--zip`)
+
+Soak-mode artifacts:
+- `soak_checkpoint.json`
+- `checkpoints/checkpoint_*.json`
+- `soak_frames.jsonl`
+
+## 6) Command Cookbook
 
 Build/test:
 - `cmake -S . -B build`
 - `cmake --build build`
 - `ctest --test-dir build --output-on-failure`
 
-CLI:
+Style gate:
+- `bash tools/clang_format.sh --check`
+
+Common CLI:
 - `./build/labops version`
+- `./build/labops list-backends`
+- `./build/labops list-devices --backend real`
 - `./build/labops validate scenarios/sim_baseline.json`
-- `./build/labops run scenarios/sim_baseline.json --out out/`
-- `./build/labops run scenarios/sim_baseline.json --out out/ --zip`
-- `./build/labops run scenarios/sim_baseline.json --out out-redacted/ --redact`
-- `./build/labops validate scenarios/trigger_roi.json`
+- `./build/labops run scenarios/sim_baseline.json --out tmp/runs`
+- `./build/labops baseline capture scenarios/sim_baseline.json`
+- `./build/labops compare --baseline baselines/sim_baseline --run tmp/runs/<run_id>`
+- `./build/labops kb draft --run tmp/runs/<run_id>`
 
-Expected run outputs:
-- `<out>/<run_id>/scenario.json`
-- `<out>/<run_id>/hostprobe.json`
-- `<out>/<run_id>/nic_*.txt`
-- `<out>/<run_id>/run.json`
-- `<out>/<run_id>/events.jsonl`
-- `<out>/<run_id>/metrics.csv`
-- `<out>/<run_id>/metrics.json`
-- `<out>/<run_id>/summary.md`
-- `<out>/<run_id>/bundle_manifest.json`
-- optional `<out>/<run_id>/sdk_log.txt` when `--sdk-log` is enabled for real runs
-- optional `<out>/<run_id>.zip`
+## 7) User Workflow Rules (Do Not Break)
 
-## User Workflow Requirements (Important)
+Follow this flow every task:
+1. implementation
+2. test/verify
+3. commit
 
-Follow these exactly when continuing commit-by-commit delivery:
+Communication requirements:
+- plain language in chat
+- always include:
+  - what was implemented
+  - how to verify
+  - commit summary
+- include the "why" for each implemented change
 
-1. Flow per task: `implementation -> test/verify -> commit`
-2. Do not include commit numbers inside git commit messages.
-3. In chat, keep it plain language and include:
-   - what was implemented
-   - how to verify
-   - commit summary
-4. Include the "why" for each implemented change.
-5. Add strong senior-level code comments in new/updated files when helpful.
-6. Add/maintain README files in subfolders to explain what is there, why it
-   exists, and how it connects to the project.
-7. Keep detailed, granular writeups in `SUMMARY.md`, overwrite it each time.
-8. `SUMMARY.md` must be committed with each commit.
-9. Keep commit messages short and clean:
-   - use one concise subject line (prefer `type(scope): intent`)
-   - avoid long multi-paragraph commit bodies unless user explicitly asks
-   - examples:
-     - `feat(real): add sdk log capture`
-     - `chore(real): fix clang formatting`
-10. Run clang-format verification before committing:
-    - `bash tools/clang_format.sh --check`
+Codebase hygiene requirements:
+- add strong senior-level comments where useful
+- maintain per-folder README context docs when touching modules
+- keep commit messages short and clean
+  - preferred style: `type(scope): intent`
+  - avoid long multi-paragraph commit bodies unless user asks
 
-## Core Files To Read First
+Summary requirements:
+- overwrite `SUMMARY.md` each commit with detailed notes
+- `SUMMARY.md` is tracked and should be committed
 
-- `README.md`
-- `docs/triage_bundle_spec.md`
-- `docs/scenario_schema.md`
-- `SUMMARY.md` (latest local implementation detail log)
+Commit-message constraints:
+- do **not** include milestone/commit numbers in git subject lines
 
-## Repo Notes
+## 8) Definition of Done Checklist (Per Commit)
 
-- There is currently no root `.gitignore`; local dirs like `build/` and `out/`
-  may appear untracked.
-- `SUMMARY.md` is a tracked artifact and should be updated/committed each time.
-- Most `src/`, `docs/`, `tests/`, and `scenarios/` subfolders include local
-  `README.md` files with module-level context.
+Before commit:
+- `bash tools/clang_format.sh --check`
+- build passes: `cmake --build build`
+- relevant targeted tests pass
+- for risky/core changes: run full `ctest --test-dir build --output-on-failure`
+- update `SUMMARY.md`
+- verify only intended files are staged
 
-## Known Environment Quirk
+After commit:
+- confirm `git status --short` is clean except expected local dirs (like `build/`)
+- provide short plain-language summary + verify commands + commit hash
 
-Commands may print this startup noise from `.zshenv`:
+## 9) Testing Surface (Useful Targets)
+
+Useful focused tests:
+- real error mapping: `real_error_mapper_smoke`
+- reconnect behavior: `run_reconnect_policy_smoke`
+- device selection: `run_device_selector_resolution_smoke`
+- backend connect failure contract: `run_backend_connect_failure_smoke`
+- list-devices behavior: `list_devices_real_backend_smoke`
+- apply-mode event contract: `real_apply_mode_events_smoke`
+
+When touching router/backends broadly, run full suite.
+
+## 10) Known Environment Quirk
+
+Shell startup may print:
 - `/Users/umararshid/.zshenv:3: parse error near 'JAVA_HOME=...'`
 
-Commands still run; it is a shell startup warning, not a LabOps failure.
+This is environmental noise; commands still run.
 
-## Next Likely Work
+## 11) What To Read First (When Picking Up Work)
 
-Use the user's explicit next commit request first. If no explicit task is
-provided, likely follow-on work is:
-- scenario-aware redaction expansion (if future security/privacy requirements add more fields)
-- netem execution harness (apply/teardown orchestration instead of manual-only suggestions)
-- richer netem status evidence in artifacts/events (applied/teardown outcomes)
-- agent experiment planner/runner (OAAT isolation loop) on top of
-  `ExperimentState` + `agent_state.json` + `ExperimentRunner` + symptom playbooks
-  + generated OAAT variants + deterministic stop conditions + engineer packets
-- engineer packet generation
-- hardware SDK backend implementation behind `ICameraBackend`
+1. `README.md`
+2. `ProjectDesc.md`
+3. `docs/triage_bundle_spec.md`
+4. `docs/scenario_schema.md`
+5. `src/labops/cli/README.md`
+6. `src/backends/real_sdk/README.md`
+7. `SUMMARY.md`
+
+## 12) Next Likely Work
+
+Use explicit user request first.
+If none is provided, likely next high-value items are:
+- real backend disconnect/recovery hardening details
+- richer transport anomaly evidence/events
+- further real SDK mapping coverage and readback fidelity
+- broader agent loop behavior (planning/execution/stopping confidence)
+- additional bundle/report polish for engineering handoff quality
+
+## 13) Guardrails
+
+- Do not commit proprietary SDK files/binaries.
+- Do not weaken stable output contracts without tests/docs updates.
+- Do not change exit-code semantics casually (CI and tooling depend on them).
+- Keep changes atomic and reviewable.
