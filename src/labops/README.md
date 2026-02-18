@@ -45,7 +45,9 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
   device by `serial:<value>` or `user_id:<value>` and optional `index:<n>`
   before connect so run selection is deterministic; writes `run.json` early on
   backend-connect failure so selected device metadata is still preserved in
-  evidence;
+  evidence; for real-device runs, `run.json` includes transport counter status
+  (`resends`, `packet_errors`, `dropped_packets`) with either numeric values
+  or explicit `not_available`;
   for real-backend runs, handles `Ctrl+C` (`SIGINT`) as a graceful interrupt
   request that stops frame collection at safe boundaries, writes a
   `STREAM_STOPPED` event with reason `signal_interrupt`, flushes all core run

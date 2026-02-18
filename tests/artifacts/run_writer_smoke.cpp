@@ -50,6 +50,12 @@ int main() {
       .firmware_version = std::optional<std::string>("4.5.6"),
       .sdk_version = std::optional<std::string>("21.1.8"),
   };
+  run_info.real_device->transport_counters.resends.available = true;
+  run_info.real_device->transport_counters.resends.value = 6U;
+  run_info.real_device->transport_counters.packet_errors.available = true;
+  run_info.real_device->transport_counters.packet_errors.value = 0U;
+  run_info.real_device->transport_counters.dropped_packets.available = false;
+  run_info.real_device->transport_counters.dropped_packets.value.reset();
   run_info.timestamps.created_at = now;
   run_info.timestamps.started_at = now;
   run_info.timestamps.finished_at = now;
@@ -88,6 +94,10 @@ int main() {
   AssertContains(content, "\"serial\":\"SN-001\"");
   AssertContains(content, "\"firmware_version\":\"4.5.6\"");
   AssertContains(content, "\"sdk_version\":\"21.1.8\"");
+  AssertContains(content, "\"transport_counters\":");
+  AssertContains(content, "\"resends\":{\"status\":\"available\",\"value\":6}");
+  AssertContains(content, "\"packet_errors\":{\"status\":\"available\",\"value\":0}");
+  AssertContains(content, "\"dropped_packets\":{\"status\":\"not_available\"}");
   AssertContains(content, "\"timestamps\":");
 
   fs::remove_all(out_dir, cleanup_ec);

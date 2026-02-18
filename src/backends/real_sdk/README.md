@@ -75,6 +75,13 @@ This folder is that bridge.
   - uses `SdkContext` RAII to guard process-level SDK init/shutdown safely.
   - keeps lifecycle and timestamp scaffolding aligned with future vendor pull
     adapter wiring.
+- `transport_counters.hpp` / `transport_counters.cpp`:
+  - collects transport-layer counters from backend/SDK dump keys in
+    best-effort mode.
+  - normalizes alias variations into stable evidence fields:
+    `resends`, `packet_errors`, `dropped_packets`.
+  - treats missing/non-numeric counters as not available instead of failing
+    runs so mixed SDK capability does not break triage flow.
 - `stream_session.hpp` / `stream_session.cpp`:
   - encapsulates acquisition start/stop semantics for real backend runs.
   - guarantees best-effort stop in destructor and idempotent explicit stop calls.
@@ -103,6 +110,12 @@ This folder is that bridge.
   - creates the effective backend object for real runs:
     - real backend enabled -> `RealBackend`
     - real backend disabled -> `sdk_stub::RealCameraBackendStub`
+
+Run pipeline integration note:
+- when `real_device` metadata is present, `run.json` now includes
+  `transport_counters` for `resends`, `packet_errors`, and
+  `dropped_packets`, each marked as `available` with a value or
+  explicit `not_available`.
 
 ## Connection to the project
 

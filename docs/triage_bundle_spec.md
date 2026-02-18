@@ -139,7 +139,12 @@ Canonical structure:
     "transport": "usb",
     "user_id": "Secondary",
     "firmware_version": "4.0.0",
-    "sdk_version": "21.1.8"
+    "sdk_version": "21.1.8",
+    "transport_counters": {
+      "resends": { "status": "not_available" },
+      "packet_errors": { "status": "not_available" },
+      "dropped_packets": { "status": "not_available" }
+    }
   },
   "timestamps": {
     "created_at_utc": "2026-02-13T21:34:24.116Z",
@@ -157,6 +162,12 @@ Field notes:
   - `model`, `serial`, `transport` are required when `real_device` exists
   - `firmware_version` is included when the SDK/discovery source exposes it
   - `sdk_version` is always captured for real-device runs (`unknown` fallback)
+  - `transport_counters` always carries explicit status for:
+    - `resends`
+    - `packet_errors`
+    - `dropped_packets`
+    each counter is either `{ "status": "available", "value": <n> }` or
+    `{ "status": "not_available" }`
 - `timestamps.*`: UTC with millisecond precision (`YYYY-MM-DDTHH:MM:SS.mmmZ`)
 
 ### `camera_config.json`

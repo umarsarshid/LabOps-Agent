@@ -38,6 +38,9 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
   camera identity.
   - attach resolved identity/version metadata to `run.json` (`real_device`)
     so triage bundles capture exact hardware provenance.
+  - collect transport-layer counters in best-effort mode (`resends`,
+    `packet_errors`, `dropped_packets`) and write explicit availability status
+    into `run.json` even on backend-connect failures.
 - Validate optional `netem_profile` references against
   `tools/netem_profiles/<profile>.json`.
 - Apply scenario settings to backend params and emit config-audit events:

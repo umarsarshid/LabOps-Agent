@@ -16,6 +16,28 @@ std::string ToJson(const RunConfig& run_config) {
   return out.str();
 }
 
+std::string ToJson(const TransportCounterStatus& counter) {
+  std::ostringstream out;
+  out << "{";
+  if (counter.available && counter.value.has_value()) {
+    out << "\"status\":\"available\","
+        << "\"value\":" << counter.value.value();
+  } else {
+    out << "\"status\":\"not_available\"";
+  }
+  out << "}";
+  return out.str();
+}
+
+std::string ToJson(const TransportCounterSnapshot& counters) {
+  std::ostringstream out;
+  out << "{"
+      << "\"resends\":" << ToJson(counters.resends) << ","
+      << "\"packet_errors\":" << ToJson(counters.packet_errors) << ","
+      << "\"dropped_packets\":" << ToJson(counters.dropped_packets) << "}";
+  return out.str();
+}
+
 std::string ToJson(const RealDeviceMetadata& real_device) {
   std::ostringstream out;
   out << "{"
@@ -32,6 +54,7 @@ std::string ToJson(const RealDeviceMetadata& real_device) {
   if (real_device.sdk_version.has_value()) {
     out << ",\"sdk_version\":\"" << core::EscapeJson(real_device.sdk_version.value()) << "\"";
   }
+  out << ",\"transport_counters\":" << ToJson(real_device.transport_counters);
   out << "}";
   return out.str();
 }

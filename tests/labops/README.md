@@ -79,7 +79,9 @@ This keeps each test focused on contract verification instead of setup code.
   status review (including trigger mode/source/activation evidence plus
   exposure/gain/ROI unit/range notes plus GigE transport tuning behavior:
   USB selectors do not fail and record unsupported transport-tuning reasons,
-  while GigE selectors apply transport settings when nodes are available), and follows
+  while GigE selectors apply transport settings when nodes are available),
+  and verifies `run.json` includes explicit transport counter availability
+  fields (`resends`, `packet_errors`, `dropped_packets`), and follows
   expected exit-code behavior for
   both real-enabled and real-disabled builds.
 - `real_apply_mode_events_smoke.cpp`: verifies real-backend `apply_mode`

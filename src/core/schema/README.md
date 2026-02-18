@@ -24,6 +24,11 @@ Keeping canonical schema types here gives every module one source of truth.
   - optional `user_id`
   - optional `firmware_version` (when source exposes it)
   - `sdk_version` for real-device runs (`unknown` fallback when unavailable)
+  - `transport_counters` with explicit per-counter status:
+    - `resends`
+    - `packet_errors`
+    - `dropped_packets`
+    each encoded as `available + value` or explicit `not_available`
 - JSON serialization is canonical and deterministic for stable snapshots and
   artifact diffs.
 

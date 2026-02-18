@@ -24,6 +24,22 @@ struct RunTimestamps {
   std::chrono::system_clock::time_point finished_at{};
 };
 
+// Normalized transport-counter status used in run metadata.
+//
+// `available=false` means the backend/SDK did not expose the counter in a
+// parseable form for this run. This keeps evidence explicit without failing
+// runs when vendor APIs differ.
+struct TransportCounterStatus {
+  bool available = false;
+  std::optional<std::uint64_t> value;
+};
+
+struct TransportCounterSnapshot {
+  TransportCounterStatus resends;
+  TransportCounterStatus packet_errors;
+  TransportCounterStatus dropped_packets;
+};
+
 // Real-device metadata captured when a run resolves a concrete physical camera.
 //
 // This is optional because sim runs (and early-failure real runs without device
@@ -35,6 +51,7 @@ struct RealDeviceMetadata {
   std::optional<std::string> user_id;
   std::optional<std::string> firmware_version;
   std::optional<std::string> sdk_version;
+  TransportCounterSnapshot transport_counters;
 };
 
 // RunInfo combines run identity, immutable config, and lifecycle timing into
@@ -49,6 +66,8 @@ struct RunInfo {
 // JSON serializers for stable artifact emission and test assertions. These
 // return canonical key ordering to keep diffs and snapshots predictable.
 std::string ToJson(const RunConfig& run_config);
+std::string ToJson(const TransportCounterStatus& counter);
+std::string ToJson(const TransportCounterSnapshot& counters);
 std::string ToJson(const RealDeviceMetadata& real_device);
 std::string ToJson(const RunInfo& run_info);
 

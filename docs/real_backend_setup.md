@@ -62,7 +62,9 @@ export LABOPS_REAL_DEVICE_FIXTURE="$(pwd)/tmp/devices.csv"
 
 When selector resolution succeeds, `run.json` will include real-device identity
 metadata (`model`, `serial`, `transport`) and version fields
-(`firmware_version` when exposed, `sdk_version` with `unknown` fallback).
+(`firmware_version` when exposed, `sdk_version` with `unknown` fallback),
+plus transport counter evidence (`resends`, `packet_errors`,
+`dropped_packets`) as either `available` values or explicit `not_available`.
 
 Selector format supported by `--device` and scenario `device_selector`:
 

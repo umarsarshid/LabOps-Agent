@@ -46,6 +46,12 @@ int main() {
       .firmware_version = std::optional<std::string>("1.2.3"),
       .sdk_version = std::optional<std::string>("21.1.8"),
   };
+  info.real_device->transport_counters.resends.available = true;
+  info.real_device->transport_counters.resends.value = 14U;
+  info.real_device->transport_counters.packet_errors.available = false;
+  info.real_device->transport_counters.packet_errors.value.reset();
+  info.real_device->transport_counters.dropped_packets.available = true;
+  info.real_device->transport_counters.dropped_packets.value = 2U;
 
   // Use deterministic timestamps so the smoke test is stable.
   const auto created_at = std::chrono::system_clock::time_point(std::chrono::milliseconds(1000));
@@ -65,6 +71,10 @@ int main() {
   AssertContains(run_info_json, "\"transport\":\"usb\"");
   AssertContains(run_info_json, "\"firmware_version\":\"1.2.3\"");
   AssertContains(run_info_json, "\"sdk_version\":\"21.1.8\"");
+  AssertContains(run_info_json, "\"transport_counters\":");
+  AssertContains(run_info_json, "\"resends\":{\"status\":\"available\",\"value\":14}");
+  AssertContains(run_info_json, "\"packet_errors\":{\"status\":\"not_available\"}");
+  AssertContains(run_info_json, "\"dropped_packets\":{\"status\":\"available\",\"value\":2}");
   AssertContains(run_info_json, "\"timestamps\":");
   AssertContains(run_info_json, "\"created_at_utc\":\"1970-01-01T00:00:01.000Z\"");
   AssertContains(run_info_json, "\"started_at_utc\":\"1970-01-01T00:00:02.500Z\"");

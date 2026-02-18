@@ -78,6 +78,7 @@ add_library(labops_backends
   src/backends/real_sdk/real_backend_factory.cpp
   src/backends/real_sdk/sdk_context.cpp
   src/backends/real_sdk/stream_session.cpp
+  src/backends/real_sdk/transport_counters.cpp
   src/backends/sdk_stub/real_camera_backend_stub.cpp
   src/backends/sim/scenario_config.cpp
   src/backends/sim/sim_camera_backend.cpp
@@ -491,6 +492,15 @@ add_labops_smoke_test(
   NAME real_apply_params_smoke
   SOURCES
     tests/backends/real_apply_params_smoke.cpp
+  LIBRARIES
+    labops_backends
+)
+
+# Smoke test for best-effort transport counter collection alias handling.
+add_labops_smoke_test(
+  NAME real_transport_counters_smoke
+  SOURCES
+    tests/backends/real_transport_counters_smoke.cpp
   LIBRARIES
     labops_backends
 )

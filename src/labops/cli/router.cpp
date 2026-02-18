@@ -16,6 +16,7 @@
 #include "backends/camera_backend.hpp"
 #include "backends/real_sdk/apply_params.hpp"
 #include "backends/real_sdk/real_backend_factory.hpp"
+#include "backends/real_sdk/transport_counters.hpp"
 #include "backends/sim/scenario_config.hpp"
 #include "backends/sim/sim_camera_backend.hpp"
 #include "core/errors/exit_codes.hpp"
@@ -1464,6 +1465,31 @@ void AttachResolvedDeviceMetadataToRunInfo(
   run_info.real_device = std::move(real_device);
 }
 
+core::schema::TransportCounterStatus
+ToTransportCounterStatus(const backends::real_sdk::TransportCounterReading& reading) {
+  core::schema::TransportCounterStatus status;
+  status.available = reading.available;
+  if (reading.available) {
+    status.value = reading.value;
+  }
+  return status;
+}
+
+void AttachTransportCountersToRunInfo(const backends::BackendConfig& backend_dump,
+                                      core::schema::RunInfo& run_info) {
+  if (!run_info.real_device.has_value()) {
+    return;
+  }
+
+  const backends::real_sdk::TransportCountersSnapshot counters =
+      backends::real_sdk::CollectTransportCounters(backend_dump);
+  run_info.real_device->transport_counters.resends = ToTransportCounterStatus(counters.resends);
+  run_info.real_device->transport_counters.packet_errors =
+      ToTransportCounterStatus(counters.packet_errors);
+  run_info.real_device->transport_counters.dropped_packets =
+      ToTransportCounterStatus(counters.dropped_packets);
+}
+
 bool ResolveDeviceSelectionForRun(const RunPlan& run_plan, const RunOptions& options,
                                   std::optional<ResolvedDeviceSelection>& resolved,
                                   std::string& error) {
@@ -2194,6 +2220,11 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     logger.Error("backend connect failed",
                  {{"backend", run_info.config.backend}, {"error", error}});
     run_info.timestamps.finished_at = std::chrono::system_clock::now();
+    if (run_plan.backend == kBackendRealStub) {
+      // Capture whatever transport counters are currently exposed so connect
+      // failure bundles still provide explicit availability evidence.
+      AttachTransportCountersToRunInfo(backend->DumpConfig(), run_info);
+    }
     fs::path run_artifact_path;
     std::string run_write_error;
     if (!artifacts::WriteRunJson(run_info, bundle_dir, run_artifact_path, run_write_error)) {
@@ -2561,6 +2592,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
         }
 
         fs::path run_artifact_path;
+        if (run_plan.backend == kBackendRealStub) {
+          AttachTransportCountersToRunInfo(backend->DumpConfig(), run_info);
+        }
         if (!artifacts::WriteRunJson(run_info, bundle_dir, run_artifact_path, error)) {
           logger.Error("failed to write run.json during soak pause", {{"error", error}});
           std::cerr << "error: failed to write run.json during soak pause: " << error << '\n';
@@ -2690,6 +2724,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
 
   fs::path run_artifact_path;
+  if (run_plan.backend == kBackendRealStub) {
+    AttachTransportCountersToRunInfo(backend->DumpConfig(), run_info);
+  }
   if (!artifacts::WriteRunJson(run_info, bundle_dir, run_artifact_path, error)) {
     logger.Error("failed to write run.json", {{"error", error}});
     std::cerr << "error: " << error << '\n';

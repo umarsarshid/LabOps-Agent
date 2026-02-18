@@ -247,6 +247,10 @@ int main() {
     AssertContains(run_json, "\"transport\":\"usb\"");
     AssertContains(run_json, "\"firmware_version\":\"4.0.0\"");
     AssertContains(run_json, "\"sdk_version\":\"21.1.8\"");
+    AssertContains(run_json, "\"transport_counters\":");
+    AssertContains(run_json, "\"resends\":{\"status\":\"not_available\"}");
+    AssertContains(run_json, "\"packet_errors\":{\"status\":\"not_available\"}");
+    AssertContains(run_json, "\"dropped_packets\":{\"status\":\"not_available\"}");
 
     const std::string verify_json = ReadFile(config_verify_path);
     AssertContains(verify_json, "\"requested_count\"");
@@ -323,6 +327,10 @@ int main() {
     const std::string gige_run_json = ReadFile(gige_bundle_dir / "run.json");
     AssertContains(gige_run_json, "\"serial\":\"SN-1001\"");
     AssertContains(gige_run_json, "\"transport\":\"gige\"");
+    AssertContains(gige_run_json, "\"transport_counters\":");
+    AssertContains(gige_run_json, "\"resends\":{\"status\":\"not_available\"}");
+    AssertContains(gige_run_json, "\"packet_errors\":{\"status\":\"not_available\"}");
+    AssertContains(gige_run_json, "\"dropped_packets\":{\"status\":\"not_available\"}");
 
     const std::string gige_verify_json = ReadFile(gige_bundle_dir / "config_verify.json");
     AssertContains(gige_verify_json, "\"generic_key\":\"packet_size_bytes\"");

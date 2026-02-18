@@ -45,6 +45,10 @@ The project needs one consistent workflow that can run on different camera stack
   - device selector parsing/resolution supports deterministic camera choice by
     `serial`, `user_id`, and optional `index` tie-breaks so repeated runs pick
     the same physical device.
+  - includes best-effort transport-counter collection normalization for
+    `resends`, `packet_errors`, and `dropped_packets` so run metadata can
+    report values when exposed by SDK nodes and explicit not-available status
+    otherwise.
   - `CreateRealBackend()` selects the effective implementation based on build
     availability (real skeleton when enabled, sdk stub fallback otherwise).
 - `sim/`: deterministic in-repo implementation of the contract with
