@@ -82,6 +82,17 @@ This folder is that bridge.
   - uses `SdkContext` RAII to guard process-level SDK init/shutdown safely.
   - keeps lifecycle and timestamp scaffolding aligned with future vendor pull
     adapter wiring.
+- `frame_provider.hpp` / `frame_provider.cpp`:
+  - introduces a frame-provider interface for acquisition loop inputs.
+  - keeps deterministic OSS outcome generation (`received`, `timeout`,
+    `incomplete`) in a provider that is independent of loop orchestration.
+  - enables mock-driven loop tests without hardware/SDK.
+- `acquisition_loop.hpp` / `acquisition_loop.cpp`:
+  - encapsulates timestamped frame-loop orchestration from provider samples.
+  - tracks loop counters (`received`, `timeout`, `incomplete`, dropped, and
+    synthetic stall periods).
+  - exposes event-like classification (`received/timeout/incomplete/dropped`)
+    for hardware-free loop contract testing.
 - `error_mapper.hpp` / `error_mapper.cpp`:
   - maps raw real-backend/SDK-style failures to stable codes
     (`REAL_DEVICE_BUSY`, `REAL_TIMEOUT`, etc.).

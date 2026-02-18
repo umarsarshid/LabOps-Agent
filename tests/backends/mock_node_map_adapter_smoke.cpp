@@ -115,7 +115,8 @@ public:
 
   bool TryGetBool(std::string_view key, bool& value) const override {
     const Node* node = Find(key);
-    if (node == nullptr || node->value_type != NodeValueType::kBool || !node->bool_value.has_value()) {
+    if (node == nullptr || node->value_type != NodeValueType::kBool ||
+        !node->bool_value.has_value()) {
       return false;
     }
     value = node->bool_value.value();

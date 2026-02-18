@@ -1,4 +1,6 @@
 #include "backends/real_sdk/real_backend.hpp"
+#include "backends/real_sdk/acquisition_loop.hpp"
+#include "backends/real_sdk/frame_provider.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -18,8 +20,6 @@ constexpr std::uint32_t kDefaultFrameSizeBytes = 4'096;
 constexpr double kDefaultTimeoutPercent = 1.0;
 constexpr double kDefaultIncompletePercent = 1.0;
 constexpr std::uint64_t kDefaultSeed = 1U;
-constexpr std::uint64_t kSplitMixIncrement = 0x9e3779b97f4a7c15ULL;
-constexpr std::uint64_t kOutcomeSalt = 0x8b8b8b8b8b8b8b8bULL;
 
 std::string BuildNotConnectedError(std::string_view operation) {
   return std::string("real backend skeleton cannot ") + std::string(operation) +
@@ -157,31 +157,6 @@ bool ResolvePercent(const BackendConfig& params, std::initializer_list<const cha
 
   resolved = parsed;
   return true;
-}
-
-std::uint64_t SplitMix64(std::uint64_t value) {
-  std::uint64_t state = value + kSplitMixIncrement;
-  state = (state ^ (state >> 30)) * 0xbf58476d1ce4e5b9ULL;
-  state = (state ^ (state >> 27)) * 0x94d049bb133111ebULL;
-  return state ^ (state >> 31);
-}
-
-FrameOutcome DetermineFrameOutcome(std::uint64_t seed, std::uint64_t frame_id,
-                                   double timeout_percent, double incomplete_percent) {
-  if (timeout_percent <= 0.0 && incomplete_percent <= 0.0) {
-    return FrameOutcome::kReceived;
-  }
-
-  // Deterministic sample in [0, 100) so seeded runs stay reproducible.
-  const std::uint64_t mixed = SplitMix64((seed ^ kOutcomeSalt) + frame_id * kSplitMixIncrement);
-  const double sample_percent = static_cast<double>(mixed % 100'000ULL) / 1'000.0;
-  if (sample_percent < timeout_percent) {
-    return FrameOutcome::kTimeout;
-  }
-  if (sample_percent < timeout_percent + incomplete_percent) {
-    return FrameOutcome::kIncomplete;
-  }
-  return FrameOutcome::kReceived;
 }
 
 } // namespace
@@ -389,57 +364,28 @@ std::vector<FrameSample> RealBackend::PullFrames(std::chrono::milliseconds durat
   // Timeout and incomplete percentages share one probability bucket.
   incomplete_percent = std::min(incomplete_percent, 100.0 - timeout_percent);
 
-  const double frame_count_exact =
-      (static_cast<double>(duration.count()) * frame_rate_fps) / 1000.0;
-  const std::uint64_t frame_count =
-      frame_count_exact > 0.0 ? static_cast<std::uint64_t>(frame_count_exact) : 0U;
-  if (frame_count == 0U) {
-    error.clear();
+  DeterministicFrameProvider provider(seed, frame_size_bytes, timeout_percent, incomplete_percent);
+  AcquisitionLoopInput loop_input;
+  loop_input.duration = duration;
+  loop_input.frame_rate_fps = frame_rate_fps;
+  loop_input.default_frame_size_bytes = frame_size_bytes;
+  loop_input.first_frame_id = next_frame_id_;
+  loop_input.stream_start_ts = stream_start_ts_;
+
+  AcquisitionLoopResult loop_result;
+  if (!RunAcquisitionLoop(provider, loop_input, loop_result, error)) {
+    AppendSdkLog("pull_frames status=error reason=acquisition_loop_failed");
     return {};
   }
 
-  const auto period_ns_double = 1'000'000'000.0 / frame_rate_fps;
-  const auto period_ns_count = static_cast<std::int64_t>(std::llround(period_ns_double));
-  const auto frame_period_ns = std::chrono::nanoseconds(std::max<std::int64_t>(1, period_ns_count));
-
-  std::vector<FrameSample> frames;
-  frames.reserve(static_cast<std::size_t>(frame_count));
-  for (std::uint64_t i = 0; i < frame_count; ++i) {
-    FrameSample frame;
-    frame.frame_id = next_frame_id_++;
-    frame.timestamp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
-        stream_start_ts_ + frame_period_ns * static_cast<std::int64_t>(frame.frame_id));
-    if (!frames.empty() && frame.timestamp <= frames.back().timestamp) {
-      frame.timestamp = frames.back().timestamp + std::chrono::microseconds(1);
-    }
-
-    frame.outcome =
-        DetermineFrameOutcome(seed, frame.frame_id, timeout_percent, incomplete_percent);
-    switch (frame.outcome) {
-    case FrameOutcome::kTimeout:
-      frame.size_bytes = 0U;
-      frame.dropped = true;
-      break;
-    case FrameOutcome::kIncomplete:
-      frame.size_bytes = std::max<std::uint32_t>(1U, frame_size_bytes / 4U);
-      frame.dropped = true;
-      break;
-    case FrameOutcome::kDropped:
-      frame.size_bytes = 0U;
-      frame.dropped = true;
-      break;
-    case FrameOutcome::kReceived:
-    default:
-      frame.size_bytes = frame_size_bytes;
-      break;
-    }
-
-    frames.push_back(frame);
-  }
-
+  next_frame_id_ = loop_result.next_frame_id;
   error.clear();
-  AppendSdkLog(std::string("pull_frames status=success frames=") + std::to_string(frames.size()));
-  return frames;
+  AppendSdkLog(std::string("pull_frames status=success frames=") +
+               std::to_string(loop_result.frames.size()) +
+               " timeout=" + std::to_string(loop_result.counters.frames_timeout) +
+               " incomplete=" + std::to_string(loop_result.counters.frames_incomplete) +
+               " stall_periods=" + std::to_string(loop_result.counters.stall_periods_total));
+  return loop_result.frames;
 }
 
 } // namespace labops::backends::real_sdk

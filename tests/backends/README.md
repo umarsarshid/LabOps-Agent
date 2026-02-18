@@ -32,6 +32,10 @@ stable interface regardless of real hardware availability.
   loop behavior (timestamp progression plus received/timeout/incomplete
   outcomes), confirms metrics are computable from real-backend samples, and
   verifies frame-rate control changes measured FPS approximately when supported.
+- `real_acquisition_loop_mock_provider_smoke.cpp`: validates the real
+  acquisition loop through a scripted `MockFrameProvider` (no SDK/hardware)
+  including timeout and incomplete outcomes, burst-stall timestamp gaps,
+  and event/counter summaries.
 - `real_device_enumeration_smoke.cpp`: validates real-device descriptor
   enumeration/mapping into normalized `DeviceInfo` fields (including transport
   normalization and optional IP/MAC/version handling).

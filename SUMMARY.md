@@ -1,77 +1,126 @@
-# SUMMARY — 0093 `test(real): add MockNodeMapAdapter unit tests`
+# SUMMARY — 0094 `test(real): add MockFrameProvider tests for acquisition loop`
 
 ## Goal
-Add real-backend parameter-bridge coverage using a dedicated mock node adapter, so key apply/mapping behaviors are tested in CI without requiring physical cameras.
+Make the real acquisition loop independently testable in CI without cameras/SDK, while validating timeout/incomplete/stall behavior and event/counter outcomes.
 
-## What I implemented
+## Implementation
 
-### 1) Added a new hardware-free unit/smoke test
-File:
-- `tests/backends/mock_node_map_adapter_smoke.cpp`
-
-What this test introduces:
-- `MockNodeMapAdapter` implementation of `INodeMapAdapter` used only for tests.
-- `RecordingBackend` test backend that captures `SetParam` calls.
-- Inline key-map fixture via `LoadParamKeyMapFromText(...)` (no file dependency).
-
-Covered behaviors:
-1. Enum mapping behavior:
-   - validates generic key (`pixel_format`) maps to the expected SDK node (`PixelFormat`)
-   - validates enum value normalization/canonical casing path
-   - validates backend receives mapped node/value
-2. Numeric range validation/clamping:
-   - validates out-of-range numeric input is clamped by apply logic
-   - validates readback evidence reflects clamped actual values
-3. Strict vs best-effort behavior:
-   - strict mode fails on unsupported input and returns actionable unsupported evidence
-   - best-effort mode continues and preserves successful applies
-4. ROI ordering logic:
-   - validates apply order is `Width`, `Height`, `OffsetX`, `OffsetY`
-     even when input order is offsets-first
-
-Why:
-- Existing coverage was strong but relied mainly on default in-memory adapter behavior.
-- A dedicated mock adapter test isolates apply-logic contracts from adapter defaults and keeps the confidence signal hardware-independent.
-
-### 2) Wired the new test into build/test system
-File:
-- `CMakeLists.txt`
+### 1) Added a frame-provider abstraction
+Files:
+- `src/backends/real_sdk/frame_provider.hpp`
+- `src/backends/real_sdk/frame_provider.cpp`
 
 What:
-- Added a new smoke target:
-  - `mock_node_map_adapter_smoke`
+- Introduced `IFrameProvider` interface to decouple frame sourcing from loop orchestration.
+- Added `FrameProviderSample` with:
+  - `outcome`
+  - `size_bytes`
+  - `stall_periods` (synthetic burst stall in frame periods)
+- Added `DeterministicFrameProvider` that preserves current OSS real-backend deterministic outcome behavior (`received`, `timeout`, `incomplete`) via seed + percentages.
 
 Why:
-- Ensures the new coverage runs in CI and local regression loops.
+- Enables true mock-driven loop tests without requiring vendor SDK hooks.
+- Keeps frame generation policy separate from stream-loop mechanics.
 
-### 3) Updated backend tests documentation
+### 2) Added an acquisition-loop module with counters/event classification
+Files:
+- `src/backends/real_sdk/acquisition_loop.hpp`
+- `src/backends/real_sdk/acquisition_loop.cpp`
+
+What:
+- Added `RunAcquisitionLoop(...)` orchestration function with explicit input/result contracts.
+- Added `AcquisitionLoopCounters`:
+  - `frames_total`
+  - `frames_received`
+  - `frames_dropped`
+  - `frames_timeout`
+  - `frames_incomplete`
+  - `stall_periods_total`
+- Added event-like classification for test assertions:
+  - `kFrameReceived`
+  - `kFrameDropped`
+  - `kFrameTimeout`
+  - `kFrameIncomplete`
+- Added timestamp handling with synthetic stall-period offsets and monotonic guard.
+
+Why:
+- Provides a deterministic, testable stream loop contract independent of hardware.
+- Makes timeout/incomplete/stall behavior explicit and assertable.
+
+### 3) Refactored `RealBackend::PullFrames` to use the loop
 File:
+- `src/backends/real_sdk/real_backend.cpp`
+
+What:
+- Replaced inline frame-generation loop with:
+  - `DeterministicFrameProvider`
+  - `RunAcquisitionLoop(...)`
+- Preserved validation and existing parameter resolution behavior.
+- Preserved deterministic semantics, while emitting richer sdk-log counts including stall periods.
+
+Why:
+- Ensures production real-backend pull path uses the same loop now covered by mock-based tests.
+- Avoids “tested code path” drift.
+
+### 4) Added new CI-safe mock-provider acquisition test
+File:
+- `tests/backends/real_acquisition_loop_mock_provider_smoke.cpp`
+
+What this test simulates:
+- timeout frames
+- incomplete frames
+- burst stalls (`stall_periods` injected as 3 + 2)
+
+Assertions include:
+- frame/event vector alignment
+- counter correctness (received/timeout/incomplete/dropped/stall)
+- normalized timeout/incomplete frame properties
+- timestamp monotonicity
+- large timestamp gaps from burst stalls
+
+Why:
+- Directly validates stream-loop behavior with no camera and no SDK.
+- Satisfies milestone intent: confidence in CI without hardware.
+
+### 5) Build/docs/test wiring updates
+Files:
+- `CMakeLists.txt`
+- `src/backends/real_sdk/README.md`
 - `tests/backends/README.md`
 
 What:
-- Added a bullet describing `mock_node_map_adapter_smoke.cpp` and exactly what it verifies.
+- Added new backends sources (`acquisition_loop.cpp`, `frame_provider.cpp`).
+- Added new smoke target: `real_acquisition_loop_mock_provider_smoke`.
+- Documented new modules/tests and their role.
 
 Why:
-- Keeps module-level test intent explicit for future maintainers.
+- Keeps maintainers oriented and ensures CI executes new coverage.
 
-## Verification performed
+### 6) Formatting hygiene adjustment
+File:
+- `tests/backends/mock_node_map_adapter_smoke.cpp`
 
-### Formatting
-- `bash tools/clang_format.sh --check`
-- Result: pass
+What:
+- Applied clang-format-compliant wrapping (format-only).
 
-### Build
-- `cmake --build build`
-- Result: pass
+Why:
+- Required to keep repo-wide `clang-format --check` green.
 
-### Targeted tests
-- `ctest --test-dir build -R "mock_node_map_adapter_smoke|real_apply_params_smoke" --output-on-failure`
-- Result: pass (2/2)
+## Verification
 
-### Full regression
-- `ctest --test-dir build --output-on-failure`
-- Result: pass (65/65)
+Formatting:
+- `bash tools/clang_format.sh --check` → pass
 
-## Net effect
-- Key mapping/apply behavior is now explicitly covered by a dedicated mock adapter path.
-- Confidence in real param-bridge logic is improved in camera-free CI environments.
+Build:
+- `cmake --build build` → pass
+
+Targeted tests:
+- `ctest --test-dir build -R "real_acquisition_loop_mock_provider_smoke|real_frame_acquisition_smoke|run_stream_trace_smoke" --output-on-failure` → pass
+
+Full regression:
+- `ctest --test-dir build --output-on-failure` → pass (`66/66`)
+
+## Outcome
+- Real stream-loop behavior is now directly testable with a mock provider.
+- Timeout/incomplete/burst-stall scenarios are CI-covered without hardware.
+- Events + counters are explicitly asserted in tests.

@@ -72,8 +72,10 @@ target_compile_features(labops_events PUBLIC cxx_std_20)
 # Camera backend contracts plus sim implementation used for hardware-free
 # development and CI.
 add_library(labops_backends
+  src/backends/real_sdk/acquisition_loop.cpp
   src/backends/real_sdk/apply_params.cpp
   src/backends/real_sdk/error_mapper.cpp
+  src/backends/real_sdk/frame_provider.cpp
   src/backends/real_sdk/node_map_adapter.cpp
   src/backends/real_sdk/param_key_map.cpp
   src/backends/real_sdk/real_backend.cpp
@@ -460,6 +462,16 @@ add_labops_smoke_test(
   LIBRARIES
     labops_backends
     labops_metrics
+)
+
+# Smoke test for real acquisition-loop behavior driven by a mock frame provider
+# (timeouts/incomplete outcomes plus burst stalls) without any SDK dependency.
+add_labops_smoke_test(
+  NAME real_acquisition_loop_mock_provider_smoke
+  SOURCES
+    tests/backends/real_acquisition_loop_mock_provider_smoke.cpp
+  LIBRARIES
+    labops_backends
 )
 
 # Smoke test for real device enumeration and descriptor normalization.
