@@ -92,7 +92,7 @@ Follow these exactly when continuing commit-by-commit delivery:
 6. Add/maintain README files in subfolders to explain what is there, why it
    exists, and how it connects to the project.
 7. Keep detailed, granular writeups in `SUMMARY.md`, overwrite it each time.
-8. `SUMMARY.md` must remain uncommitted.
+8. `SUMMARY.md` must be committed with each commit.
 
 ## Core Files To Read First
 
@@ -105,7 +105,7 @@ Follow these exactly when continuing commit-by-commit delivery:
 
 - There is currently no root `.gitignore`; local dirs like `build/` and `out/`
   may appear untracked.
-- `SUMMARY.md` is intentionally untracked and should stay local.
+- `SUMMARY.md` is a tracked artifact and should be updated/committed each time.
 - Most `src/`, `docs/`, `tests/`, and `scenarios/` subfolders include local
   `README.md` files with module-level context.
 

@@ -10,8 +10,8 @@ constexpr std::uint64_t kResendSpikeThreshold = 50U;
 constexpr std::uint64_t kPacketErrorThreshold = 1U;
 constexpr std::uint64_t kDroppedPacketThreshold = 1U;
 
-void MaybeAppendFinding(std::vector<TransportAnomalyFinding>& findings,
-                        std::string heuristic_id, std::string counter_name,
+void MaybeAppendFinding(std::vector<TransportAnomalyFinding>& findings, std::string heuristic_id,
+                        std::string counter_name,
                         const core::schema::TransportCounterStatus& counter_status,
                         const std::uint64_t threshold, std::string summary_prefix) {
   if (!counter_status.available || !counter_status.value.has_value()) {
