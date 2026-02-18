@@ -15,7 +15,11 @@ change. Keeping mappings in JSON allows rapid updates by integration engineers.
     - `exposure`
     - `gain`
     - `pixel_format`
-    - `roi`
+    - `roi_width`
+    - `roi_height`
+    - `roi_offset_x`
+    - `roi_offset_y`
+    - `roi` (legacy alias)
     - `trigger_mode`
     - `trigger_source`
     - `frame_rate`

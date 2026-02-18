@@ -43,8 +43,10 @@ int main() {
   }
 
   // Milestone contract: mapping must answer support checks before apply path.
-  if (!map.Has("exposure") || !map.Has("gain") || !map.Has("pixel_format") || !map.Has("roi") ||
-      !map.Has("trigger_mode") || !map.Has("trigger_source") || !map.Has("frame_rate")) {
+  if (!map.Has("exposure") || !map.Has("gain") || !map.Has("pixel_format") ||
+      !map.Has("roi_width") || !map.Has("roi_height") || !map.Has("roi_offset_x") ||
+      !map.Has("roi_offset_y") || !map.Has("trigger_mode") || !map.Has("trigger_source") ||
+      !map.Has("frame_rate")) {
     Fail("default map missing one or more required first keys");
   }
   if (map.Has("unknown_key")) {
@@ -63,7 +65,10 @@ int main() {
   AssertContains(keys, "exposure");
   AssertContains(keys, "gain");
   AssertContains(keys, "pixel_format");
-  AssertContains(keys, "roi");
+  AssertContains(keys, "roi_width");
+  AssertContains(keys, "roi_height");
+  AssertContains(keys, "roi_offset_x");
+  AssertContains(keys, "roi_offset_y");
   AssertContains(keys, "trigger_mode");
   AssertContains(keys, "trigger_source");
   AssertContains(keys, "frame_rate");
@@ -92,7 +97,10 @@ int main() {
         << "  \"exposure\": \"ExposureTimeAbs\",\n"
         << "  \"gain\": \"GainRaw\",\n"
         << "  \"pixel_format\": \"PixelFormat\",\n"
-        << "  \"roi\": \"RoiSelector\",\n"
+        << "  \"roi_width\": \"Width\",\n"
+        << "  \"roi_height\": \"Height\",\n"
+        << "  \"roi_offset_x\": \"OffsetX\",\n"
+        << "  \"roi_offset_y\": \"OffsetY\",\n"
         << "  \"trigger_mode\": \"TriggerMode\",\n"
         << "  \"trigger_source\": \"TriggerSource\",\n"
         << "  \"frame_rate\": \"AcquisitionFrameRateAbs\"\n"

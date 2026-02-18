@@ -181,7 +181,13 @@ int main() {
                   << "    \"fps\": 30,\n"
                   << "    \"exposure_us\": 8000,\n"
                   << "    \"gain_db\": 6.5,\n"
-                  << "    \"trigger_mode\": \"free_run\"\n"
+                  << "    \"trigger_mode\": \"free_run\",\n"
+                  << "    \"roi\": {\n"
+                  << "      \"x\": 100,\n"
+                  << "      \"y\": 120,\n"
+                  << "      \"width\": 1280,\n"
+                  << "      \"height\": 720\n"
+                  << "    }\n"
                   << "  },\n"
                   << "  \"thresholds\": {\n"
                   << "    \"min_avg_fps\": 1.0\n"
@@ -240,8 +246,16 @@ int main() {
     AssertContains(verify_json, "\"generic_key\":\"frame_rate\"");
     AssertContains(verify_json, "\"generic_key\":\"exposure\"");
     AssertContains(verify_json, "\"generic_key\":\"gain\"");
+    AssertContains(verify_json, "\"generic_key\":\"roi_width\"");
+    AssertContains(verify_json, "\"generic_key\":\"roi_height\"");
+    AssertContains(verify_json, "\"generic_key\":\"roi_offset_x\"");
+    AssertContains(verify_json, "\"generic_key\":\"roi_offset_y\"");
     AssertContains(verify_json, "\"actual\":\"8000\"");
     AssertContains(verify_json, "\"actual\":\"6.5\"");
+    AssertContains(verify_json, "\"actual\":\"1280\"");
+    AssertContains(verify_json, "\"actual\":\"720\"");
+    AssertContains(verify_json, "\"actual\":\"100\"");
+    AssertContains(verify_json, "\"actual\":\"120\"");
     AssertContains(verify_json, "\"supported\":true");
 
     const std::string camera_config_json = ReadFile(camera_config_path);
@@ -258,8 +272,15 @@ int main() {
     AssertContains(config_report, "frame_rate");
     AssertContains(config_report, "exposure");
     AssertContains(config_report, "gain");
+    AssertContains(config_report, "roi_width");
+    AssertContains(config_report, "roi_height");
+    AssertContains(config_report, "roi_offset_x");
+    AssertContains(config_report, "roi_offset_y");
     AssertContains(config_report, "units: us; validated range: [5, 10000000]");
     AssertContains(config_report, "units: dB; validated range: [0, 48]");
+    AssertContains(config_report, "units: px; validated range: [64, 4096]; applied before offsets");
+    AssertContains(config_report,
+                   "units: px; validated range: [0, 4095]; applied after width/height");
     AssertContains(config_report, "✅ applied");
   } else {
     if (exit_code != labops::core::errors::ToInt(labops::core::errors::ExitCode::kFailure)) {

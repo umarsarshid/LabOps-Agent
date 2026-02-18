@@ -87,6 +87,18 @@ std::optional<std::string> BuildKeyUnitAndRangeNote(std::string_view generic_key
   if (generic_key == "gain") {
     return "units: dB; validated range: [0, 48]";
   }
+  if (generic_key == "roi_width") {
+    return "units: px; validated range: [64, 4096]; applied before offsets";
+  }
+  if (generic_key == "roi_height") {
+    return "units: px; validated range: [64, 2160]; applied before offsets";
+  }
+  if (generic_key == "roi_offset_x") {
+    return "units: px; validated range: [0, 4095]; applied after width/height";
+  }
+  if (generic_key == "roi_offset_y") {
+    return "units: px; validated range: [0, 2159]; applied after width/height";
+  }
   return std::nullopt;
 }
 

@@ -778,8 +778,15 @@ bool TryGetFiniteNumber(const JsonValue& value, double& out) {
   return true;
 }
 
-bool BuildRoiParamValue(const JsonValue& roi, std::string& roi_value, std::string& error) {
-  roi_value.clear();
+struct RoiValues {
+  std::uint64_t x = 0;
+  std::uint64_t y = 0;
+  std::uint64_t width = 0;
+  std::uint64_t height = 0;
+};
+
+bool ParseRoiValues(const JsonValue& roi, RoiValues& roi_values, std::string& error) {
+  roi_values = RoiValues{};
   error.clear();
   if (roi.type != JsonValue::Type::kObject) {
     error = "scenario camera.roi must include x, y, width, and height";
@@ -794,19 +801,14 @@ bool BuildRoiParamValue(const JsonValue& roi, std::string& roi_value, std::strin
     return TryGetNonNegativeInteger(*value, parsed_value);
   };
 
-  std::uint64_t x = 0;
-  std::uint64_t y = 0;
-  std::uint64_t width = 0;
-  std::uint64_t height = 0;
-  if (!read_required_non_negative_integer("x", x) || !read_required_non_negative_integer("y", y) ||
-      !read_required_non_negative_integer("width", width) ||
-      !read_required_non_negative_integer("height", height)) {
+  if (!read_required_non_negative_integer("x", roi_values.x) ||
+      !read_required_non_negative_integer("y", roi_values.y) ||
+      !read_required_non_negative_integer("width", roi_values.width) ||
+      !read_required_non_negative_integer("height", roi_values.height)) {
     error = "scenario camera.roi must include x, y, width, and height";
     return false;
   }
 
-  roi_value = "x=" + std::to_string(x) + ",y=" + std::to_string(y) +
-              ",width=" + std::to_string(width) + ",height=" + std::to_string(height);
   return true;
 }
 
@@ -1256,10 +1258,10 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
   const auto gain_db = read_number({"camera", "gain_db"}, {"gain_db"});
   const auto trigger_mode = read_string({"camera", "trigger_mode"}, {"trigger_mode"});
   const auto trigger_source = read_string({"camera", "trigger_source"}, {"trigger_source"});
-  std::string roi_value;
+  RoiValues roi_values;
   const JsonValue* roi_object = FindScenarioField(scenario_root, {"camera", "roi"}, {"roi"});
   const bool has_roi = roi_object != nullptr;
-  if (has_roi && !BuildRoiParamValue(*roi_object, roi_value, error)) {
+  if (has_roi && !ParseRoiValues(*roi_object, roi_values, error)) {
     return false;
   }
 
@@ -1313,7 +1315,12 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
     UpsertRealParam(plan.real_params, "trigger_source", trigger_source.value());
   }
   if (has_roi) {
-    UpsertRealParam(plan.real_params, "roi", roi_value);
+    // Keep ROI ordering deterministic for cameras that require Width/Height
+    // to be committed before OffsetX/OffsetY.
+    UpsertRealParam(plan.real_params, "roi_width", std::to_string(roi_values.width));
+    UpsertRealParam(plan.real_params, "roi_height", std::to_string(roi_values.height));
+    UpsertRealParam(plan.real_params, "roi_offset_x", std::to_string(roi_values.x));
+    UpsertRealParam(plan.real_params, "roi_offset_y", std::to_string(roi_values.y));
   }
 
   if (!assign_non_negative_double("min_avg_fps", {"thresholds", "min_avg_fps"}, {"min_avg_fps"},

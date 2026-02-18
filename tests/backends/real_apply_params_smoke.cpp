@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -45,6 +46,7 @@ public:
       error = "empty key/value is not allowed";
       return false;
     }
+    set_calls_.emplace_back(key, value);
     params_[key] = value;
     return true;
   }
@@ -58,8 +60,13 @@ public:
     return {};
   }
 
+  const std::vector<std::pair<std::string, std::string>>& set_calls() const {
+    return set_calls_;
+  }
+
 private:
   labops::backends::BackendConfig params_;
+  std::vector<std::pair<std::string, std::string>> set_calls_;
 };
 
 } // namespace
@@ -295,6 +302,64 @@ int main() {
     }
     if (!saw_applied_frame_rate || !saw_unsupported_pixel_format) {
       Fail("best-effort pixel_format readback rows missing expected applied/unsupported evidence");
+    }
+  }
+
+  // ROI controls should apply size nodes before offsets and clamp to node
+  // ranges so camera constraints are visible in readback evidence.
+  {
+    RecordingBackend backend;
+    std::unique_ptr<labops::backends::real_sdk::INodeMapAdapter> adapter =
+        CreateDefaultNodeMapAdapter();
+    ApplyParamsResult result;
+    if (!ApplyParams(backend, key_map, *adapter,
+                     {
+                         ApplyParamInput{"roi_offset_x", "5000"},
+                         ApplyParamInput{"roi_offset_y", "-5"},
+                         ApplyParamInput{"roi_width", "5000"},
+                         ApplyParamInput{"roi_height", "5000"},
+                     },
+                     ParamApplyMode::kBestEffort, result, error)) {
+      Fail("best-effort ROI apply unexpectedly failed: " + error);
+    }
+
+    if (result.applied.size() != 4U || result.unsupported.size() != 0U ||
+        result.readback_rows.size() != 4U) {
+      Fail("ROI apply should produce four applied rows without unsupported entries");
+    }
+
+    const auto& calls = backend.set_calls();
+    if (calls.size() != 4U) {
+      Fail("ROI apply should emit exactly four backend set calls");
+    }
+    if (calls[0].first != "Width" || calls[1].first != "Height" || calls[2].first != "OffsetX" ||
+        calls[3].first != "OffsetY") {
+      Fail("ROI apply ordering should set width/height before offsets");
+    }
+
+    bool saw_width = false;
+    bool saw_height = false;
+    bool saw_offset_x = false;
+    bool saw_offset_y = false;
+    for (const auto& row : result.readback_rows) {
+      if (!row.supported || !row.applied || !row.adjusted) {
+        Fail("ROI rows should be applied and adjusted due to numeric constraints");
+      }
+      if (row.generic_key == "roi_width" && row.actual_value == "4096") {
+        saw_width = true;
+      }
+      if (row.generic_key == "roi_height" && row.actual_value == "2160") {
+        saw_height = true;
+      }
+      if (row.generic_key == "roi_offset_x" && row.actual_value == "4095") {
+        saw_offset_x = true;
+      }
+      if (row.generic_key == "roi_offset_y" && row.actual_value == "0") {
+        saw_offset_y = true;
+      }
+    }
+    if (!saw_width || !saw_height || !saw_offset_x || !saw_offset_y) {
+      Fail("ROI readback rows missing expected clamped actual values");
     }
   }
 

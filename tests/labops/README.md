@@ -76,7 +76,7 @@ This keeps each test focused on contract verification instead of setup code.
   deterministically, logs selected identity/version fields, writes `run.json`
   with `real_device` metadata, writes `camera_config.json` with resolved
   identity + curated config fields, writes `config_report.md` for readable
-  status review (including exposure/gain unit/range notes), and follows
+  status review (including exposure/gain and ROI unit/range notes), and follows
   expected exit-code behavior for
   both real-enabled and real-disabled builds.
 - `real_apply_mode_events_smoke.cpp`: verifies real-backend `apply_mode`

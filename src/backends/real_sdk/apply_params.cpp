@@ -146,6 +146,34 @@ std::string JoinEnumValues(const std::vector<std::string>& values) {
   return joined;
 }
 
+int ApplyPriorityForGenericKey(std::string_view generic_key) {
+  // Many cameras reject ROI offsets unless width/height have already been
+  // applied. Keep this ordering explicit and centralized.
+  if (generic_key == "roi_width") {
+    return 0;
+  }
+  if (generic_key == "roi_height") {
+    return 1;
+  }
+  if (generic_key == "roi_offset_x") {
+    return 2;
+  }
+  if (generic_key == "roi_offset_y") {
+    return 3;
+  }
+  return 10;
+}
+
+std::vector<ApplyParamInput> OrderApplyInputs(const std::vector<ApplyParamInput>& params) {
+  std::vector<ApplyParamInput> ordered = params;
+  std::stable_sort(ordered.begin(), ordered.end(),
+                   [](const ApplyParamInput& lhs, const ApplyParamInput& rhs) {
+                     return ApplyPriorityForGenericKey(lhs.generic_key) <
+                            ApplyPriorityForGenericKey(rhs.generic_key);
+                   });
+  return ordered;
+}
+
 bool TryReadNodeValueAsString(INodeMapAdapter& node_adapter, std::string_view node_name,
                               std::string& actual_value, std::string& error) {
   actual_value.clear();
@@ -262,6 +290,42 @@ std::unique_ptr<InMemoryNodeMapAdapter> BuildDefaultNodeAdapter() {
                                               .value_type = NodeValueType::kString,
                                               .string_value = std::optional<std::string>(""),
                                           });
+  adapter->UpsertNode("Width", InMemoryNodeMapAdapter::NodeDefinition{
+                                   .value_type = NodeValueType::kInt64,
+                                   .int64_value = 1920,
+                                   .numeric_range =
+                                       NodeNumericRange{
+                                           .min = std::optional<double>(64.0),
+                                           .max = std::optional<double>(4096.0),
+                                       },
+                               });
+  adapter->UpsertNode("Height", InMemoryNodeMapAdapter::NodeDefinition{
+                                    .value_type = NodeValueType::kInt64,
+                                    .int64_value = 1080,
+                                    .numeric_range =
+                                        NodeNumericRange{
+                                            .min = std::optional<double>(64.0),
+                                            .max = std::optional<double>(2160.0),
+                                        },
+                                });
+  adapter->UpsertNode("OffsetX", InMemoryNodeMapAdapter::NodeDefinition{
+                                     .value_type = NodeValueType::kInt64,
+                                     .int64_value = 0,
+                                     .numeric_range =
+                                         NodeNumericRange{
+                                             .min = std::optional<double>(0.0),
+                                             .max = std::optional<double>(4095.0),
+                                         },
+                                 });
+  adapter->UpsertNode("OffsetY", InMemoryNodeMapAdapter::NodeDefinition{
+                                     .value_type = NodeValueType::kInt64,
+                                     .int64_value = 0,
+                                     .numeric_range =
+                                         NodeNumericRange{
+                                             .min = std::optional<double>(0.0),
+                                             .max = std::optional<double>(2159.0),
+                                         },
+                                 });
   adapter->UpsertNode("TriggerMode", InMemoryNodeMapAdapter::NodeDefinition{
                                          .value_type = NodeValueType::kEnumeration,
                                          .string_value = std::optional<std::string>("free_run"),
@@ -333,7 +397,8 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
   result = ApplyParamsResult{};
   error.clear();
 
-  for (const ApplyParamInput& input : params) {
+  const std::vector<ApplyParamInput> ordered_inputs = OrderApplyInputs(params);
+  for (const ApplyParamInput& input : ordered_inputs) {
     const std::string generic_key = Trim(input.generic_key);
     if (generic_key.empty()) {
       continue;

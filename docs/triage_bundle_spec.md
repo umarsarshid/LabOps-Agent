@@ -205,6 +205,11 @@ Current sections:
   - exposure/gain rows include unit/range hints in `Notes`:
     - exposure: `us`, validated range `[5, 10000000]`
     - gain: `dB`, validated range `[0, 48]`
+  - ROI rows include unit/range/order hints in `Notes`:
+    - `roi_width`: `px`, validated range `[64, 4096]`, applied before offsets
+    - `roi_height`: `px`, validated range `[64, 2160]`, applied before offsets
+    - `roi_offset_x`: `px`, validated range `[0, 4095]`, applied after size
+    - `roi_offset_y`: `px`, validated range `[0, 2159]`, applied after size
 
 ### `hostprobe.json`
 

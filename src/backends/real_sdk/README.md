@@ -30,6 +30,13 @@ This folder is that bridge.
   - includes first practical numeric knob guards for real triage tickets:
     - `exposure` (`ExposureTime`) clamped/validated to `[5, 10000000]` (us)
     - `gain` (`Gain`) clamped/validated to `[0, 48]` (dB)
+    - ROI nodes:
+      - `roi_width` (`Width`) clamped/validated to `[64, 4096]` (px)
+      - `roi_height` (`Height`) clamped/validated to `[64, 2160]` (px)
+      - `roi_offset_x` (`OffsetX`) clamped/validated to `[0, 4095]` (px)
+      - `roi_offset_y` (`OffsetY`) clamped/validated to `[0, 2159]` (px)
+    - applies ROI with deterministic size-before-offset ordering:
+      `roi_width`, `roi_height`, `roi_offset_x`, `roi_offset_y`.
   - performs per-setting readback verification and returns structured
     `requested vs actual vs supported` rows.
   - returns structured applied/unsupported/adjusted results so CLI can emit
@@ -38,7 +45,9 @@ This folder is that bridge.
     (`CONFIG_APPLIED`, `CONFIG_UNSUPPORTED`, `CONFIG_ADJUSTED`).
 - `maps/param_key_map.json`:
   - default mapping data for first integration keys:
-    - `exposure`, `gain`, `pixel_format`, `roi`,
+    - `exposure`, `gain`, `pixel_format`,
+      `roi_width`, `roi_height`, `roi_offset_x`, `roi_offset_y`,
+      `roi` (legacy alias),
       `trigger_mode`, `trigger_source`, `frame_rate`
 - `real_backend.hpp` / `real_backend.cpp`:
   - `RealBackend` implements `ICameraBackend`.
