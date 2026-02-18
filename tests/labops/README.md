@@ -24,6 +24,11 @@ This keeps each test focused on contract verification instead of setup code.
   suggestions appear in `summary.md` when `netem_profile` is set, raw NIC
   command outputs (`nic_*.txt`) are present, and
   `bundle_manifest.json` includes the core artifact entries and hash metadata.
+- `run_interrupt_flush_smoke.cpp`: sends `SIGINT` (Ctrl+C equivalent) during
+  `labops run` and verifies the CLI exits cleanly after flushing a valid
+  partial bundle (`run.json`, `events.jsonl`, `metrics.*`, `summary.md`,
+  `report.html`, `bundle_manifest.json`) with `STREAM_STOPPED` reason
+  `signal_interrupt`.
 - `validate_actionable_smoke.cpp`: drives `labops validate` and verifies
   invalid schema output includes actionable field-level error paths and the
   schema-invalid exit code contract.

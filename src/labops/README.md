@@ -46,6 +46,11 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
   before connect so run selection is deterministic; writes `run.json` early on
   backend-connect failure so selected device metadata is still preserved in
   evidence;
+  for real-backend runs, handles `Ctrl+C` (`SIGINT`) as a graceful interrupt
+  request that stops frame collection at safe boundaries, writes a
+  `STREAM_STOPPED` event with reason `signal_interrupt`, flushes all core run
+  artifacts (`run.json`, `events.jsonl`, `metrics.*`, `summary.md`,
+  `report.html`, `bundle_manifest.json`), and exits non-zero;
   evaluates configured scenario thresholds against computed metrics; returns
   non-zero when thresholds fail; and reports output paths.
 - `labops baseline capture <scenario.json> [--redact] [--device <selector>] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: captures a scenario baseline into

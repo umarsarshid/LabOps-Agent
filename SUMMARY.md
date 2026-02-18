@@ -1,167 +1,145 @@
 # Commit Summary
 
 ## Commit
-`feat(metrics): classify timeouts vs incomplete vs drops`
+`feat(real): handle clean shutdown on Ctrl+C and flush run artifacts`
 
 ## What I Implemented
 
-This commit splits dropped-frame metrics into three explicit categories so engineers can tell exactly what kind of failure happened:
-- generic drops
-- acquisition timeouts
-- incomplete frames
+This commit adds graceful Ctrl+C handling for real-backend `labops run` execution so interrupted runs still produce a valid, engineer-usable evidence bundle.
 
-The split is now reflected consistently in:
-- in-memory metrics (`FpsReport`)
-- persisted artifacts (`metrics.csv`, `metrics.json`)
-- human summaries (`summary.md`, `report.html`)
-- anomaly text
-- CLI run output
-- tests and bundle spec docs
+### In plain terms
+- Pressing Ctrl+C during a real run no longer risks losing the run packet.
+- LabOps now stops at safe boundaries, writes `STREAM_STOPPED` with reason `signal_interrupt`, flushes bundle files, and exits non-zero.
 
 ## Why This Was Needed
 
-Before this change, all non-received frames were effectively one "drop" bucket. That hid useful triage signal:
-- timeout-heavy runs usually indicate acquisition/transport wait problems
-- incomplete-heavy runs usually indicate payload integrity issues
-- generic drops can reflect simulated fault injection or other non-timeout loss
+Before this change, interrupt behavior was only handled for soak pause flow. A normal real run interrupted by Ctrl+C could terminate before all writers finished, leaving incomplete evidence.
 
-Separating these counters makes triage faster and reduces guesswork.
+For triage workflows, partial or missing artifacts are high-cost because engineers cannot trust reproducibility or compare results cleanly.
 
 ## Detailed Changes
 
-### 1) Extended metrics contract with explicit category counters/rates
-Files:
-- `src/metrics/fps.hpp`
-- `src/metrics/fps.cpp`
-
-Changes:
-- Added new `FpsReport` totals:
-  - `dropped_generic_frames_total`
-  - `timeout_frames_total`
-  - `incomplete_frames_total`
-- Added new `FpsReport` rates:
-  - `generic_drop_rate_percent`
-  - `timeout_rate_percent`
-  - `incomplete_rate_percent`
-- Updated computation logic to classify frames by `FrameOutcome`:
-  - `kTimeout` -> timeout bucket + total dropped
-  - `kIncomplete` -> incomplete bucket + total dropped
-  - `kDropped` -> generic dropped bucket + total dropped
-- Added backward-compatible fallback:
-  - if legacy sample has `outcome=kReceived` but `dropped=true`, classify as generic dropped.
-
-Why:
-- keeps old fixtures/runs working while introducing richer classification for new data.
-
-### 2) Persisted new categories in machine and spreadsheet artifacts
+## 1) Unified SIGINT handling at run scope
 File:
-- `src/artifacts/metrics_writer.cpp`
-
-Changes:
-- `metrics.csv` now includes:
-  - `drops_generic_total`
-  - `timeouts_total`
-  - `incomplete_total`
-  - `generic_drop_rate_percent`
-  - `timeout_rate_percent`
-  - `incomplete_rate_percent`
-- `metrics.json` now includes matching total/rate fields.
-
-Why:
-- agent and automation need machine-readable category metrics.
-- engineers exporting CSV need category visibility for quick plots.
-
-### 3) Exposed category metrics in human-facing summaries
-Files:
-- `src/artifacts/run_summary_writer.cpp`
-- `src/artifacts/html_report_writer.cpp`
-
-Changes:
-- Added category totals/rates to key metric sections.
-- Added category rate rows to HTML diff table.
-
-Why:
-- one-page summaries should show root-signal metrics without requiring raw JSON inspection.
-
-### 4) Updated anomaly and CLI quick output to include breakdown
-Files:
-- `src/metrics/anomalies.cpp`
 - `src/labops/cli/router.cpp`
 
 Changes:
-- Drop anomaly now prints:
-  - total drop count/rate plus
-  - generic/timeout/incomplete breakdown.
-- run console line (`drops:`) now includes all three category counts.
+- Replaced soak-specific signal flag with run-level interrupt flag:
+  - `g_run_interrupt_requested`
+- Updated SIGINT handler to set this run-level flag.
+- Updated `ResolveSoakStopReason()` to read the shared interrupt flag.
+- Simplified `ScopedInterruptSignalHandler` to always arm/disarm for run execution.
 
 Why:
-- improves immediate triage signal during live runs and in summary text.
+- one consistent interrupt signal source avoids split behavior between soak and normal runs.
+- guarantees SIGINT is captured during run lifecycle instead of default abrupt process termination.
 
-### 5) Kept metric compare output order aligned
+## 2) Added real-backend safe-boundary interrupt loop for non-soak runs
 File:
-- `src/artifacts/metrics_diff_writer.cpp`
+- `src/labops/cli/router.cpp`
 
 Changes:
-- Added new category totals/rates to preferred metric ordering.
+- For non-soak real backend (`backend == real_stub`), frame pulling now happens in 250ms chunks.
+- At each chunk boundary, run checks `g_run_interrupt_requested`.
+- On interrupt request:
+  - marks run as interrupted,
+  - records completed vs requested duration,
+  - continues to flush downstream artifacts.
+
+Important compatibility guard:
+- Sim non-soak runs keep one-shot pull behavior (no chunking) to preserve existing deterministic frame-count behavior and avoid per-chunk rounding drift.
 
 Why:
-- keeps diffs stable and readable when comparing baseline vs run.
+- chunk boundaries create safe cancellation points for real runs.
+- preserving sim one-shot behavior prevents regressions in existing tests and baseline expectations.
 
-### 6) Updated module and contract docs
-Files:
-- `src/metrics/README.md`
-- `docs/triage_bundle_spec.md`
+## 3) Added explicit interrupted stop-reason + payload details
+File:
+- `src/labops/cli/router.cpp`
 
 Changes:
-- documented the new category split in metrics module README.
-- expanded bundle spec metric contract for CSV/JSON fields and formulas.
+- `STREAM_STOPPED` reason now uses `signal_interrupt` when interrupted.
+- Added interruption payload fields:
+  - `requested_duration_ms`
+  - `completed_duration_ms`
 
 Why:
-- prevents drift between implementation and expected artifact schema.
+- stream stop reason must clearly distinguish a user interrupt from normal completion.
+- duration deltas are useful for triage context and run reproducibility notes.
 
-### 7) Expanded test coverage for category separation
+## 4) Kept metrics/summaries valid for interrupted runs
+File:
+- `src/labops/cli/router.cpp`
+
+Changes:
+- For interrupted real non-soak runs, metrics compute over completed duration (min 1ms fallback).
+- Threshold evaluation is intentionally skipped in favor of deterministic interrupted-run failure messaging:
+  - inserts threshold failure note: `run interrupted by signal before requested duration completed`
+- CLI prints:
+  - `run_status: interrupted`
+  - completed/requested duration values
+- Returns non-zero (`kFailure`) for interrupted runs.
+
+Why:
+- interrupted runs should still emit coherent artifacts while signaling incomplete execution to automation.
+- explicit interruption reason in summary is more actionable than ambiguous threshold math on unfinished runs.
+
+## 5) Added integration smoke test for Ctrl+C flush contract
 Files:
-- `tests/metrics/fps_metrics_smoke.cpp`
-- `tests/metrics/drop_injection_smoke.cpp`
-- `tests/backends/real_frame_acquisition_smoke.cpp`
-- `tests/artifacts/metrics_writers_smoke.cpp`
-- `tests/artifacts/html_report_writer_smoke.cpp`
-- `tests/scenarios/sim_baseline_metrics_integration_smoke.cpp`
+- `tests/labops/run_interrupt_flush_smoke.cpp` (new)
+- `CMakeLists.txt`
+- `tests/labops/README.md`
 
-Coverage added:
-- mixed-outcome fixture validates total + per-category counters/rates.
-- sim drop injection validates generic bucket only.
-- real acquisition smoke validates timeout/incomplete buckets map correctly.
-- artifact writers include all new fields.
-- baseline integration confirms category fields exist and are zero for clean run.
+Test behavior:
+- Creates a real-backend scenario with long duration.
+- Starts `labops run` and sends SIGINT from a helper thread.
+- Verifies:
+  - non-zero exit code (`kFailure`),
+  - required bundle files exist (`run.json`, `events.jsonl`, `metrics.csv`, `metrics.json`, `summary.md`, `report.html`, `bundle_manifest.json`, etc.),
+  - `events.jsonl` includes `STREAM_STOPPED` with reason `signal_interrupt`,
+  - summary contains interruption note.
+- If real backend is disabled at build, test exits cleanly (no false failure in disabled builds).
 
 Why:
-- ensures category split is correct in compute path, serialization path, and integration path.
+- protects the new interrupt behavior with a CLI-level regression test.
+- validates done-condition directly: interrupted runs still yield valid artifacts.
+
+## 6) Updated module docs for operator clarity
+File:
+- `src/labops/README.md`
+
+Changes:
+- Documented real-run Ctrl+C graceful interrupt behavior and resulting artifact guarantees.
+
+Why:
+- user-facing command contract should describe interruption semantics explicitly.
 
 ## Verification Performed
 
-### Format
+## Formatting
 - `bash tools/clang_format.sh --check` (initially failed)
 - `bash tools/clang_format.sh --fix`
 - `bash tools/clang_format.sh --check`
 - Result: pass
 
-### Build
+## Build
 - `cmake --build build`
 - Result: pass
 
-### Tests
+## Focused tests
+- `ctest --test-dir build -R "run_interrupt_flush_smoke|run_stream_trace_smoke|sim_determinism_golden_smoke|starter_scenarios_e2e_smoke|run_threshold_failure_smoke|soak_checkpoint_resume_smoke" --output-on-failure`
+- Result: pass (`6/6`)
+
+## Full suite
 - `ctest --test-dir build --output-on-failure`
-- Result: pass (`58/58`)
+- Result: pass (`59/59`)
 
 ## Risk Assessment
 
-Low:
-- additive metric fields and derived formulas
-- no removal of existing fields (`dropped_frames_total`, `drop_rate_percent` remain)
-- legacy compatibility fallback included for older frame samples
-- full smoke suite passed
+Low to moderate:
+- touches central run pipeline signal/termination behavior.
+- mitigated by preserving sim behavior, adding dedicated interrupt smoke test, and full-suite pass.
 
 ## Outcome
 
-LabOps now reports dropped frame causes separately (generic vs timeout vs incomplete) across compute, artifact, and summary layers, so engineers can triage failures with much better signal and less ambiguity.
+Real backend runs now handle Ctrl+C as a graceful interruption path that still writes a complete, valid artifact bundle with explicit interruption evidence, improving reliability for real-world triage handoff.

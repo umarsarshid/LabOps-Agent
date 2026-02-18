@@ -525,6 +525,19 @@ add_labops_smoke_test(
     ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
 
+# Integration smoke test validating Ctrl+C shutdown behavior:
+# interrupted runs still flush a complete artifact bundle before exit.
+add_labops_smoke_test(
+  NAME run_interrupt_flush_smoke
+  SOURCES
+    tests/labops/run_interrupt_flush_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
+)
+
 # Integration smoke test for actionable schema validation errors through CLI.
 add_labops_smoke_test(
   NAME validate_actionable_smoke

@@ -121,13 +121,13 @@ void PrintListDevicesUsage(std::ostream& out) {
       << "  labops list-devices --backend <real>\n";
 }
 
-// SIGINT is handled as a best-effort safe pause request for soak runs.
-// We only read this flag at checkpoint boundaries, so active chunk processing
-// remains deterministic and does not abort mid-write.
-std::atomic<bool> g_soak_stop_requested{false};
+// SIGINT is handled as a cooperative stop request for active runs.
+// The handler only flips this atomic flag; run logic observes it at safe
+// boundaries so we can flush artifacts instead of exiting mid-write.
+std::atomic<bool> g_run_interrupt_requested{false};
 
 void HandleInterruptSignal(int /*signal_number*/) {
-  g_soak_stop_requested.store(true);
+  g_run_interrupt_requested.store(true);
 }
 
 bool ParsePositiveUInt64Arg(std::string_view text, std::uint64_t& value) {
@@ -1760,7 +1760,7 @@ bool EvaluateRunThresholds(const RunPlan::Thresholds& thresholds, const metrics:
 }
 
 std::string ResolveSoakStopReason(const RunOptions& options) {
-  if (g_soak_stop_requested.load()) {
+  if (g_run_interrupt_requested.load()) {
     return "signal_interrupt";
   }
   if (!options.soak_stop_file.empty()) {
@@ -1774,18 +1774,12 @@ std::string ResolveSoakStopReason(const RunOptions& options) {
 
 class ScopedInterruptSignalHandler {
 public:
-  explicit ScopedInterruptSignalHandler(bool enabled) : enabled_(enabled) {
-    if (!enabled_) {
-      return;
-    }
-    g_soak_stop_requested.store(false);
+  ScopedInterruptSignalHandler() {
+    g_run_interrupt_requested.store(false);
     previous_handler_ = std::signal(SIGINT, HandleInterruptSignal);
   }
 
   ~ScopedInterruptSignalHandler() {
-    if (!enabled_) {
-      return;
-    }
     (void)std::signal(SIGINT, previous_handler_);
   }
 
@@ -1793,7 +1787,6 @@ public:
   ScopedInterruptSignalHandler& operator=(const ScopedInterruptSignalHandler&) = delete;
 
 private:
-  bool enabled_ = false;
   using SignalHandler = void (*)(int);
   SignalHandler previous_handler_ = SIG_DFL;
 };
@@ -2272,25 +2265,74 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
                             events_path, error);
   };
 
-  ScopedInterruptSignalHandler scoped_signal_handler(options.soak_mode);
+  ScopedInterruptSignalHandler scoped_signal_handler;
+  bool interrupted_by_signal = false;
+  std::chrono::milliseconds non_soak_completed_duration = run_plan.duration;
   if (!options.soak_mode) {
-    const std::vector<backends::FrameSample> pulled_frames =
-        backend->PullFrames(run_plan.duration, error);
-    if (!error.empty()) {
-      logger.Error("backend pull_frames failed", {{"error", error}});
-      stop_if_started();
-      std::cerr << "error: backend pull_frames failed: " << error << '\n';
-      return kExitFailure;
-    }
-
-    for (const auto& frame : pulled_frames) {
-      if (!append_frame_event(frame)) {
-        logger.Error("failed to append frame event", {{"error", error}});
+    if (run_plan.backend != kBackendRealStub) {
+      const std::vector<backends::FrameSample> pulled_frames =
+          backend->PullFrames(run_plan.duration, error);
+      if (!error.empty()) {
+        logger.Error("backend pull_frames failed", {{"error", error}});
         stop_if_started();
-        std::cerr << "error: failed to append frame event: " << error << '\n';
+        std::cerr << "error: backend pull_frames failed: " << error << '\n';
         return kExitFailure;
       }
-      frames.push_back(frame);
+
+      for (const auto& frame : pulled_frames) {
+        if (!append_frame_event(frame)) {
+          logger.Error("failed to append frame event", {{"error", error}});
+          stop_if_started();
+          std::cerr << "error: failed to append frame event: " << error << '\n';
+          return kExitFailure;
+        }
+        frames.push_back(frame);
+      }
+    } else {
+      // Real-backend runs are chunked so Ctrl+C can stop at safe boundaries
+      // without dropping partially written artifacts.
+      constexpr std::chrono::milliseconds kInterruptPollInterval(250);
+      non_soak_completed_duration = std::chrono::milliseconds::zero();
+      std::chrono::milliseconds remaining_duration = run_plan.duration;
+      while (remaining_duration > std::chrono::milliseconds::zero()) {
+        if (g_run_interrupt_requested.load()) {
+          interrupted_by_signal = true;
+          break;
+        }
+
+        const std::chrono::milliseconds chunk_duration =
+            std::min(kInterruptPollInterval, remaining_duration);
+        const std::vector<backends::FrameSample> pulled_frames =
+            backend->PullFrames(chunk_duration, error);
+        if (!error.empty()) {
+          logger.Error("backend pull_frames failed", {{"error", error}});
+          stop_if_started();
+          std::cerr << "error: backend pull_frames failed: " << error << '\n';
+          return kExitFailure;
+        }
+
+        for (const auto& frame : pulled_frames) {
+          if (!append_frame_event(frame)) {
+            logger.Error("failed to append frame event", {{"error", error}});
+            stop_if_started();
+            std::cerr << "error: failed to append frame event: " << error << '\n';
+            return kExitFailure;
+          }
+          frames.push_back(frame);
+        }
+
+        non_soak_completed_duration += chunk_duration;
+        if (non_soak_completed_duration > run_plan.duration) {
+          non_soak_completed_duration = run_plan.duration;
+        }
+        remaining_duration = run_plan.duration - non_soak_completed_duration;
+      }
+
+      if (interrupted_by_signal) {
+        logger.Warn("interrupt received; finalizing run with partial duration",
+                    {{"completed_duration_ms", std::to_string(non_soak_completed_duration.count())},
+                     {"requested_duration_ms", std::to_string(run_plan.duration.count())}});
+      }
     }
   } else {
     if (soak_frame_cache_path.empty()) {
@@ -2541,15 +2583,25 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     run_info.timestamps.finished_at = finished_at;
   }
 
+  std::string stream_stop_reason = options.soak_mode ? "soak_completed" : "completed";
+  if (!options.soak_mode && interrupted_by_signal) {
+    stream_stop_reason = "signal_interrupt";
+  }
+  std::map<std::string, std::string> stream_stopped_payload = {
+      {"run_id", run_info.run_id},
+      {"frames_total", std::to_string(frames.size())},
+      {"frames_received", std::to_string(received_count)},
+      {"frames_dropped", std::to_string(dropped_count)},
+      {"reason", stream_stop_reason},
+  };
+  if (!options.soak_mode && interrupted_by_signal) {
+    stream_stopped_payload["requested_duration_ms"] = std::to_string(run_plan.duration.count());
+    stream_stopped_payload["completed_duration_ms"] =
+        std::to_string(non_soak_completed_duration.count());
+  }
+
   if (!AppendTraceEvent(events::EventType::kStreamStopped, run_info.timestamps.finished_at,
-                        {
-                            {"run_id", run_info.run_id},
-                            {"frames_total", std::to_string(frames.size())},
-                            {"frames_received", std::to_string(received_count)},
-                            {"frames_dropped", std::to_string(dropped_count)},
-                            {"reason", options.soak_mode ? "soak_completed" : "completed"},
-                        },
-                        bundle_dir, events_path, error)) {
+                        std::move(stream_stopped_payload), bundle_dir, events_path, error)) {
     logger.Error("failed to append STREAM_STOPPED event", {{"error", error}});
     std::cerr << "error: failed to append STREAM_STOPPED event: " << error << '\n';
     return kExitFailure;
@@ -2566,8 +2618,16 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     run_result->events_jsonl_path = events_path;
   }
 
+  std::chrono::milliseconds metrics_duration = run_plan.duration;
+  if (!options.soak_mode && interrupted_by_signal) {
+    metrics_duration = non_soak_completed_duration;
+    if (metrics_duration <= std::chrono::milliseconds::zero()) {
+      metrics_duration = std::chrono::milliseconds(1);
+    }
+  }
+
   metrics::FpsReport fps_report;
-  if (!metrics::ComputeFpsReport(frames, run_plan.duration, std::chrono::milliseconds(1'000),
+  if (!metrics::ComputeFpsReport(frames, metrics_duration, std::chrono::milliseconds(1'000),
                                  fps_report, error)) {
     logger.Error("failed to compute metrics", {{"error", error}});
     std::cerr << "error: failed to compute fps metrics: " << error << '\n';
@@ -2592,8 +2652,13 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
 
   std::vector<std::string> threshold_failures;
-  const bool thresholds_passed =
-      EvaluateRunThresholds(run_plan.thresholds, fps_report, threshold_failures);
+  bool thresholds_passed = true;
+  if (interrupted_by_signal) {
+    thresholds_passed = false;
+    threshold_failures.push_back("run interrupted by signal before requested duration completed");
+  } else {
+    thresholds_passed = EvaluateRunThresholds(run_plan.thresholds, fps_report, threshold_failures);
+  }
   if (run_result != nullptr) {
     run_result->thresholds_passed = thresholds_passed;
   }
@@ -2727,6 +2792,23 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
             << " jitter_p95=" << fps_report.inter_frame_jitter_us.p95_us << '\n';
   std::cout << "frames: total=" << frames.size() << " received=" << received_count
             << " dropped=" << dropped_count << '\n';
+  std::cout << "run_status: " << (interrupted_by_signal ? "interrupted" : "completed") << '\n';
+  if (!options.soak_mode && interrupted_by_signal) {
+    std::cout << "completed_duration_ms: " << non_soak_completed_duration.count() << '\n';
+    std::cout << "requested_duration_ms: " << run_plan.duration.count() << '\n';
+  }
+
+  if (interrupted_by_signal) {
+    logger.Warn("run interrupted by signal",
+                {{"frames_total", std::to_string(frames.size())},
+                 {"frames_received", std::to_string(received_count)},
+                 {"frames_dropped", std::to_string(dropped_count)},
+                 {"completed_duration_ms", std::to_string(non_soak_completed_duration.count())},
+                 {"requested_duration_ms", std::to_string(run_plan.duration.count())}});
+    std::cerr << "warning: run interrupted by Ctrl+C; finalized partial artifact bundle\n";
+    return kExitFailure;
+  }
+
   if (thresholds_passed) {
     logger.Info("run completed", {{"thresholds", "pass"},
                                   {"frames_total", std::to_string(frames.size())},
