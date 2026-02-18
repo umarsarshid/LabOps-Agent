@@ -13,23 +13,20 @@ namespace {
 
 std::string Trim(std::string_view value) {
   std::size_t begin = 0;
-  while (begin < value.size() &&
-         std::isspace(static_cast<unsigned char>(value[begin])) != 0) {
+  while (begin < value.size() && std::isspace(static_cast<unsigned char>(value[begin])) != 0) {
     ++begin;
   }
 
   std::size_t end = value.size();
-  while (end > begin &&
-         std::isspace(static_cast<unsigned char>(value[end - 1])) != 0) {
+  while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1])) != 0) {
     --end;
   }
   return std::string(value.substr(begin, end - begin));
 }
 
 std::string ToLowerAscii(std::string value) {
-  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
-    return static_cast<char>(std::tolower(c));
-  });
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return value;
 }
 
@@ -69,32 +66,19 @@ TransportCounterReading ResolveCounter(const BackendConfig& backend_dump,
 }
 
 constexpr std::array<std::string_view, 7> kResendAliases = {
-    "transport.resends",
-    "transport_resends",
-    "device.transport_resends",
-    "gevresendpacketcount",
-    "gevresendcount",
-    "streamresendcount",
-    "resendpacketcount",
+    "transport.resends", "transport_resends", "device.transport_resends", "gevresendpacketcount",
+    "gevresendcount",    "streamresendcount", "resendpacketcount",
 };
 
 constexpr std::array<std::string_view, 7> kPacketErrorAliases = {
-    "transport.packet_errors",
-    "transport_packet_errors",
-    "device.transport_packet_errors",
-    "gevpacketerrorcount",
-    "streampacketerrorcount",
-    "packeterrorcount",
+    "transport.packet_errors", "transport_packet_errors", "device.transport_packet_errors",
+    "gevpacketerrorcount",     "streampacketerrorcount",  "packeterrorcount",
     "transporterrorcount",
 };
 
 constexpr std::array<std::string_view, 7> kDroppedPacketAliases = {
-    "transport.dropped_packets",
-    "transport_dropped_packets",
-    "device.transport_dropped_packets",
-    "gevdroppedpacketcount",
-    "streamdroppedpacketcount",
-    "droppedpacketcount",
+    "transport.dropped_packets", "transport_dropped_packets", "device.transport_dropped_packets",
+    "gevdroppedpacketcount",     "streamdroppedpacketcount",  "droppedpacketcount",
     "transportdroppedcount",
 };
 

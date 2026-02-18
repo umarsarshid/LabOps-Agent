@@ -306,6 +306,10 @@ Current event types in run flow:
 - `STREAM_STARTED`
 - `FRAME_RECEIVED`
 - `FRAME_DROPPED`
+- `FRAME_TIMEOUT`
+- `FRAME_INCOMPLETE`
+- `TRANSPORT_ANOMALY` (optional heuristic event when real transport counters
+  exceed thresholds)
 - `STREAM_STOPPED`
 
 Important timeline behavior:
@@ -392,6 +396,11 @@ Current sections:
     - `Resend spike`
     - `Jitter cliff`
     - `Periodic stall`
+  - also surfaces transport-counter threshold heuristics for real runs when
+    counters are available:
+    - resend counter spike
+    - packet-error counter spike
+    - dropped-packet counter spike
 - optional `Netem Commands (Manual)` when scenario references a valid
   `netem_profile`
 

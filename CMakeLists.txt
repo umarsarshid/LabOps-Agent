@@ -64,6 +64,7 @@ target_compile_features(labops_schema PUBLIC cxx_std_20)
 add_library(labops_events
   src/events/event_model.cpp
   src/events/jsonl_writer.cpp
+  src/events/transport_anomaly.cpp
 )
 target_include_directories(labops_events PUBLIC src)
 target_compile_features(labops_events PUBLIC cxx_std_20)
@@ -387,6 +388,15 @@ add_labops_smoke_test(
   NAME events_jsonl_smoke
   SOURCES
     tests/events/events_jsonl_smoke.cpp
+  LIBRARIES
+    labops_events
+)
+
+# Smoke test for transport-counter anomaly heuristics.
+add_labops_smoke_test(
+  NAME transport_anomaly_smoke
+  SOURCES
+    tests/events/transport_anomaly_smoke.cpp
   LIBRARIES
     labops_events
 )

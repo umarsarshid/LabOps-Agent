@@ -11,6 +11,9 @@ contract and append-only JSONL writer behavior from regressions.
 
 - `events_jsonl_smoke.cpp`: verifies append behavior and required keys in
   `events.jsonl` lines.
+- `transport_anomaly_smoke.cpp`: verifies optional transport-counter anomaly
+  heuristics trigger findings only when counters are available and exceed
+  thresholds.
 
 ## Connection to the project
 

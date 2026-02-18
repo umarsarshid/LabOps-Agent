@@ -61,8 +61,12 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
   drop, and timing/jitter reporting.
 - Generate one-page `summary.md` per run with pass/fail, key metrics, and top
   anomalies for quick human triage, including named heuristics (`resend spike`,
-  `jitter cliff`, `periodic stall`) plus optional manual netem
+  `jitter cliff`, `periodic stall`), plus optional real transport-counter
+  heuristics (`resends`, `packet_errors`, `dropped_packets`) when available,
+  plus optional manual netem
   apply/show/teardown suggestions when `netem_profile` is configured.
+- Emit optional `TRANSPORT_ANOMALY` events when transport counter thresholds
+  trigger on real-device runs.
 - Generate static `report.html` per run for browser-based review with no JS,
   including plots-ready metric and delta tables.
 - Optionally apply Linux netem profile impairments when explicitly requested

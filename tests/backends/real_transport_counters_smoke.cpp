@@ -32,8 +32,7 @@ int main() {
   const auto available = CollectTransportCounters(available_dump);
   Require(available.resends.available, "expected resend counter to be available");
   Require(available.resends.value == 12U, "unexpected resend counter value");
-  Require(available.resends.source_key == "GevResendPacketCount",
-          "unexpected resend source key");
+  Require(available.resends.source_key == "GevResendPacketCount", "unexpected resend source key");
   Require(available.packet_errors.available, "expected packet-error counter to be available");
   Require(available.packet_errors.value == 3U, "unexpected packet-error value");
   Require(available.dropped_packets.available, "expected dropped-packet counter to be available");

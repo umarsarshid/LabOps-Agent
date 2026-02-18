@@ -47,9 +47,11 @@ int main() {
 
   Event second;
   second.ts = std::chrono::system_clock::time_point(std::chrono::milliseconds(2'000));
-  second.type = EventType::kInfo;
+  second.type = EventType::kTransportAnomaly;
   second.payload = {
-      {"message", "sample"},
+      {"counter", "resends"},
+      {"observed_value", "120"},
+      {"threshold", "50"},
   };
 
   fs::path written_path;
@@ -83,8 +85,9 @@ int main() {
   AssertContains(lines[0], "\"run_id\":\"run-1\"");
 
   AssertContains(lines[1], "\"ts_utc\":\"1970-01-01T00:00:02.000Z\"");
-  AssertContains(lines[1], "\"type\":\"info\"");
-  AssertContains(lines[1], "\"message\":\"sample\"");
+  AssertContains(lines[1], "\"type\":\"TRANSPORT_ANOMALY\"");
+  AssertContains(lines[1], "\"counter\":\"resends\"");
+  AssertContains(lines[1], "\"observed_value\":\"120\"");
 
   fs::remove_all(out_dir, cleanup_ec);
   std::cout << "events_jsonl_smoke: ok\n";

@@ -18,6 +18,7 @@ enum class EventType {
   kFrameDropped,
   kFrameTimeout,
   kFrameIncomplete,
+  kTransportAnomaly,
   kStreamStopped,
   kInfo,
   kWarning,

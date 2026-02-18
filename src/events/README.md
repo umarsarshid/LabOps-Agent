@@ -18,6 +18,9 @@ Debugging camera failures requires timeline evidence, not just summary metrics. 
   plus JSON serialization.
 - `jsonl_writer.hpp/.cpp`: append-only writer for `events.jsonl` (one JSON
   object per line).
+- `transport_anomaly.hpp/.cpp`: optional transport-counter heuristics that
+  convert real-run counter snapshots into structured anomaly findings used by
+  both timeline events and summary callouts.
 
 ## Current stream trace event types
 
@@ -29,6 +32,7 @@ Debugging camera failures requires timeline evidence, not just summary metrics. 
 - `FRAME_DROPPED`
 - `FRAME_TIMEOUT`
 - `FRAME_INCOMPLETE`
+- `TRANSPORT_ANOMALY` (optional, heuristic-driven)
 - `STREAM_STOPPED`
 
 ## Key design principle

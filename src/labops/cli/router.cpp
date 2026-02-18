@@ -24,6 +24,7 @@
 #include "core/schema/run_contract.hpp"
 #include "events/event_model.hpp"
 #include "events/jsonl_writer.hpp"
+#include "events/transport_anomaly.hpp"
 #include "hostprobe/system_probe.hpp"
 #include "labops/soak/checkpoint_store.hpp"
 #include "metrics/anomalies.hpp"
@@ -2781,8 +2782,36 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   if (run_result != nullptr) {
     run_result->thresholds_passed = thresholds_passed;
   }
-  const std::vector<std::string> top_anomalies =
+  std::vector<std::string> top_anomalies =
       metrics::BuildAnomalyHighlights(fps_report, run_plan.sim_config.fps, threshold_failures);
+
+  // Optional real-transport heuristics: emit machine-readable timeline events
+  // and also surface the same findings in the run summary.
+  const std::vector<events::TransportAnomalyFinding> transport_anomalies =
+      events::DetectTransportAnomalies(run_info);
+  if (!transport_anomalies.empty()) {
+    auto it = std::find(top_anomalies.begin(), top_anomalies.end(),
+                        "No notable anomalies detected by current heuristics.");
+    if (it != top_anomalies.end()) {
+      top_anomalies.erase(it);
+    }
+  }
+  for (const auto& anomaly : transport_anomalies) {
+    top_anomalies.push_back(anomaly.summary);
+    if (!AppendTraceEvent(events::EventType::kTransportAnomaly, run_info.timestamps.finished_at,
+                          {{"run_id", run_info.run_id},
+                           {"scenario_id", run_info.config.scenario_id},
+                           {"heuristic_id", anomaly.heuristic_id},
+                           {"counter", anomaly.counter_name},
+                           {"observed_value", std::to_string(anomaly.observed_value)},
+                           {"threshold", std::to_string(anomaly.threshold)},
+                           {"summary", anomaly.summary}},
+                          bundle_dir, events_path, error)) {
+      logger.Error("failed to append TRANSPORT_ANOMALY event", {{"error", error}});
+      std::cerr << "error: failed to append TRANSPORT_ANOMALY event: " << error << '\n';
+      return kExitFailure;
+    }
+  }
 
   fs::path summary_markdown_path;
   if (!artifacts::WriteRunSummaryMarkdown(
