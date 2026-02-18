@@ -27,6 +27,11 @@ This folder is that bridge.
   - validates enumeration knobs (for example `pixel_format`) against enum
     entries exposed by the node map adapter and reports allowed values when
     unsupported.
+  - supports trigger enum knobs:
+    - `trigger_mode` (`free_run`, `software`, `hardware`)
+    - `trigger_source` (`line0`, `line1`, `software`)
+    - `trigger_activation` (`rising_edge`, `falling_edge`, `any_edge`)
+    with readback evidence per key.
   - includes first practical numeric knob guards for real triage tickets:
     - `exposure` (`ExposureTime`) clamped/validated to `[5, 10000000]` (us)
     - `gain` (`Gain`) clamped/validated to `[0, 48]` (dB)
@@ -48,7 +53,7 @@ This folder is that bridge.
     - `exposure`, `gain`, `pixel_format`,
       `roi_width`, `roi_height`, `roi_offset_x`, `roi_offset_y`,
       `roi` (legacy alias),
-      `trigger_mode`, `trigger_source`, `frame_rate`
+      `trigger_mode`, `trigger_source`, `trigger_activation`, `frame_rate`
 - `real_backend.hpp` / `real_backend.cpp`:
   - `RealBackend` implements `ICameraBackend`.
   - `connect/start/stop` lifecycle is now wired through SDK/context-safe RAII.

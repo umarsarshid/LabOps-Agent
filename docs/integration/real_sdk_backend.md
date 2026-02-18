@@ -123,6 +123,8 @@ Maintain a table in your backend module docs/code comments:
 | `camera.fps` | `fps` | `SetFrameRate(...)` | integer Hz | `>0` |
 | `camera.pixel_format` | `pixel_format` | `SetPixelFormat(...)` | enum map | allowed enum |
 | `camera.trigger_mode` | `trigger_mode` | `SetTriggerMode(...)` | enum map | allowed enum |
+| `camera.trigger_source` | `trigger_source` | `SetTriggerSource(...)` | enum map | allowed enum |
+| `camera.trigger_activation` | `trigger_activation` | `SetTriggerActivation(...)` | enum map | allowed enum |
 | `camera.network.inter_packet_delay_us` | `inter_packet_delay_us` | SDK transport delay API | us -> sdk unit | `>=0` |
 | `camera.roi.width` | `roi_width` | ROI setter | pixels | range/device caps |
 

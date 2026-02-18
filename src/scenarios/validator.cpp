@@ -192,6 +192,31 @@ void ValidateCamera(const JsonValue& root, ValidationReport& report) {
     }
   }
 
+  if (const JsonValue* trigger_source = GetField(*camera, "trigger_source");
+      trigger_source != nullptr) {
+    if (!IsString(trigger_source)) {
+      AddIssue(report, "camera.trigger_source", "must be a string");
+    } else {
+      const std::string& source = trigger_source->string_value;
+      if (source != "line0" && source != "line1" && source != "software") {
+        AddIssue(report, "camera.trigger_source", "must be one of: line0, line1, software");
+      }
+    }
+  }
+
+  if (const JsonValue* trigger_activation = GetField(*camera, "trigger_activation");
+      trigger_activation != nullptr) {
+    if (!IsString(trigger_activation)) {
+      AddIssue(report, "camera.trigger_activation", "must be a string");
+    } else {
+      const std::string& activation = trigger_activation->string_value;
+      if (activation != "rising_edge" && activation != "falling_edge" && activation != "any_edge") {
+        AddIssue(report, "camera.trigger_activation",
+                 "must be one of: rising_edge, falling_edge, any_edge");
+      }
+    }
+  }
+
   if (const JsonValue* roi = GetField(*camera, "roi"); roi != nullptr) {
     if (!IsObject(roi)) {
       AddIssue(report, "camera.roi", "must be an object");

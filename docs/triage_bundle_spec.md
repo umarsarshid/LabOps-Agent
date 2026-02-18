@@ -174,7 +174,8 @@ Current fields:
   - selector details when available (`selector`, `index`, optional `ip`, `mac`)
 - `curated_nodes`:
   - fixed key rows for core camera settings (`frame_rate`, `pixel_format`,
-    `exposure`, `gain`, `roi`, `trigger_mode`, `trigger_source`)
+    `exposure`, `gain`, `roi_width`, `roi_height`, `roi_offset_x`,
+    `roi_offset_y`, `trigger_mode`, `trigger_source`, `trigger_activation`)
   - each row captures `requested`, `actual`, `supported`, `applied`,
     `adjusted`, `missing`, and `reason`
 - `missing_keys`: curated keys with no readback row

@@ -181,7 +181,9 @@ int main() {
                   << "    \"fps\": 30,\n"
                   << "    \"exposure_us\": 8000,\n"
                   << "    \"gain_db\": 6.5,\n"
-                  << "    \"trigger_mode\": \"free_run\",\n"
+                  << "    \"trigger_mode\": \"hardware\",\n"
+                  << "    \"trigger_source\": \"line1\",\n"
+                  << "    \"trigger_activation\": \"falling_edge\",\n"
                   << "    \"roi\": {\n"
                   << "      \"x\": 100,\n"
                   << "      \"y\": 120,\n"
@@ -246,12 +248,18 @@ int main() {
     AssertContains(verify_json, "\"generic_key\":\"frame_rate\"");
     AssertContains(verify_json, "\"generic_key\":\"exposure\"");
     AssertContains(verify_json, "\"generic_key\":\"gain\"");
+    AssertContains(verify_json, "\"generic_key\":\"trigger_mode\"");
+    AssertContains(verify_json, "\"generic_key\":\"trigger_source\"");
+    AssertContains(verify_json, "\"generic_key\":\"trigger_activation\"");
     AssertContains(verify_json, "\"generic_key\":\"roi_width\"");
     AssertContains(verify_json, "\"generic_key\":\"roi_height\"");
     AssertContains(verify_json, "\"generic_key\":\"roi_offset_x\"");
     AssertContains(verify_json, "\"generic_key\":\"roi_offset_y\"");
     AssertContains(verify_json, "\"actual\":\"8000\"");
     AssertContains(verify_json, "\"actual\":\"6.5\"");
+    AssertContains(verify_json, "\"actual\":\"hardware\"");
+    AssertContains(verify_json, "\"actual\":\"line1\"");
+    AssertContains(verify_json, "\"actual\":\"falling_edge\"");
     AssertContains(verify_json, "\"actual\":\"1280\"");
     AssertContains(verify_json, "\"actual\":\"720\"");
     AssertContains(verify_json, "\"actual\":\"100\"");
@@ -272,6 +280,9 @@ int main() {
     AssertContains(config_report, "frame_rate");
     AssertContains(config_report, "exposure");
     AssertContains(config_report, "gain");
+    AssertContains(config_report, "trigger_mode");
+    AssertContains(config_report, "trigger_source");
+    AssertContains(config_report, "trigger_activation");
     AssertContains(config_report, "roi_width");
     AssertContains(config_report, "roi_height");
     AssertContains(config_report, "roi_offset_x");

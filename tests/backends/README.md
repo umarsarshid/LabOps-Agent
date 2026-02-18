@@ -50,7 +50,8 @@ stable interface regardless of real hardware availability.
   reporting plus per-setting readback rows (`requested/actual/supported`) used
   by `config_verify.json`, `camera_config.json`, and `config_report.md`,
   including numeric range guards for `exposure`/`gain` and enum validation
-  for `pixel_format`, plus deterministic ROI ordering
+  for `pixel_format`, trigger enum round-trips
+  (`trigger_mode`, `trigger_source`, `trigger_activation`), plus deterministic ROI ordering
   (`roi_width`, `roi_height`, `roi_offset_x`, `roi_offset_y`) with constraint
   clamping evidence.
 

@@ -46,7 +46,7 @@ int main() {
   if (!map.Has("exposure") || !map.Has("gain") || !map.Has("pixel_format") ||
       !map.Has("roi_width") || !map.Has("roi_height") || !map.Has("roi_offset_x") ||
       !map.Has("roi_offset_y") || !map.Has("trigger_mode") || !map.Has("trigger_source") ||
-      !map.Has("frame_rate")) {
+      !map.Has("trigger_activation") || !map.Has("frame_rate")) {
     Fail("default map missing one or more required first keys");
   }
   if (map.Has("unknown_key")) {
@@ -71,6 +71,7 @@ int main() {
   AssertContains(keys, "roi_offset_y");
   AssertContains(keys, "trigger_mode");
   AssertContains(keys, "trigger_source");
+  AssertContains(keys, "trigger_activation");
   AssertContains(keys, "frame_rate");
 
   // Data-driven update proof: changing JSON content updates behavior without
@@ -103,6 +104,7 @@ int main() {
         << "  \"roi_offset_y\": \"OffsetY\",\n"
         << "  \"trigger_mode\": \"TriggerMode\",\n"
         << "  \"trigger_source\": \"TriggerSource\",\n"
+        << "  \"trigger_activation\": \"TriggerActivation\",\n"
         << "  \"frame_rate\": \"AcquisitionFrameRateAbs\"\n"
         << "}\n";
   }

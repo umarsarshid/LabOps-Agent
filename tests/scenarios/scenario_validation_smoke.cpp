@@ -184,6 +184,8 @@ int main() {
   "camera": {
     "fps": 0,
     "trigger_mode": "edge",
+    "trigger_source": "line7",
+    "trigger_activation": "upward",
     "roi": { "x": 10, "width": 640 }
   },
   "sim_faults": { "drop_percent": 120 },
@@ -217,6 +219,12 @@ int main() {
     }
     if (!ContainsIssue(report, "camera.trigger_mode", "must be one of")) {
       Fail("missing actionable issue for camera.trigger_mode");
+    }
+    if (!ContainsIssue(report, "camera.trigger_source", "must be one of")) {
+      Fail("missing actionable issue for camera.trigger_source");
+    }
+    if (!ContainsIssue(report, "camera.trigger_activation", "must be one of")) {
+      Fail("missing actionable issue for camera.trigger_activation");
     }
     if (!ContainsIssue(report, "camera.roi.y", "required")) {
       Fail("missing actionable issue for camera.roi.y");

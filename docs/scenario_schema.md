@@ -129,6 +129,10 @@ A scenario JSON document is an object with these top-level sections:
   - `gain_db` (number, optional)
   - `trigger_mode` (string, optional)
     - allowed: `"free_run"`, `"software"`, `"hardware"`
+  - `trigger_source` (string, optional)
+    - allowed: `"line0"`, `"line1"`, `"software"`
+  - `trigger_activation` (string, optional)
+    - allowed: `"rising_edge"`, `"falling_edge"`, `"any_edge"`
   - `roi` (object, optional)
     - `x` (integer, `>= 0`)
     - `y` (integer, `>= 0`)
@@ -204,7 +208,9 @@ At least one threshold should be present.
   "camera": {
     "fps": 30,
     "pixel_format": "mono8",
-    "trigger_mode": "free_run"
+    "trigger_mode": "free_run",
+    "trigger_source": "line0",
+    "trigger_activation": "rising_edge"
   },
   "thresholds": {
     "min_avg_fps": 28.0,
@@ -234,6 +240,8 @@ At least one threshold should be present.
     "exposure_us": 8000,
     "gain_db": 3.0,
     "trigger_mode": "hardware",
+    "trigger_source": "line1",
+    "trigger_activation": "falling_edge",
     "roi": {
       "x": 100,
       "y": 120,

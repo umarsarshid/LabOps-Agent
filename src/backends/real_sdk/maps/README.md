@@ -22,6 +22,7 @@ change. Keeping mappings in JSON allows rapid updates by integration engineers.
     - `roi` (legacy alias)
     - `trigger_mode`
     - `trigger_source`
+    - `trigger_activation`
     - `frame_rate`
 
 ## Connection to the project

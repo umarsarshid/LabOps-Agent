@@ -9,5 +9,6 @@
   "roi": "RegionOfInterest",
   "trigger_mode": "TriggerMode",
   "trigger_source": "TriggerSource",
+  "trigger_activation": "TriggerActivation",
   "frame_rate": "AcquisitionFrameRate"
 }

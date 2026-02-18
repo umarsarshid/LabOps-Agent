@@ -305,6 +305,55 @@ int main() {
     }
   }
 
+  // Trigger controls (mode/source/activation) should apply as enum knobs and
+  // round-trip through readback rows with the requested values.
+  {
+    RecordingBackend backend;
+    std::unique_ptr<labops::backends::real_sdk::INodeMapAdapter> adapter =
+        CreateDefaultNodeMapAdapter();
+    ApplyParamsResult result;
+    if (!ApplyParams(backend, key_map, *adapter,
+                     {
+                         ApplyParamInput{"trigger_mode", "hardware"},
+                         ApplyParamInput{"trigger_source", "line1"},
+                         ApplyParamInput{"trigger_activation", "falling_edge"},
+                     },
+                     ParamApplyMode::kStrict, result, error)) {
+      Fail("strict trigger apply unexpectedly failed: " + error);
+    }
+
+    if (result.applied.size() != 3U || result.unsupported.size() != 0U ||
+        result.readback_rows.size() != 3U) {
+      Fail("trigger apply should produce three applied rows");
+    }
+
+    bool saw_mode = false;
+    bool saw_source = false;
+    bool saw_activation = false;
+    for (const auto& row : result.readback_rows) {
+      if (row.generic_key == "trigger_mode" && row.applied && row.actual_value == "hardware") {
+        saw_mode = true;
+      }
+      if (row.generic_key == "trigger_source" && row.applied && row.actual_value == "line1") {
+        saw_source = true;
+      }
+      if (row.generic_key == "trigger_activation" && row.applied &&
+          row.actual_value == "falling_edge") {
+        saw_activation = true;
+      }
+    }
+    if (!saw_mode || !saw_source || !saw_activation) {
+      Fail("trigger readback rows missing expected mode/source/activation values");
+    }
+
+    const auto dumped = backend.DumpConfig();
+    if (dumped.find("TriggerMode") == dumped.end() ||
+        dumped.find("TriggerSource") == dumped.end() ||
+        dumped.find("TriggerActivation") == dumped.end()) {
+      Fail("trigger mapped SDK node writes were not recorded in backend dump");
+    }
+  }
+
   // ROI controls should apply size nodes before offsets and clamp to node
   // ranges so camera constraints are visible in readback evidence.
   {

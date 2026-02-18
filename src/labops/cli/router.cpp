@@ -1258,6 +1258,8 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
   const auto gain_db = read_number({"camera", "gain_db"}, {"gain_db"});
   const auto trigger_mode = read_string({"camera", "trigger_mode"}, {"trigger_mode"});
   const auto trigger_source = read_string({"camera", "trigger_source"}, {"trigger_source"});
+  const auto trigger_activation =
+      read_string({"camera", "trigger_activation"}, {"trigger_activation"});
   RoiValues roi_values;
   const JsonValue* roi_object = FindScenarioField(scenario_root, {"camera", "roi"}, {"roi"});
   const bool has_roi = roi_object != nullptr;
@@ -1313,6 +1315,9 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
   }
   if (trigger_source.has_value() && !trigger_source->empty()) {
     UpsertRealParam(plan.real_params, "trigger_source", trigger_source.value());
+  }
+  if (trigger_activation.has_value() && !trigger_activation->empty()) {
+    UpsertRealParam(plan.real_params, "trigger_activation", trigger_activation.value());
   }
   if (has_roi) {
     // Keep ROI ordering deterministic for cameras that require Width/Height

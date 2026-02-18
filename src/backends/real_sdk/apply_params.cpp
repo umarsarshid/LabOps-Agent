@@ -346,6 +346,17 @@ std::unique_ptr<InMemoryNodeMapAdapter> BuildDefaultNodeAdapter() {
                                                    "software",
                                                },
                                        });
+  adapter->UpsertNode("TriggerActivation",
+                      InMemoryNodeMapAdapter::NodeDefinition{
+                          .value_type = NodeValueType::kEnumeration,
+                          .string_value = std::optional<std::string>("rising_edge"),
+                          .enum_values =
+                              std::vector<std::string>{
+                                  "rising_edge",
+                                  "falling_edge",
+                                  "any_edge",
+                              },
+                      });
   adapter->UpsertNode("AcquisitionFrameRate", InMemoryNodeMapAdapter::NodeDefinition{
                                                   .value_type = NodeValueType::kFloat64,
                                                   .float64_value = 30.0,
