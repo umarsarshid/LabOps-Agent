@@ -1,92 +1,64 @@
-# SUMMARY — 0095 `test(integration): add manual real camera smoke target`
+# SUMMARY — 0096 `docs(real): add real-backend troubleshooting page`
 
 ## Goal
-Add one manual command developers can run to quickly verify local real-backend lab setup (connect -> stream 5s -> dump config -> exit) without putting camera-dependent checks into CI.
+Create a practical real-backend troubleshooting runbook that reads like internal AE/QA notes, focused on the most common lab blockers:
+- device not found
+- timeouts
+- trigger confusion
+- GigE MTU/packet issues
 
 ## Implementation
 
-### 1) Added a dedicated manual smoke scenario
-Files:
-- `tests/manual/real_camera_smoke_scenario.json`
-
-What:
-- Added a 5-second scenario intended for lab bring-up:
-  - `backend: real_stub`
-  - `apply_mode: best_effort`
-  - camera defaults for free-run streaming (`fps`, `pixel_format`, `trigger_mode`, exposure/gain)
-  - minimal thresholds (`min_avg_fps`, permissive drop rate, no disconnects)
-
-Why:
-- Gives developers a stable, checked-in scenario for fast manual validation.
-- Avoids ad-hoc per-engineer scenario files for the same bring-up task.
-
-### 2) Added a non-CTEST manual CMake target
+### 1) Added a dedicated troubleshooting runbook
 File:
-- `CMakeLists.txt`
+- `docs/real_backend_troubleshooting.md`
 
 What:
-- Added custom target: `real_camera_smoke_manual`
-- Target behavior:
-  - ensures `tmp/manual_real_camera_smoke` exists
-  - runs:
-    - `labops run tests/manual/real_camera_smoke_scenario.json --out tmp/manual_real_camera_smoke`
-- Added clear comments explaining why this is a custom target and not `add_test(...)`.
+- Added a symptom-based guide with a short first-pass triage flow.
+- Added dedicated sections for each requested issue class:
+  - Device not found
+  - Timeouts / intermittent frame gaps
+  - Trigger confusion
+  - GigE MTU / packet-size issues
+- For each section, documented:
+  - typical signs
+  - likely causes
+  - concrete checks (commands + artifacts)
+  - practical fix pattern
+  - evidence to attach for escalation
+- Added an escalation checklist for handoffs.
 
 Why:
-- Delivers the requested one-command operator flow.
-- Keeps hardware/lab checks out of CI while still making them easy to run locally.
+- Engineers need fast, repeatable triage steps in production-like lab incidents.
+- A symptom-first runbook reduces back-and-forth and improves quality of handoff evidence.
 
-### 3) Added manual-test folder documentation
-File:
-- `tests/manual/README.md`
-
-What:
-- Documented purpose of `tests/manual/`.
-- Documented one-command usage and expected output path.
-- Documented that this target is intentionally not part of `ctest`.
-- Included note for multi-camera labs to run equivalent CLI with `--device`.
-
-Why:
-- Makes manual workflow discoverable for new engineers.
-- Prevents confusion about why this target does not appear in CI test output.
-
-### 4) Updated existing docs to surface the new workflow
+### 2) Linked the runbook from core docs entry points
 Files:
-- `tests/README.md`
+- `docs/README.md`
 - `docs/real_backend_setup.md`
+- `README.md`
 
 What:
-- Added references to `tests/manual/` and the `real_camera_smoke_manual` command.
-- Added plain-language flow and output location for manual bring-up verification.
+- Added references so the troubleshooting doc is discoverable from:
+  - top-level project README
+  - docs index
+  - real-backend setup guide
 
 Why:
-- Keeps setup and testing docs aligned with the new command.
-- Reduces time to first successful lab validation.
+- Good runbooks only help if engineers can find them quickly during failures.
 
 ## Verification
 
-Formatting:
-- `bash tools/clang_format.sh --check` -> pass
+Link/path checks:
+- `rg -n "real_backend_troubleshooting.md" README.md docs/README.md docs/real_backend_setup.md`
+- confirmed all expected references exist.
+- `test -f docs/real_backend_troubleshooting.md` -> doc exists.
 
-Default build (existing local build tree):
+Repo hygiene checks:
+- `bash tools/clang_format.sh --check` -> pass
 - `cmake --build build` -> pass
 
-Targeted smoke check (regression guard):
-- `ctest --test-dir build -R list_backends_smoke --output-on-failure` -> pass
-
-Manual target end-to-end validation in real-enabled fixture build:
-1. Created local fake SDK dirs:
-   - `tmp/fake_vendor_sdk/include`
-   - `tmp/fake_vendor_sdk/lib`
-2. Configured real-enabled build:
-   - `cmake -S . -B tmp/build-real-manual -DLABOPS_ENABLE_REAL_BACKEND=ON -DVENDOR_SDK_ROOT:PATH="$(pwd)/tmp/fake_vendor_sdk"`
-3. Ran one-command manual target:
-   - `cmake --build tmp/build-real-manual --target real_camera_smoke_manual`
-4. Confirmed success and artifact output:
-   - `tmp/manual_real_camera_smoke/run-1771448971550/`
-   - includes `camera_config.json`, `config_verify.json`, `config_report.md`, `events.jsonl`, `metrics.*`, `summary.md`, `report.html`, `bundle_manifest.json`
-
 ## Outcome
-- Developers now have a single command to perform a quick real-backend smoke flow.
-- The workflow stays manual and out of CI by design.
-- Documentation points to the command and output bundle location.
+- Real-backend troubleshooting guidance now exists as a single operational runbook.
+- The doc is written in practical AE/QA style and anchored to actual LabOps artifacts.
+- Entry-point docs now route engineers to the runbook directly.

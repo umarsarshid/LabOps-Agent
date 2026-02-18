@@ -136,3 +136,5 @@ If any SDK file appears as staged/tracked, stop and remove it from the commit.
 
 - Integration design/implementation guide:
   - `docs/integration/real_sdk_backend.md`
+- Troubleshooting guide (AE/QA runbook style):
+  - `docs/real_backend_troubleshooting.md`
