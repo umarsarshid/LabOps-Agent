@@ -32,7 +32,8 @@ int main() {
   }
 
   {
-    const auto mapped = MapRealBackendError("pull_frames", "device disconnected during acquisition");
+    const auto mapped =
+        MapRealBackendError("pull_frames", "device disconnected during acquisition");
     if (mapped.code != RealBackendErrorCode::kDeviceDisconnected) {
       Fail("expected disconnect classification for disconnect error text");
     }

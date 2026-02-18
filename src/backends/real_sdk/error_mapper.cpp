@@ -60,7 +60,8 @@ bool ContainsAny(std::string_view haystack, std::initializer_list<std::string_vi
 }
 
 std::string BuildActionableMessage(const RealBackendErrorCode code, std::string_view operation) {
-  const std::string operation_label = operation.empty() ? "requested operation" : std::string(operation);
+  const std::string operation_label =
+      operation.empty() ? "requested operation" : std::string(operation);
 
   switch (code) {
   case RealBackendErrorCode::kDeviceBusy:
@@ -79,7 +80,8 @@ std::string BuildActionableMessage(const RealBackendErrorCode code, std::string_
     return "Camera disconnected during " + operation_label +
            "; check cable/NIC stability and retry.";
   case RealBackendErrorCode::kSdkUnavailable:
-    return "Real SDK is unavailable; install/enable SDK and rebuild with LABOPS_ENABLE_REAL_BACKEND=ON.";
+    return "Real SDK is unavailable; install/enable SDK and rebuild with "
+           "LABOPS_ENABLE_REAL_BACKEND=ON.";
   case RealBackendErrorCode::kInvalidConfiguration:
     return "Configuration is invalid for this camera; review scenario values and supported ranges.";
   case RealBackendErrorCode::kStateConflict:
@@ -181,7 +183,8 @@ RealBackendErrorMapping MapRealBackendError(std::string_view operation, std::str
 
 std::string FormatRealBackendError(std::string_view operation, std::string_view detail) {
   const RealBackendErrorMapping mapped = MapRealBackendError(operation, detail);
-  std::string formatted = std::string(ToStableErrorCode(mapped.code)) + ": " + mapped.actionable_message;
+  std::string formatted =
+      std::string(ToStableErrorCode(mapped.code)) + ": " + mapped.actionable_message;
   if (!mapped.detail.empty()) {
     formatted += " detail: " + mapped.detail;
   }
