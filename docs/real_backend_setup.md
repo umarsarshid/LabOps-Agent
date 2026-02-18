@@ -40,7 +40,19 @@ cmake -S . -B tmp/build-real -DLABOPS_ENABLE_REAL_BACKEND=ON
 cmake --build tmp/build-real
 ./tmp/build-real/labops list-backends
 ./tmp/build-real/labops list-devices --backend real
+cmake --build tmp/build-real --target real_camera_smoke_manual
 ```
+
+The manual smoke target runs one real-backend run flow:
+
+- connect
+- stream 5 seconds
+- dump config + normal run artifacts
+- exit
+
+Artifacts land under:
+
+- `tmp/manual_real_camera_smoke/<run_id>/`
 
 For OSS/local validation (without proprietary SDK enumeration calls), you can
 provide a descriptor fixture:

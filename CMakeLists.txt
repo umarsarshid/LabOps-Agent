@@ -940,6 +940,29 @@ add_labops_smoke_test(
     labops_hostprobe
 )
 
+# Manual (non-CTEST) real-camera smoke target for lab bring-up.
+# This is intentionally a custom target instead of `add_test(...)` so CI does
+# not require cameras or SDK-connected hardware.
+#
+# Flow:
+# - connect
+# - stream for 5 seconds
+# - emit normal run artifacts (including config dump)
+# - exit
+add_custom_target(real_camera_smoke_manual
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/tmp/manual_real_camera_smoke"
+  COMMAND
+    ${CMAKE_COMMAND} -E chdir "${CMAKE_SOURCE_DIR}"
+    "$<TARGET_FILE:labops>"
+    run
+    "tests/manual/real_camera_smoke_scenario.json"
+    --out
+    "tmp/manual_real_camera_smoke"
+  DEPENDS labops
+  USES_TERMINAL
+  COMMENT "Manual real camera smoke run (connect -> stream 5s -> dump config -> exit)"
+)
+
 if(LABOPS_ENABLE_CATCH2_TESTS)
   find_package(Catch2 3 QUIET)
 

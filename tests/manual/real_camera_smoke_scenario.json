@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "manual_real_camera_smoke",
+  "description": "Developer-only real camera smoke path for fast lab setup validation.",
+  "backend": "real_stub",
+  "apply_mode": "best_effort",
+  "duration": {
+    "duration_ms": 5000
+  },
+  "camera": {
+    "fps": 30,
+    "pixel_format": "mono8",
+    "trigger_mode": "free_run",
+    "exposure_us": 5000,
+    "gain_db": 0.0
+  },
+  "thresholds": {
+    "min_avg_fps": 1.0,
+    "max_drop_rate_percent": 100.0,
+    "max_disconnect_count": 0
+  }
+}

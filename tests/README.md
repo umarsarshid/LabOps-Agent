@@ -21,6 +21,8 @@ LabOps must be predictable. Tests verify command contracts, scenario validation,
   subfolders, including backend interface conformance checks.
 - Artifact-specific writer contract tests under `tests/artifacts/`.
 - CLI integration smoke tests under `tests/labops/` for end-to-end run traces.
+- Manual developer-only integration targets under `tests/manual/` for quick
+  physical-lab bring-up checks that should stay out of CI.
 - CLI netem option contract smoke coverage for safe flag pairing.
 - Bundle layout consistency smoke coverage for `<out>/<run_id>/...` contracts.
 - Optional support-zip smoke coverage for `--zip` bundle packaging.
@@ -42,6 +44,18 @@ LabOps must be predictable. Tests verify command contracts, scenario validation,
 ## Design principle
 
 Tests should favor determinism and clear failure messages so regressions are easy to triage.
+
+## Manual lab smoke command
+
+When validating a real-camera lab setup locally (not CI), run:
+
+```bash
+cmake --build build --target real_camera_smoke_manual
+```
+
+This performs one 5-second real-backend run and writes artifacts to:
+
+- `tmp/manual_real_camera_smoke/<run_id>/`
 
 ## Connection to the project
 

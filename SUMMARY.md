@@ -1,126 +1,92 @@
-# SUMMARY — 0094 `test(real): add MockFrameProvider tests for acquisition loop`
+# SUMMARY — 0095 `test(integration): add manual real camera smoke target`
 
 ## Goal
-Make the real acquisition loop independently testable in CI without cameras/SDK, while validating timeout/incomplete/stall behavior and event/counter outcomes.
+Add one manual command developers can run to quickly verify local real-backend lab setup (connect -> stream 5s -> dump config -> exit) without putting camera-dependent checks into CI.
 
 ## Implementation
 
-### 1) Added a frame-provider abstraction
+### 1) Added a dedicated manual smoke scenario
 Files:
-- `src/backends/real_sdk/frame_provider.hpp`
-- `src/backends/real_sdk/frame_provider.cpp`
+- `tests/manual/real_camera_smoke_scenario.json`
 
 What:
-- Introduced `IFrameProvider` interface to decouple frame sourcing from loop orchestration.
-- Added `FrameProviderSample` with:
-  - `outcome`
-  - `size_bytes`
-  - `stall_periods` (synthetic burst stall in frame periods)
-- Added `DeterministicFrameProvider` that preserves current OSS real-backend deterministic outcome behavior (`received`, `timeout`, `incomplete`) via seed + percentages.
+- Added a 5-second scenario intended for lab bring-up:
+  - `backend: real_stub`
+  - `apply_mode: best_effort`
+  - camera defaults for free-run streaming (`fps`, `pixel_format`, `trigger_mode`, exposure/gain)
+  - minimal thresholds (`min_avg_fps`, permissive drop rate, no disconnects)
 
 Why:
-- Enables true mock-driven loop tests without requiring vendor SDK hooks.
-- Keeps frame generation policy separate from stream-loop mechanics.
+- Gives developers a stable, checked-in scenario for fast manual validation.
+- Avoids ad-hoc per-engineer scenario files for the same bring-up task.
 
-### 2) Added an acquisition-loop module with counters/event classification
-Files:
-- `src/backends/real_sdk/acquisition_loop.hpp`
-- `src/backends/real_sdk/acquisition_loop.cpp`
-
-What:
-- Added `RunAcquisitionLoop(...)` orchestration function with explicit input/result contracts.
-- Added `AcquisitionLoopCounters`:
-  - `frames_total`
-  - `frames_received`
-  - `frames_dropped`
-  - `frames_timeout`
-  - `frames_incomplete`
-  - `stall_periods_total`
-- Added event-like classification for test assertions:
-  - `kFrameReceived`
-  - `kFrameDropped`
-  - `kFrameTimeout`
-  - `kFrameIncomplete`
-- Added timestamp handling with synthetic stall-period offsets and monotonic guard.
-
-Why:
-- Provides a deterministic, testable stream loop contract independent of hardware.
-- Makes timeout/incomplete/stall behavior explicit and assertable.
-
-### 3) Refactored `RealBackend::PullFrames` to use the loop
+### 2) Added a non-CTEST manual CMake target
 File:
-- `src/backends/real_sdk/real_backend.cpp`
-
-What:
-- Replaced inline frame-generation loop with:
-  - `DeterministicFrameProvider`
-  - `RunAcquisitionLoop(...)`
-- Preserved validation and existing parameter resolution behavior.
-- Preserved deterministic semantics, while emitting richer sdk-log counts including stall periods.
-
-Why:
-- Ensures production real-backend pull path uses the same loop now covered by mock-based tests.
-- Avoids “tested code path” drift.
-
-### 4) Added new CI-safe mock-provider acquisition test
-File:
-- `tests/backends/real_acquisition_loop_mock_provider_smoke.cpp`
-
-What this test simulates:
-- timeout frames
-- incomplete frames
-- burst stalls (`stall_periods` injected as 3 + 2)
-
-Assertions include:
-- frame/event vector alignment
-- counter correctness (received/timeout/incomplete/dropped/stall)
-- normalized timeout/incomplete frame properties
-- timestamp monotonicity
-- large timestamp gaps from burst stalls
-
-Why:
-- Directly validates stream-loop behavior with no camera and no SDK.
-- Satisfies milestone intent: confidence in CI without hardware.
-
-### 5) Build/docs/test wiring updates
-Files:
 - `CMakeLists.txt`
-- `src/backends/real_sdk/README.md`
-- `tests/backends/README.md`
 
 What:
-- Added new backends sources (`acquisition_loop.cpp`, `frame_provider.cpp`).
-- Added new smoke target: `real_acquisition_loop_mock_provider_smoke`.
-- Documented new modules/tests and their role.
+- Added custom target: `real_camera_smoke_manual`
+- Target behavior:
+  - ensures `tmp/manual_real_camera_smoke` exists
+  - runs:
+    - `labops run tests/manual/real_camera_smoke_scenario.json --out tmp/manual_real_camera_smoke`
+- Added clear comments explaining why this is a custom target and not `add_test(...)`.
 
 Why:
-- Keeps maintainers oriented and ensures CI executes new coverage.
+- Delivers the requested one-command operator flow.
+- Keeps hardware/lab checks out of CI while still making them easy to run locally.
 
-### 6) Formatting hygiene adjustment
+### 3) Added manual-test folder documentation
 File:
-- `tests/backends/mock_node_map_adapter_smoke.cpp`
+- `tests/manual/README.md`
 
 What:
-- Applied clang-format-compliant wrapping (format-only).
+- Documented purpose of `tests/manual/`.
+- Documented one-command usage and expected output path.
+- Documented that this target is intentionally not part of `ctest`.
+- Included note for multi-camera labs to run equivalent CLI with `--device`.
 
 Why:
-- Required to keep repo-wide `clang-format --check` green.
+- Makes manual workflow discoverable for new engineers.
+- Prevents confusion about why this target does not appear in CI test output.
+
+### 4) Updated existing docs to surface the new workflow
+Files:
+- `tests/README.md`
+- `docs/real_backend_setup.md`
+
+What:
+- Added references to `tests/manual/` and the `real_camera_smoke_manual` command.
+- Added plain-language flow and output location for manual bring-up verification.
+
+Why:
+- Keeps setup and testing docs aligned with the new command.
+- Reduces time to first successful lab validation.
 
 ## Verification
 
 Formatting:
-- `bash tools/clang_format.sh --check` → pass
+- `bash tools/clang_format.sh --check` -> pass
 
-Build:
-- `cmake --build build` → pass
+Default build (existing local build tree):
+- `cmake --build build` -> pass
 
-Targeted tests:
-- `ctest --test-dir build -R "real_acquisition_loop_mock_provider_smoke|real_frame_acquisition_smoke|run_stream_trace_smoke" --output-on-failure` → pass
+Targeted smoke check (regression guard):
+- `ctest --test-dir build -R list_backends_smoke --output-on-failure` -> pass
 
-Full regression:
-- `ctest --test-dir build --output-on-failure` → pass (`66/66`)
+Manual target end-to-end validation in real-enabled fixture build:
+1. Created local fake SDK dirs:
+   - `tmp/fake_vendor_sdk/include`
+   - `tmp/fake_vendor_sdk/lib`
+2. Configured real-enabled build:
+   - `cmake -S . -B tmp/build-real-manual -DLABOPS_ENABLE_REAL_BACKEND=ON -DVENDOR_SDK_ROOT:PATH="$(pwd)/tmp/fake_vendor_sdk"`
+3. Ran one-command manual target:
+   - `cmake --build tmp/build-real-manual --target real_camera_smoke_manual`
+4. Confirmed success and artifact output:
+   - `tmp/manual_real_camera_smoke/run-1771448971550/`
+   - includes `camera_config.json`, `config_verify.json`, `config_report.md`, `events.jsonl`, `metrics.*`, `summary.md`, `report.html`, `bundle_manifest.json`
 
 ## Outcome
-- Real stream-loop behavior is now directly testable with a mock provider.
-- Timeout/incomplete/burst-stall scenarios are CI-covered without hardware.
-- Events + counters are explicitly asserted in tests.
+- Developers now have a single command to perform a quick real-backend smoke flow.
+- The workflow stays manual and out of CI by design.
+- Documentation points to the command and output bundle location.
