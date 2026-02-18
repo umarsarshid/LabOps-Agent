@@ -43,6 +43,10 @@ stable interface regardless of real hardware availability.
   pre-apply parameter capability checks (`Has`/type/range/enum listing) and
   typed get/set behavior with actionable failures for mismatched/out-of-range
   writes.
+- `mock_node_map_adapter_smoke.cpp`: validates `ApplyParams` behavior against
+  a dedicated mock adapter (no hardware) for:
+  enum mapping, numeric range validation/clamping, strict vs best-effort
+  unsupported handling, and ROI apply ordering (`width/height` before offsets).
 - `param_key_map_smoke.cpp`: validates loading of the data-driven generic-key
   to SDK-node mapping (`maps/param_key_map.json`) and verifies behavior changes
   through JSON edits alone, so mapping updates do not require core code edits.

@@ -489,6 +489,15 @@ add_labops_smoke_test(
     labops_backends
 )
 
+# Smoke test for apply-logic coverage using a mock node-map adapter (no hardware).
+add_labops_smoke_test(
+  NAME mock_node_map_adapter_smoke
+  SOURCES
+    tests/backends/mock_node_map_adapter_smoke.cpp
+  LIBRARIES
+    labops_backends
+)
+
 # Smoke test for data-driven generic-key -> SDK-node map loading.
 add_labops_smoke_test(
   NAME param_key_map_smoke

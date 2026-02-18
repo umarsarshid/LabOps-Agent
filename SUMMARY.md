@@ -1,35 +1,77 @@
-# SUMMARY — docs(agent): expand AGENTS handoff
+# SUMMARY — 0093 `test(real): add MockNodeMapAdapter unit tests`
 
 ## Goal
-Make `AGENTS.md` significantly more comprehensive so future coding agents can pick up work quickly and consistently without re-discovery.
+Add real-backend parameter-bridge coverage using a dedicated mock node adapter, so key apply/mapping behaviors are tested in CI without requiring physical cameras.
 
-## What was implemented
-- Reworked `AGENTS.md` into a fuller operations/handoff guide with clear sections:
-  - project purpose and real-world framing
-  - current status snapshot (recent commits + latest suite status)
-  - architecture map by `src/` area
-  - backend reality/limitations for `sim` vs `real_stub`
-  - artifact contract (core, context, soak, optional files)
-  - command cookbook (build, style, run, baseline, compare, kb)
-  - strict user workflow rules (implementation -> verify -> commit)
-  - definition-of-done checklist per commit
-  - targeted test surface references
-  - environment quirks and read-first file order
-  - next-likely-work roadmap and guardrails
+## What I implemented
 
-## Why
-- Previous handoff was useful but still left implicit context spread across the repo.
-- A stronger AGENTS file reduces onboarding time for the next agent and improves consistency in commits, testing, and communication style.
-- Explicit checklists reduce regressions and process drift.
+### 1) Added a new hardware-free unit/smoke test
+File:
+- `tests/backends/mock_node_map_adapter_smoke.cpp`
 
-## Verification
-- Confirmed key new sections exist in `AGENTS.md`.
-- Confirmed user-required style constraints are preserved:
-  - short commit messages
-  - no commit numbers in message subjects
-  - plain-language updates with implementation/verify/commit summary
-- Docs-only change; no runtime code path affected.
+What this test introduces:
+- `MockNodeMapAdapter` implementation of `INodeMapAdapter` used only for tests.
+- `RecordingBackend` test backend that captures `SetParam` calls.
+- Inline key-map fixture via `LoadParamKeyMapFromText(...)` (no file dependency).
 
-## Files changed
-- `AGENTS.md`
-- `SUMMARY.md`
+Covered behaviors:
+1. Enum mapping behavior:
+   - validates generic key (`pixel_format`) maps to the expected SDK node (`PixelFormat`)
+   - validates enum value normalization/canonical casing path
+   - validates backend receives mapped node/value
+2. Numeric range validation/clamping:
+   - validates out-of-range numeric input is clamped by apply logic
+   - validates readback evidence reflects clamped actual values
+3. Strict vs best-effort behavior:
+   - strict mode fails on unsupported input and returns actionable unsupported evidence
+   - best-effort mode continues and preserves successful applies
+4. ROI ordering logic:
+   - validates apply order is `Width`, `Height`, `OffsetX`, `OffsetY`
+     even when input order is offsets-first
+
+Why:
+- Existing coverage was strong but relied mainly on default in-memory adapter behavior.
+- A dedicated mock adapter test isolates apply-logic contracts from adapter defaults and keeps the confidence signal hardware-independent.
+
+### 2) Wired the new test into build/test system
+File:
+- `CMakeLists.txt`
+
+What:
+- Added a new smoke target:
+  - `mock_node_map_adapter_smoke`
+
+Why:
+- Ensures the new coverage runs in CI and local regression loops.
+
+### 3) Updated backend tests documentation
+File:
+- `tests/backends/README.md`
+
+What:
+- Added a bullet describing `mock_node_map_adapter_smoke.cpp` and exactly what it verifies.
+
+Why:
+- Keeps module-level test intent explicit for future maintainers.
+
+## Verification performed
+
+### Formatting
+- `bash tools/clang_format.sh --check`
+- Result: pass
+
+### Build
+- `cmake --build build`
+- Result: pass
+
+### Targeted tests
+- `ctest --test-dir build -R "mock_node_map_adapter_smoke|real_apply_params_smoke" --output-on-failure`
+- Result: pass (2/2)
+
+### Full regression
+- `ctest --test-dir build --output-on-failure`
+- Result: pass (65/65)
+
+## Net effect
+- Key mapping/apply behavior is now explicitly covered by a dedicated mock adapter path.
+- Confidence in real param-bridge logic is improved in camera-free CI environments.
