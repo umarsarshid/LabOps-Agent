@@ -2,6 +2,7 @@
 
 #include "backends/camera_backend.hpp"
 
+#include <filesystem>
 #include <string>
 #include <string_view>
 
@@ -43,7 +44,10 @@ public:
                                       std::string& error) override;
 
 private:
+  void AppendSdkLog(std::string_view message) const;
+
   BackendConfig params_;
+  std::filesystem::path sdk_log_path_;
   bool connected_ = false;
   bool running_ = false;
 };

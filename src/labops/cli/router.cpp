@@ -87,13 +87,13 @@ constexpr int kExitThresholdsFailed =
 void PrintUsage(std::ostream& out) {
   out << "usage:\n"
       << "  labops run <scenario.json> [--out <dir>] [--zip] [--redact] "
-         "[--device <selector>] "
+         "[--device <selector>] [--sdk-log] "
          "[--soak] [--checkpoint-interval-ms <ms>] [--resume <checkpoint.json>] "
          "[--soak-stop-file <path>] "
          "[--log-level <debug|info|warn|error>] "
          "[--apply-netem --netem-iface <iface> [--apply-netem-force]]\n"
       << "  labops baseline capture <scenario.json> [--redact] "
-         "[--device <selector>] "
+         "[--device <selector>] [--sdk-log] "
          "[--log-level <debug|info|warn|error>] "
          "[--apply-netem --netem-iface <iface> [--apply-netem-force]]\n"
       << "  labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]\n"
@@ -108,7 +108,7 @@ void PrintUsage(std::ostream& out) {
 void PrintBaselineUsage(std::ostream& out) {
   out << "usage:\n"
       << "  labops baseline capture <scenario.json> [--redact] "
-         "[--device <selector>] "
+         "[--device <selector>] [--sdk-log] "
          "[--log-level <debug|info|warn|error>] "
          "[--apply-netem --netem-iface <iface> [--apply-netem-force]]\n";
 }
@@ -340,6 +340,10 @@ bool ParseRunOptions(const std::vector<std::string_view>& args, RunOptions& opti
       options.redact_identifiers = true;
       continue;
     }
+    if (token == "--sdk-log") {
+      options.capture_sdk_log = true;
+      continue;
+    }
     if (token == "--apply-netem") {
       options.apply_netem = true;
       continue;
@@ -450,6 +454,10 @@ bool ParseBaselineCaptureOptions(const std::vector<std::string_view>& args, RunO
     const std::string_view token = args[i];
     if (token == "--redact") {
       options.redact_identifiers = true;
+      continue;
+    }
+    if (token == "--sdk-log") {
+      options.capture_sdk_log = true;
       continue;
     }
     if (token == "--apply-netem") {
@@ -1568,6 +1576,33 @@ bool ApplyDeviceSelectionToBackend(backends::ICameraBackend& backend,
   return true;
 }
 
+bool ConfigureOptionalSdkLogCapture(const RunOptions& options, const RunPlan& run_plan,
+                                    backends::ICameraBackend& backend, const fs::path& bundle_dir,
+                                    fs::path& sdk_log_path, core::logging::Logger& logger,
+                                    std::string& error) {
+  // Keep SDK capture opt-in so default runs remain lightweight. When enabled,
+  // pass a stable bundle path into the backend so vendor-level logs land next
+  // to run artifacts without introducing backend-specific wiring in callers.
+  sdk_log_path.clear();
+  if (!options.capture_sdk_log) {
+    return true;
+  }
+
+  if (run_plan.backend != kBackendRealStub) {
+    logger.Warn("sdk log capture requested for non-real backend; request ignored",
+                {{"backend", run_plan.backend}});
+    return true;
+  }
+
+  sdk_log_path = bundle_dir / "sdk_log.txt";
+  if (!backend.SetParam("sdk.log.path", sdk_log_path.string(), error)) {
+    error = "failed to enable sdk log capture: " + error;
+    return false;
+  }
+  logger.Info("sdk log capture enabled", {{"sdk_log_path", sdk_log_path.string()}});
+  return true;
+}
+
 // Bundle layout contract:
 // - one subdirectory per run ID
 // - all run artifacts emitted into that directory
@@ -2015,6 +2050,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
        {"output_root", options.output_dir.string()},
        {"zip_bundle", options.zip_bundle ? "true" : "false"},
        {"redact", options.redact_identifiers ? "true" : "false"},
+       {"sdk_log", options.capture_sdk_log ? "true" : "false"},
        {"soak_mode", options.soak_mode ? "true" : "false"},
        {"netem_apply", options.apply_netem ? "true" : "false"},
        {"device_selector", options.device_selector.empty() ? "-" : options.device_selector}});
@@ -2235,6 +2271,14 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     return kExitFailure;
   }
 
+  fs::path sdk_log_artifact_path;
+  if (!ConfigureOptionalSdkLogCapture(options, run_plan, *backend, bundle_dir,
+                                      sdk_log_artifact_path, logger, error)) {
+    logger.Error("failed to configure sdk log capture", {{"error", error}});
+    std::cerr << "error: " << error << '\n';
+    return kExitFailure;
+  }
+
   backends::BackendConfig selected_device_params;
   if (resolved_device_selection.has_value() &&
       !ApplyDeviceSelectionToBackend(*backend, resolved_device_selection.value(),
@@ -2301,6 +2345,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     }
     if (!config_report_artifact_path.empty()) {
       std::cerr << "info: config report artifact: " << config_report_artifact_path.string() << '\n';
+    }
+    if (!sdk_log_artifact_path.empty() && fs::exists(sdk_log_artifact_path)) {
+      std::cerr << "info: sdk log artifact: " << sdk_log_artifact_path.string() << '\n';
     }
     std::cerr << "error: backend connect failed: " << error << '\n';
     return kExitBackendConnectFailed;
@@ -2730,6 +2777,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
 
         fs::path bundle_manifest_path;
         const std::vector<fs::path> pause_optional_artifacts = {
+            sdk_log_artifact_path,
             config_verify_artifact_path,
             camera_config_artifact_path,
             config_report_artifact_path,
@@ -2770,6 +2818,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
         }
         if (!config_report_artifact_path.empty()) {
           std::cout << "config_report: " << config_report_artifact_path.string() << '\n';
+        }
+        if (!sdk_log_artifact_path.empty() && fs::exists(sdk_log_artifact_path)) {
+          std::cout << "sdk_log: " << sdk_log_artifact_path.string() << '\n';
         }
         std::cout << "artifact: " << run_artifact_path.string() << '\n';
         std::cout << "manifest: " << bundle_manifest_path.string() << '\n';
@@ -2973,6 +3024,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
 
   fs::path bundle_manifest_path;
   std::vector<fs::path> completion_optional_artifacts = {
+      sdk_log_artifact_path,
       config_verify_artifact_path,
       camera_config_artifact_path,
       config_report_artifact_path,
@@ -3019,6 +3071,7 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
                 camera_config_artifact_path.empty() ? "-" : camera_config_artifact_path.string()},
                {"config_report",
                 config_report_artifact_path.empty() ? "-" : config_report_artifact_path.string()},
+               {"sdk_log", sdk_log_artifact_path.empty() ? "-" : sdk_log_artifact_path.string()},
                {"metrics_json", metrics_json_path.string()},
                {"summary", summary_markdown_path.string()},
                {"report_html", report_html_path.string()}});
@@ -3030,6 +3083,11 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   std::cout << "hostprobe: " << hostprobe_artifact_path.string() << '\n';
   std::cout << "hostprobe_raw_count: " << hostprobe_raw_artifact_paths.size() << '\n';
   std::cout << "redaction: " << (options.redact_identifiers ? "enabled" : "disabled") << '\n';
+  std::string sdk_log_capture_status = "disabled";
+  if (options.capture_sdk_log) {
+    sdk_log_capture_status = sdk_log_artifact_path.empty() ? "ignored" : "enabled";
+  }
+  std::cout << "sdk_log_capture: " << sdk_log_capture_status << '\n';
   std::cout << "soak_mode: " << (options.soak_mode ? "enabled" : "disabled") << '\n';
   if (options.soak_mode) {
     std::cout << "soak_checkpoint_interval_ms: " << options.checkpoint_interval.count() << '\n';
@@ -3058,6 +3116,9 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
   if (!config_report_artifact_path.empty()) {
     std::cout << "config_report: " << config_report_artifact_path.string() << '\n';
+  }
+  if (!sdk_log_artifact_path.empty() && fs::exists(sdk_log_artifact_path)) {
+    std::cout << "sdk_log: " << sdk_log_artifact_path.string() << '\n';
   }
   std::cout << "metrics_csv: " << metrics_csv_path.string() << '\n';
   std::cout << "metrics_json: " << metrics_json_path.string() << '\n';

@@ -558,6 +558,19 @@ add_labops_smoke_test(
     ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
 
+# Integration smoke test for optional SDK log capture:
+# `--sdk-log` should emit `sdk_log.txt` without changing run result behavior.
+add_labops_smoke_test(
+  NAME sdk_log_capture_smoke
+  SOURCES
+    tests/labops/sdk_log_capture_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
+)
+
 # Integration smoke test validating reconnect policy for mid-stream device loss:
 # emit DEVICE_DISCONNECTED, retry with bounded budget, and still flush a full
 # failure bundle when retries are exhausted.

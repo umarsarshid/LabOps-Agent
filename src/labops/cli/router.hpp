@@ -23,6 +23,7 @@ struct RunOptions {
   std::filesystem::path soak_stop_file;
   bool apply_netem = false;
   bool apply_netem_force = false;
+  bool capture_sdk_log = false;
   std::string netem_interface;
   std::string device_selector;
   core::logging::LogLevel log_level = core::logging::LogLevel::kInfo;

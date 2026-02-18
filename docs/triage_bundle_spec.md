@@ -52,15 +52,17 @@ Current high-level write sequence:
    config report (identity + curated node dump + missing/unsupported keys).
 8. for real-backend runs, `config_report.md` is written as a markdown status
    table (`✅ applied`, `⚠ adjusted`, `❌ unsupported`) for quick triage.
-9. `events.jsonl` receives lifecycle and frame events.
-10. netem teardown is attempted on run exit when apply succeeded.
-11. `run.json` is written after stream completion (or earlier on certain
+9. when `--sdk-log` is enabled for real-backend runs, `sdk_log.txt` is
+   captured into the bundle.
+10. `events.jsonl` receives lifecycle and frame events.
+11. netem teardown is attempted on run exit when apply succeeded.
+12. `run.json` is written after stream completion (or earlier on certain
    backend initialization failures so run metadata is still preserved).
-12. `metrics.csv` and `metrics.json` are written.
-13. `summary.md` is written as a one-page human triage report.
-14. `report.html` is written as a static browser triage report (no JS).
-15. `bundle_manifest.json` is generated from required artifacts.
-16. optional `.zip` archive is created as a sibling of bundle directory.
+13. `metrics.csv` and `metrics.json` are written.
+14. `summary.md` is written as a one-page human triage report.
+15. `report.html` is written as a static browser triage report (no JS).
+16. `bundle_manifest.json` is generated from required artifacts.
+17. optional `.zip` archive is created as a sibling of bundle directory.
 
 ## Directory Layout Contract
 
@@ -76,6 +78,7 @@ Required bundle structure:
     config_verify.json   # real-backend runs
     camera_config.json   # real-backend runs
     config_report.md     # real-backend runs
+    sdk_log.txt          # only when --sdk-log is enabled for real-backend runs
     events.jsonl
     metrics.csv
     metrics.json
@@ -104,6 +107,7 @@ Optional output:
 | `config_verify.json` | conditional (real backend) | config verify writer | Captures per-setting requested vs actual vs supported readback evidence after apply. |
 | `camera_config.json` | conditional (real backend) | camera config writer | Captures resolved camera identity plus curated node rows and missing/unsupported key lists for engineer-readable config triage. |
 | `config_report.md` | conditional (real backend) | config report writer | Provides a one-page markdown status table for applied/adjusted/unsupported settings without opening JSON artifacts. |
+| `sdk_log.txt` | conditional (`--sdk-log` + real backend) | backend SDK capture path | Captures best-effort SDK/backend debug lines for vendor-level troubleshooting. |
 | `events.jsonl` | yes | event writer | Timeline-level evidence for stream behavior and failures. |
 | `metrics.csv` | yes | metrics writer | Human-readable metrics for spreadsheets and quick plotting. |
 | `metrics.json` | yes | metrics writer | Machine-readable metrics for automation and agent parsing. |

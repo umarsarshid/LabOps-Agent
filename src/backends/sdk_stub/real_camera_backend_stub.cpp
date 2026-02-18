@@ -1,5 +1,6 @@
 #include "backends/sdk_stub/real_camera_backend_stub.hpp"
 
+#include <fstream>
 #include <string_view>
 
 #ifndef LABOPS_ENABLE_REAL_BACKEND
@@ -65,37 +66,55 @@ RealCameraBackendStub::RealCameraBackendStub() {
   };
 }
 
+void RealCameraBackendStub::AppendSdkLog(std::string_view message) const {
+  if (sdk_log_path_.empty()) {
+    return;
+  }
+  std::ofstream out(sdk_log_path_, std::ios::app | std::ios::binary);
+  if (!out) {
+    return;
+  }
+  out << message << '\n';
+}
+
 bool RealCameraBackendStub::Connect(std::string& error) {
   if (connected_) {
     error = "real backend stub is already connected";
+    AppendSdkLog("connect status=error reason=already_connected");
     return false;
   }
 
   error = BuildConnectionError();
+  AppendSdkLog(std::string("connect status=error reason=") + error);
   return false;
 }
 
 bool RealCameraBackendStub::Start(std::string& error) {
   if (!connected_) {
     error = BuildNotConnectedError("start");
+    AppendSdkLog("start status=error reason=not_connected");
     return false;
   }
   if (running_) {
     error = "real backend stub is already running";
+    AppendSdkLog("start status=error reason=already_running");
     return false;
   }
 
   error = "real backend stub cannot start stream because SDK adapter is not implemented";
+  AppendSdkLog("start status=error reason=sdk_not_implemented");
   return false;
 }
 
 bool RealCameraBackendStub::Stop(std::string& error) {
   if (!running_) {
     error = "real backend stub is not running";
+    AppendSdkLog("stop status=error reason=not_running");
     return false;
   }
 
   error = "real backend stub cannot stop stream because no active SDK session exists";
+  AppendSdkLog("stop status=error reason=sdk_not_implemented");
   return false;
 }
 
@@ -110,8 +129,22 @@ bool RealCameraBackendStub::SetParam(const std::string& key, const std::string& 
     return false;
   }
 
+  if (key == "sdk.log.path") {
+    sdk_log_path_ = std::filesystem::path(value);
+    std::ofstream out(sdk_log_path_, std::ios::out | std::ios::trunc | std::ios::binary);
+    if (!out) {
+      error = "unable to open sdk log path: " + value;
+      return false;
+    }
+    out << "sdk_log_capture=enabled backend=real_stub\n";
+    params_[key] = value;
+    error.clear();
+    return true;
+  }
+
   // Preserve requested values for diagnostics even though no SDK calls occur.
   params_[key] = value;
+  AppendSdkLog(std::string("set_param key=") + key + " value=" + value + " status=accepted");
   return true;
 }
 
@@ -126,20 +159,24 @@ std::vector<FrameSample> RealCameraBackendStub::PullFrames(std::chrono::millisec
                                                            std::string& error) {
   if (duration < std::chrono::milliseconds::zero()) {
     error = "pull_frames duration cannot be negative";
+    AppendSdkLog("pull_frames status=error reason=negative_duration");
     return {};
   }
 
   if (!connected_) {
     error = BuildNotConnectedError("pull_frames");
+    AppendSdkLog("pull_frames status=error reason=not_connected");
     return {};
   }
 
   if (!running_) {
     error = "real backend stub cannot pull frames while stream is stopped";
+    AppendSdkLog("pull_frames status=error reason=stream_not_running");
     return {};
   }
 
   error = "real backend stub cannot produce frames because SDK adapter is not implemented";
+  AppendSdkLog("pull_frames status=error reason=sdk_not_implemented");
   return {};
 }
 

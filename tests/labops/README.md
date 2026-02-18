@@ -29,6 +29,9 @@ This keeps each test focused on contract verification instead of setup code.
   partial bundle (`run.json`, `events.jsonl`, `metrics.*`, `summary.md`,
   `report.html`, `bundle_manifest.json`) with `STREAM_STOPPED` reason
   `signal_interrupt`.
+- `sdk_log_capture_smoke.cpp`: verifies optional `--sdk-log` behavior:
+  default runs do not emit `sdk_log.txt`, enabling `--sdk-log` writes
+  `sdk_log.txt`, and run exit behavior remains unchanged.
 - `run_reconnect_policy_smoke.cpp`: forces deterministic mid-stream disconnect
   behavior in the OSS real backend via fixture env var, verifies
   `DEVICE_DISCONNECTED` is emitted, verifies reconnect attempts are bounded,

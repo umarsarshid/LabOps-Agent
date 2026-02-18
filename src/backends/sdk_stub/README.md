@@ -26,6 +26,8 @@ We need a clear boundary where vendor-specific camera integration will live, wit
   - intentionally avoids vendor headers/binaries
   - returns actionable "not implemented" errors instead of fake streaming
   - preserves requested params in `DumpConfig()` for diagnostics
+  - supports optional `sdk.log.path` capture so CLI `--sdk-log` can emit
+    `sdk_log.txt` even when proprietary SDK integration is unavailable
 
 ## Build toggle
 

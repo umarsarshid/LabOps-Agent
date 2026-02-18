@@ -28,6 +28,7 @@ This file helps the next coding agent continue work without re-discovery.
 - engineer packet generator (`engineer_packet.md` with evidence links)
 - bundle manifest generation (`bundle_manifest.json`)
 - optional support bundle zip (`--zip`)
+- optional SDK/backend log capture (`--sdk-log` -> `sdk_log.txt`)
 
 Long-term goal:
 - autonomous triage loop that changes one variable at a time and ships an
@@ -35,7 +36,7 @@ Long-term goal:
 
 ## Current Snapshot (as of February 18, 2026)
 
-- Latest commit before current work: `635bf25` (`chore: commit summary and update agent handoff policy`)
+- Latest commit before current work: `3ec4b35` (`feat(real): add reconnect policy for mid-stream disconnects`)
 - Milestones completed:
   - Milestone 0: repo/build/style/CI foundation
   - Milestone 1: CLI skeleton + output contracts
@@ -50,7 +51,7 @@ Long-term goal:
   - Milestone R0-R8: done (real backend build gates, selection, params, frame loop, transport counters/anomalies)
   - Milestone R9: in progress (robustness; reconnect policy now implemented)
 - Latest known test status:
-  - `ctest --test-dir build --output-on-failure` passing (`62/62`)
+  - `ctest --test-dir build --output-on-failure` passing (`63/63`)
 
 ## Confirmed Working Commands
 
@@ -77,6 +78,7 @@ Expected run outputs:
 - `<out>/<run_id>/metrics.json`
 - `<out>/<run_id>/summary.md`
 - `<out>/<run_id>/bundle_manifest.json`
+- optional `<out>/<run_id>/sdk_log.txt` when `--sdk-log` is enabled for real runs
 - optional `<out>/<run_id>.zip`
 
 ## User Workflow Requirements (Important)

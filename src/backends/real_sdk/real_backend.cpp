@@ -4,6 +4,7 @@
 #include <charconv>
 #include <cmath>
 #include <cstdlib>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -205,35 +206,52 @@ RealBackend::RealBackend() {
   }
 }
 
+void RealBackend::AppendSdkLog(std::string_view message) const {
+  if (sdk_log_path_.empty()) {
+    return;
+  }
+  std::ofstream out(sdk_log_path_, std::ios::app | std::ios::binary);
+  if (!out) {
+    return;
+  }
+  out << message << '\n';
+}
+
 bool RealBackend::Connect(std::string& error) {
   if (connected_) {
     error = "real backend skeleton is already connected";
+    AppendSdkLog("connect status=error reason=already_connected");
     return false;
   }
   if (simulated_disconnect_latched_) {
     // Once the fixture disconnect trips, keep connect failing so run-level
     // reconnect policy can exercise retry exhaustion deterministically.
     error = "device unavailable after disconnect";
+    AppendSdkLog("connect status=error reason=device_unavailable_after_disconnect");
     return false;
   }
 
   // Acquire process-level SDK context first so init/shutdown behavior is
   // centralized and balanced even before camera session APIs are wired.
   if (!sdk_context_.Acquire(error)) {
+    AppendSdkLog("connect status=error reason=sdk_context_acquire_failed");
     return false;
   }
 
   connected_ = true;
   error.clear();
+  AppendSdkLog("connect status=success");
   return true;
 }
 
 bool RealBackend::Start(std::string& error) {
   if (!connected_) {
     error = BuildNotConnectedError("start");
+    AppendSdkLog("start status=error reason=not_connected");
     return false;
   }
   if (!stream_session_.Start(error)) {
+    AppendSdkLog("start status=error reason=stream_session_start_failed");
     return false;
   }
 
@@ -241,19 +259,27 @@ bool RealBackend::Start(std::string& error) {
     stream_start_ts_ = std::chrono::system_clock::now();
   }
   error.clear();
+  AppendSdkLog("start status=success");
   return true;
 }
 
 bool RealBackend::Stop(std::string& error) {
   if (!connected_ && !stream_session_.running()) {
     error.clear();
+    AppendSdkLog("stop status=success reason=already_stopped");
     return true;
   }
   if (!connected_) {
     error = BuildNotConnectedError("stop");
+    AppendSdkLog("stop status=error reason=not_connected");
     return false;
   }
-  return stream_session_.Stop(error);
+  if (!stream_session_.Stop(error)) {
+    AppendSdkLog("stop status=error reason=stream_session_stop_failed");
+    return false;
+  }
+  AppendSdkLog("stop status=success");
+  return true;
 }
 
 bool RealBackend::SetParam(const std::string& key, const std::string& value, std::string& error) {
@@ -266,8 +292,22 @@ bool RealBackend::SetParam(const std::string& key, const std::string& value, std
     return false;
   }
 
+  if (key == "sdk.log.path") {
+    sdk_log_path_ = std::filesystem::path(value);
+    std::ofstream out(sdk_log_path_, std::ios::out | std::ios::trunc | std::ios::binary);
+    if (!out) {
+      error = "unable to open sdk log path: " + value;
+      return false;
+    }
+    out << "sdk_log_capture=enabled backend=real\n";
+    params_[key] = value;
+    error.clear();
+    return true;
+  }
+
   // Preserve requested values for diagnostics before SDK mapping is wired.
   params_[key] = value;
+  AppendSdkLog(std::string("set_param key=") + key + " value=" + value + " status=accepted");
   return true;
 }
 
@@ -282,21 +322,25 @@ std::vector<FrameSample> RealBackend::PullFrames(std::chrono::milliseconds durat
                                                  std::string& error) {
   if (duration < std::chrono::milliseconds::zero()) {
     error = "pull_frames duration cannot be negative";
+    AppendSdkLog("pull_frames status=error reason=negative_duration");
     return {};
   }
 
   if (!connected_) {
     error = BuildNotConnectedError("pull_frames");
+    AppendSdkLog("pull_frames status=error reason=not_connected");
     return {};
   }
 
   if (!stream_session_.running()) {
     error = "real backend skeleton cannot pull frames while stream is stopped";
+    AppendSdkLog("pull_frames status=error reason=stream_not_running");
     return {};
   }
 
   if (duration == std::chrono::milliseconds::zero()) {
     error.clear();
+    AppendSdkLog("pull_frames status=success frames=0 reason=zero_duration");
     return {};
   }
 
@@ -310,6 +354,7 @@ std::vector<FrameSample> RealBackend::PullFrames(std::chrono::milliseconds durat
     simulated_disconnect_latched_ = true;
     connected_ = false;
     error = "device disconnected during acquisition";
+    AppendSdkLog("pull_frames status=error reason=device_disconnected");
     return {};
   }
 
@@ -393,6 +438,7 @@ std::vector<FrameSample> RealBackend::PullFrames(std::chrono::milliseconds durat
   }
 
   error.clear();
+  AppendSdkLog(std::string("pull_frames status=success frames=") + std::to_string(frames.size()));
   return frames;
 }
 

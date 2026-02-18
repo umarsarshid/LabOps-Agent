@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -34,9 +35,12 @@ public:
                                       std::string& error) override;
 
 private:
+  void AppendSdkLog(std::string_view message) const;
+
   SdkContext sdk_context_;
   StreamSession stream_session_;
   BackendConfig params_;
+  std::filesystem::path sdk_log_path_;
   bool connected_ = false;
   bool simulated_disconnect_latched_ = false;
   std::uint64_t next_frame_id_ = 0;

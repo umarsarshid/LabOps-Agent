@@ -26,11 +26,13 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
   optional `ip`/`mac`, optional `firmware_version`/`sdk_version`).
 - `labops validate <scenario.json>`: validates scenario schema and prints
   actionable field-level errors when invalid.
-- `labops run <scenario.json> --out <dir> [--device <selector>] [--zip] [--redact] [--soak --checkpoint-interval-ms <ms> [--soak-stop-file <path>] [--resume <checkpoint.json>]] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: emits a per-run bundle under
+- `labops run <scenario.json> --out <dir> [--device <selector>] [--sdk-log] [--zip] [--redact] [--soak --checkpoint-interval-ms <ms> [--soak-stop-file <path>] [--resume <checkpoint.json>]] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: emits a per-run bundle under
   `<dir>/<run_id>/` containing `scenario.json`, `run.json`,
   `config_verify.json` (real backend readback evidence),
   `camera_config.json` (real backend config report),
-  `config_report.md` (real backend markdown triage report), `events.jsonl`,
+  `config_report.md` (real backend markdown triage report),
+  optional `sdk_log.txt` when `--sdk-log` is enabled for real runs,
+  `events.jsonl`,
   `metrics.csv`, `metrics.json`, `summary.md`, `report.html`,
   `hostprobe.json`, and
   platform NIC raw command outputs (`nic_*.txt`),
