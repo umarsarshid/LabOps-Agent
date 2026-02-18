@@ -307,49 +307,109 @@ int main() {
   }
 
   // Frame-rate is best-effort-only even in strict mode so unsupported rate
-  // controls do not block the run pipeline on cameras where the node is
-  // missing/read-only.
+  // and transport tuning controls do not block the run pipeline on cameras
+  // where these nodes are missing/read-only.
   {
-    ParamKeyMap missing_frame_rate_key_map;
+    ParamKeyMap missing_tuning_key_map;
     if (!LoadParamKeyMapFromText("{\n"
                                  "  \"frame_rate\": \"MissingFrameRateNode\",\n"
+                                 "  \"packet_size_bytes\": \"MissingPacketSizeNode\",\n"
+                                 "  \"inter_packet_delay_us\": \"MissingInterPacketDelayNode\",\n"
                                  "  \"trigger_mode\": \"TriggerMode\"\n"
                                  "}\n",
-                                 missing_frame_rate_key_map, error)) {
-      Fail("failed to load frame-rate override key map: " + error);
+                                 missing_tuning_key_map, error)) {
+      Fail("failed to load tuning override key map: " + error);
     }
 
     RecordingBackend backend;
     std::unique_ptr<labops::backends::real_sdk::INodeMapAdapter> adapter =
         CreateDefaultNodeMapAdapter();
     ApplyParamsResult result;
-    if (!ApplyParams(backend, missing_frame_rate_key_map, *adapter,
+    if (!ApplyParams(backend, missing_tuning_key_map, *adapter,
                      {
                          ApplyParamInput{"frame_rate", "120"},
+                         ApplyParamInput{"packet_size_bytes", "9000"},
+                         ApplyParamInput{"inter_packet_delay_us", "300"},
                          ApplyParamInput{"trigger_mode", "hardware"},
                      },
                      ParamApplyMode::kStrict, result, error)) {
-      Fail("strict apply should continue when frame_rate is unsupported: " + error);
+      Fail("strict apply should continue when best-effort-only keys are unsupported: " + error);
     }
 
-    if (result.applied.size() != 1U || result.unsupported.size() != 1U ||
-        result.readback_rows.size() != 2U) {
-      Fail("frame-rate best-effort path should keep supported params and report one unsupported");
+    if (result.applied.size() != 1U || result.unsupported.size() != 3U ||
+        result.readback_rows.size() != 4U) {
+      Fail("best-effort-only keys should be reported unsupported without aborting strict apply");
     }
 
     bool saw_frame_rate_unsupported = false;
+    bool saw_packet_size_unsupported = false;
+    bool saw_inter_packet_delay_unsupported = false;
     bool saw_trigger_applied = false;
     for (const auto& row : result.readback_rows) {
       if (row.generic_key == "frame_rate" && !row.applied && !row.supported &&
           row.reason.find("MissingFrameRateNode") != std::string::npos) {
         saw_frame_rate_unsupported = true;
       }
+      if (row.generic_key == "packet_size_bytes" && !row.applied && !row.supported &&
+          row.reason.find("MissingPacketSizeNode") != std::string::npos) {
+        saw_packet_size_unsupported = true;
+      }
+      if (row.generic_key == "inter_packet_delay_us" && !row.applied && !row.supported &&
+          row.reason.find("MissingInterPacketDelayNode") != std::string::npos) {
+        saw_inter_packet_delay_unsupported = true;
+      }
       if (row.generic_key == "trigger_mode" && row.applied && row.actual_value == "hardware") {
         saw_trigger_applied = true;
       }
     }
-    if (!saw_frame_rate_unsupported || !saw_trigger_applied) {
-      Fail("frame-rate best-effort row evidence is incomplete");
+    if (!saw_frame_rate_unsupported || !saw_packet_size_unsupported ||
+        !saw_inter_packet_delay_unsupported || !saw_trigger_applied) {
+      Fail("best-effort-only row evidence is incomplete");
+    }
+  }
+
+  // GigE transport tuning knobs should apply and clamp to valid ranges when
+  // nodes are available.
+  {
+    RecordingBackend backend;
+    std::unique_ptr<labops::backends::real_sdk::INodeMapAdapter> adapter =
+        CreateDefaultNodeMapAdapter();
+    ApplyParamsResult result;
+    if (!ApplyParams(backend, key_map, *adapter,
+                     {
+                         ApplyParamInput{"packet_size_bytes", "9500"},
+                         ApplyParamInput{"inter_packet_delay_us", "120000"},
+                     },
+                     ParamApplyMode::kStrict, result, error)) {
+      Fail("strict transport tuning apply unexpectedly failed: " + error);
+    }
+
+    if (result.applied.size() != 2U || result.unsupported.size() != 0U ||
+        result.readback_rows.size() != 2U) {
+      Fail("transport tuning apply should produce two applied rows");
+    }
+
+    bool saw_packet_size = false;
+    bool saw_inter_packet_delay = false;
+    for (const auto& row : result.readback_rows) {
+      if (!row.supported || !row.applied || !row.adjusted) {
+        Fail("transport tuning rows should be applied and adjusted due to range clamping");
+      }
+      if (row.generic_key == "packet_size_bytes" && row.actual_value == "9000") {
+        saw_packet_size = true;
+      }
+      if (row.generic_key == "inter_packet_delay_us" && row.actual_value == "100000") {
+        saw_inter_packet_delay = true;
+      }
+    }
+    if (!saw_packet_size || !saw_inter_packet_delay) {
+      Fail("transport tuning readback rows missing expected clamped actual values");
+    }
+
+    const auto dumped = backend.DumpConfig();
+    if (dumped.find("GevSCPSPacketSize") == dumped.end() ||
+        dumped.find("GevSCPD") == dumped.end()) {
+      Fail("transport tuning mapped SDK node writes were not recorded");
     }
   }
 

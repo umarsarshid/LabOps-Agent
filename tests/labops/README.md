@@ -77,7 +77,9 @@ This keeps each test focused on contract verification instead of setup code.
   with `real_device` metadata, writes `camera_config.json` with resolved
   identity + curated config fields, writes `config_report.md` for readable
   status review (including trigger mode/source/activation evidence plus
-  exposure/gain and ROI unit/range notes), and follows
+  exposure/gain/ROI unit/range notes plus GigE transport tuning behavior:
+  USB selectors do not fail and record unsupported transport-tuning reasons,
+  while GigE selectors apply transport settings when nodes are available), and follows
   expected exit-code behavior for
   both real-enabled and real-disabled builds.
 - `real_apply_mode_events_smoke.cpp`: verifies real-backend `apply_mode`

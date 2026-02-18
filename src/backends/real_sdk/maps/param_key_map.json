@@ -7,6 +7,8 @@
   "roi_offset_x": "OffsetX",
   "roi_offset_y": "OffsetY",
   "roi": "RegionOfInterest",
+  "packet_size_bytes": "GevSCPSPacketSize",
+  "inter_packet_delay_us": "GevSCPD",
   "trigger_mode": "TriggerMode",
   "trigger_source": "TriggerSource",
   "trigger_activation": "TriggerActivation",

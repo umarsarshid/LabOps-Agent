@@ -141,6 +141,8 @@ A scenario JSON document is an object with these top-level sections:
   - `network` (object, optional)
     - `packet_size_bytes` (integer, optional, `> 0`)
     - `inter_packet_delay_us` (integer, optional, `>= 0`)
+    - runtime note: real backend applies these as GigE-only best-effort knobs
+      (USB/non-GigE runs continue and record unsupported evidence)
 
 ### `sim_faults` (optional)
 

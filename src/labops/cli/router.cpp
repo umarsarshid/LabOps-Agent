@@ -1256,6 +1256,10 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
   const auto pixel_format = read_string({"camera", "pixel_format"}, {"pixel_format"});
   const auto exposure_us = read_u64({"camera", "exposure_us"}, {"exposure_us"});
   const auto gain_db = read_number({"camera", "gain_db"}, {"gain_db"});
+  const auto packet_size_bytes =
+      read_u64({"camera", "network", "packet_size_bytes"}, {"packet_size_bytes"});
+  const auto inter_packet_delay_us =
+      read_u64({"camera", "network", "inter_packet_delay_us"}, {"inter_packet_delay_us"});
   const auto trigger_mode = read_string({"camera", "trigger_mode"}, {"trigger_mode"});
   const auto trigger_source = read_string({"camera", "trigger_source"}, {"trigger_source"});
   const auto trigger_activation =
@@ -1309,6 +1313,14 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
   }
   if (gain_db.has_value()) {
     UpsertRealParam(plan.real_params, "gain", FormatCompactDouble(gain_db.value()));
+  }
+  if (packet_size_bytes.has_value()) {
+    UpsertRealParam(plan.real_params, "packet_size_bytes",
+                    std::to_string(packet_size_bytes.value()));
+  }
+  if (inter_packet_delay_us.has_value()) {
+    UpsertRealParam(plan.real_params, "inter_packet_delay_us",
+                    std::to_string(inter_packet_delay_us.value()));
   }
   if (trigger_mode.has_value() && !trigger_mode->empty()) {
     UpsertRealParam(plan.real_params, "trigger_mode", trigger_mode.value());
@@ -1607,6 +1619,24 @@ BuildConfigAdjustedPayload(const core::schema::RunInfo& run_info,
   };
 }
 
+std::string ToLowerAscii(std::string value) {
+  for (char& c : value) {
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  }
+  return value;
+}
+
+bool IsGigETransport(const core::schema::RunInfo& run_info) {
+  if (!run_info.real_device.has_value()) {
+    return false;
+  }
+  return ToLowerAscii(run_info.real_device->transport) == "gige";
+}
+
+bool IsGigEOnlyTransportTuningKey(std::string_view generic_key) {
+  return generic_key == "packet_size_bytes" || generic_key == "inter_packet_delay_us";
+}
+
 bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan& run_plan,
                                const core::schema::RunInfo& run_info, const fs::path& bundle_dir,
                                backends::BackendConfig& applied_params, fs::path& events_path,
@@ -1661,8 +1691,47 @@ bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan&
     return false;
   }
 
-  if (!backends::real_sdk::ApplyParams(backend, key_map, *adapter, run_plan.real_params,
+  std::vector<backends::real_sdk::ApplyParamInput> params_for_apply;
+  std::vector<backends::real_sdk::ApplyParamInput> skipped_transport_tuning;
+  params_for_apply.reserve(run_plan.real_params.size());
+  const bool is_gige_transport = IsGigETransport(run_info);
+  for (const auto& param : run_plan.real_params) {
+    if (!is_gige_transport && IsGigEOnlyTransportTuningKey(param.generic_key)) {
+      skipped_transport_tuning.push_back(param);
+      continue;
+    }
+    params_for_apply.push_back(param);
+  }
+
+  const std::string resolved_transport =
+      run_info.real_device.has_value() ? run_info.real_device->transport : "unknown";
+  auto append_skipped_transport_tuning_rows = [&]() {
+    for (const auto& skipped : skipped_transport_tuning) {
+      const std::string reason =
+          "setting requires GigE transport (resolved transport: " + resolved_transport + ")";
+      apply_result.unsupported.push_back(backends::real_sdk::UnsupportedParam{
+          .generic_key = skipped.generic_key,
+          .requested_value = skipped.requested_value,
+          .reason = reason,
+      });
+      apply_result.readback_rows.push_back(backends::real_sdk::ReadbackRow{
+          .generic_key = skipped.generic_key,
+          .requested_value = skipped.requested_value,
+          .supported = false,
+          .applied = false,
+          .reason = reason,
+      });
+    }
+  };
+  if (!skipped_transport_tuning.empty()) {
+    logger.Info("skipping transport tuning keys for non-gige transport",
+                {{"resolved_transport", resolved_transport},
+                 {"skipped_count", std::to_string(skipped_transport_tuning.size())}});
+  }
+
+  if (!backends::real_sdk::ApplyParams(backend, key_map, *adapter, params_for_apply,
                                        run_plan.real_apply_mode, apply_result, error)) {
+    append_skipped_transport_tuning_rows();
     std::string write_error;
     if (!artifacts::WriteConfigVerifyJson(run_info, apply_result, run_plan.real_apply_mode,
                                           bundle_dir, config_verify_path, write_error)) {
@@ -1685,6 +1754,7 @@ bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan&
     }
     return false;
   }
+  append_skipped_transport_tuning_rows();
 
   for (const auto& unsupported : apply_result.unsupported) {
     if (!AppendTraceEvent(

@@ -174,8 +174,9 @@ Current fields:
   - selector details when available (`selector`, `index`, optional `ip`, `mac`)
 - `curated_nodes`:
   - fixed key rows for core camera settings (`frame_rate`, `pixel_format`,
-    `exposure`, `gain`, `roi_width`, `roi_height`, `roi_offset_x`,
-    `roi_offset_y`, `trigger_mode`, `trigger_source`, `trigger_activation`)
+    `exposure`, `gain`, `packet_size_bytes`, `inter_packet_delay_us`,
+    `roi_width`, `roi_height`, `roi_offset_x`, `roi_offset_y`,
+    `trigger_mode`, `trigger_source`, `trigger_activation`)
   - each row captures `requested`, `actual`, `supported`, `applied`,
     `adjusted`, `missing`, and `reason`
 - `missing_keys`: curated keys with no readback row
@@ -206,6 +207,9 @@ Current sections:
   - exposure/gain rows include unit/range hints in `Notes`:
     - exposure: `us`, validated range `[5, 10000000]`
     - gain: `dB`, validated range `[0, 48]`
+  - transport tuning rows include unit/range hints in `Notes`:
+    - `packet_size_bytes`: `bytes`, GigE-only, validated range `[576, 9000]`
+    - `inter_packet_delay_us`: `us`, GigE-only, validated range `[0, 100000]`
   - ROI rows include unit/range/order hints in `Notes`:
     - `roi_width`: `px`, validated range `[64, 4096]`, applied before offsets
     - `roi_height`: `px`, validated range `[64, 2160]`, applied before offsets

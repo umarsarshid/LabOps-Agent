@@ -15,6 +15,8 @@ change. Keeping mappings in JSON allows rapid updates by integration engineers.
     - `exposure`
     - `gain`
     - `pixel_format`
+    - `packet_size_bytes`
+    - `inter_packet_delay_us`
     - `roi_width`
     - `roi_height`
     - `roi_offset_x`

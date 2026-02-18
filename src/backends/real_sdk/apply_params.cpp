@@ -178,7 +178,8 @@ bool IsBestEffortOnlyKey(std::string_view generic_key) {
   // Some cameras expose stream rate as read-only or transport-constrained.
   // Treat frame-rate writes as best-effort so a missing/locked rate control
   // does not block evidence collection runs.
-  return generic_key == "frame_rate";
+  return generic_key == "frame_rate" || generic_key == "packet_size_bytes" ||
+         generic_key == "inter_packet_delay_us";
 }
 
 ParamApplyMode ResolveModeForKey(std::string_view generic_key, ParamApplyMode default_mode) {
@@ -338,6 +339,24 @@ std::unique_ptr<InMemoryNodeMapAdapter> BuildDefaultNodeAdapter() {
                                          NodeNumericRange{
                                              .min = std::optional<double>(0.0),
                                              .max = std::optional<double>(2159.0),
+                                         },
+                                 });
+  adapter->UpsertNode("GevSCPSPacketSize", InMemoryNodeMapAdapter::NodeDefinition{
+                                               .value_type = NodeValueType::kInt64,
+                                               .int64_value = 1500,
+                                               .numeric_range =
+                                                   NodeNumericRange{
+                                                       .min = std::optional<double>(576.0),
+                                                       .max = std::optional<double>(9000.0),
+                                                   },
+                                           });
+  adapter->UpsertNode("GevSCPD", InMemoryNodeMapAdapter::NodeDefinition{
+                                     .value_type = NodeValueType::kInt64,
+                                     .int64_value = 0,
+                                     .numeric_range =
+                                         NodeNumericRange{
+                                             .min = std::optional<double>(0.0),
+                                             .max = std::optional<double>(100'000.0),
                                          },
                                  });
   adapter->UpsertNode("TriggerMode", InMemoryNodeMapAdapter::NodeDefinition{

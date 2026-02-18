@@ -87,6 +87,12 @@ std::optional<std::string> BuildKeyUnitAndRangeNote(std::string_view generic_key
   if (generic_key == "gain") {
     return "units: dB; validated range: [0, 48]";
   }
+  if (generic_key == "packet_size_bytes") {
+    return "units: bytes; GigE-only; validated range: [576, 9000]";
+  }
+  if (generic_key == "inter_packet_delay_us") {
+    return "units: us; GigE-only; validated range: [0, 100000]";
+  }
   if (generic_key == "roi_width") {
     return "units: px; validated range: [64, 4096]; applied before offsets";
   }

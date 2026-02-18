@@ -44,9 +44,10 @@ int main() {
 
   // Milestone contract: mapping must answer support checks before apply path.
   if (!map.Has("exposure") || !map.Has("gain") || !map.Has("pixel_format") ||
-      !map.Has("roi_width") || !map.Has("roi_height") || !map.Has("roi_offset_x") ||
-      !map.Has("roi_offset_y") || !map.Has("trigger_mode") || !map.Has("trigger_source") ||
-      !map.Has("trigger_activation") || !map.Has("frame_rate")) {
+      !map.Has("packet_size_bytes") || !map.Has("inter_packet_delay_us") || !map.Has("roi_width") ||
+      !map.Has("roi_height") || !map.Has("roi_offset_x") || !map.Has("roi_offset_y") ||
+      !map.Has("trigger_mode") || !map.Has("trigger_source") || !map.Has("trigger_activation") ||
+      !map.Has("frame_rate")) {
     Fail("default map missing one or more required first keys");
   }
   if (map.Has("unknown_key")) {
@@ -65,6 +66,8 @@ int main() {
   AssertContains(keys, "exposure");
   AssertContains(keys, "gain");
   AssertContains(keys, "pixel_format");
+  AssertContains(keys, "packet_size_bytes");
+  AssertContains(keys, "inter_packet_delay_us");
   AssertContains(keys, "roi_width");
   AssertContains(keys, "roi_height");
   AssertContains(keys, "roi_offset_x");
@@ -98,6 +101,8 @@ int main() {
         << "  \"exposure\": \"ExposureTimeAbs\",\n"
         << "  \"gain\": \"GainRaw\",\n"
         << "  \"pixel_format\": \"PixelFormat\",\n"
+        << "  \"packet_size_bytes\": \"GevSCPSPacketSize\",\n"
+        << "  \"inter_packet_delay_us\": \"GevSCPD\",\n"
         << "  \"roi_width\": \"Width\",\n"
         << "  \"roi_height\": \"Height\",\n"
         << "  \"roi_offset_x\": \"OffsetX\",\n"

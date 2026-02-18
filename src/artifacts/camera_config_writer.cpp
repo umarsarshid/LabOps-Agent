@@ -167,9 +167,10 @@ BuildReadbackLookup(const backends::real_sdk::ApplyParamsResult& apply_result) {
 
 std::vector<std::string> CuratedGenericKeys() {
   return {
-      "frame_rate",   "pixel_format",   "exposure",           "gain",
-      "roi_width",    "roi_height",     "roi_offset_x",       "roi_offset_y",
-      "trigger_mode", "trigger_source", "trigger_activation",
+      "frame_rate",         "pixel_format",          "exposure",     "gain",
+      "packet_size_bytes",  "inter_packet_delay_us", "roi_width",    "roi_height",
+      "roi_offset_x",       "roi_offset_y",          "trigger_mode", "trigger_source",
+      "trigger_activation",
   };
 }
 

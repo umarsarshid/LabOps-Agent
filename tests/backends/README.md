@@ -54,7 +54,9 @@ stable interface regardless of real hardware availability.
   for `pixel_format`, trigger enum round-trips
   (`trigger_mode`, `trigger_source`, `trigger_activation`), plus deterministic ROI ordering
   (`roi_width`, `roi_height`, `roi_offset_x`, `roi_offset_y`) with constraint
-  clamping evidence, and frame-rate best-effort-only behavior when unsupported.
+  clamping evidence, plus best-effort-only behavior for unsupported
+  `frame_rate` and GigE transport tuning keys
+  (`packet_size_bytes`, `inter_packet_delay_us`).
 
 ## Connection to the project
 

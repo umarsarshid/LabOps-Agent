@@ -155,7 +155,8 @@ int main() {
       fs::temp_directory_path() / ("labops-run-device-selector-smoke-" + std::to_string(now_ms));
   const fs::path scenario_path = temp_root / "real_selector_run.json";
   const fs::path fixture_path = temp_root / "devices.csv";
-  const fs::path out_dir = temp_root / "out";
+  const fs::path out_usb_dir = temp_root / "out_usb";
+  const fs::path out_gige_dir = temp_root / "out_gige";
 
   std::error_code ec;
   fs::remove_all(temp_root, ec);
@@ -189,6 +190,10 @@ int main() {
                   << "      \"y\": 120,\n"
                   << "      \"width\": 1280,\n"
                   << "      \"height\": 720\n"
+                  << "    },\n"
+                  << "    \"network\": {\n"
+                  << "      \"packet_size_bytes\": 9000,\n"
+                  << "      \"inter_packet_delay_us\": 200\n"
                   << "    }\n"
                   << "  },\n"
                   << "  \"thresholds\": {\n"
@@ -202,13 +207,13 @@ int main() {
   ScopedEnvOverride fixture_override("LABOPS_REAL_DEVICE_FIXTURE", fixture_path_text.c_str());
 
   std::string stderr_output;
-  const int exit_code =
+  const int usb_exit_code =
       DispatchWithCapturedStderr({"labops", "run", scenario_path.string(), "--out",
-                                  out_dir.string(), "--device", "serial:SN-2000"},
+                                  out_usb_dir.string(), "--device", "serial:SN-2000"},
                                  stderr_output);
 
   if (labops::backends::real_sdk::IsRealBackendEnabledAtBuild()) {
-    if (exit_code !=
+    if (usb_exit_code !=
         labops::core::errors::ToInt(labops::core::errors::ExitCode::kBackendConnectFailed)) {
       Fail("expected backend-connect-failed exit code in real-enabled build");
     }
@@ -218,7 +223,7 @@ int main() {
     AssertContains(stderr_output, "selected_firmware_version=\"4.0.0\"");
     AssertContains(stderr_output, "selected_sdk_version=\"21.1.8\"");
 
-    const fs::path bundle_dir = ResolveSingleBundleDir(out_dir);
+    const fs::path bundle_dir = ResolveSingleBundleDir(out_usb_dir);
     const fs::path run_json_path = bundle_dir / "run.json";
     const fs::path config_verify_path = bundle_dir / "config_verify.json";
     const fs::path camera_config_path = bundle_dir / "camera_config.json";
@@ -264,6 +269,9 @@ int main() {
     AssertContains(verify_json, "\"actual\":\"720\"");
     AssertContains(verify_json, "\"actual\":\"100\"");
     AssertContains(verify_json, "\"actual\":\"120\"");
+    AssertContains(verify_json, "\"generic_key\":\"packet_size_bytes\"");
+    AssertContains(verify_json, "\"generic_key\":\"inter_packet_delay_us\"");
+    AssertContains(verify_json, "requires GigE transport (resolved transport: usb)");
     AssertContains(verify_json, "\"supported\":true");
 
     const std::string camera_config_json = ReadFile(camera_config_path);
@@ -287,14 +295,49 @@ int main() {
     AssertContains(config_report, "roi_height");
     AssertContains(config_report, "roi_offset_x");
     AssertContains(config_report, "roi_offset_y");
+    AssertContains(config_report, "packet_size_bytes");
+    AssertContains(config_report, "inter_packet_delay_us");
+    AssertContains(config_report, "requires GigE transport (resolved transport: usb)");
     AssertContains(config_report, "units: us; validated range: [5, 10000000]");
     AssertContains(config_report, "units: dB; validated range: [0, 48]");
+    AssertContains(config_report, "units: bytes; GigE-only; validated range: [576, 9000]");
+    AssertContains(config_report, "units: us; GigE-only; validated range: [0, 100000]");
     AssertContains(config_report, "units: px; validated range: [64, 4096]; applied before offsets");
     AssertContains(config_report,
                    "units: px; validated range: [0, 4095]; applied after width/height");
-    AssertContains(config_report, "✅ applied");
+    AssertContains(config_report, "❌ unsupported");
+
+    std::string gige_stderr_output;
+    const int gige_exit_code =
+        DispatchWithCapturedStderr({"labops", "run", scenario_path.string(), "--out",
+                                    out_gige_dir.string(), "--device", "serial:SN-1001"},
+                                   gige_stderr_output);
+    if (gige_exit_code !=
+        labops::core::errors::ToInt(labops::core::errors::ExitCode::kBackendConnectFailed)) {
+      Fail("expected backend-connect-failed exit code for GigE selector run");
+    }
+    AssertContains(gige_stderr_output, "selected_serial=\"SN-1001\"");
+    AssertContains(gige_stderr_output, "selected_transport=\"gige\"");
+
+    const fs::path gige_bundle_dir = ResolveSingleBundleDir(out_gige_dir);
+    const std::string gige_run_json = ReadFile(gige_bundle_dir / "run.json");
+    AssertContains(gige_run_json, "\"serial\":\"SN-1001\"");
+    AssertContains(gige_run_json, "\"transport\":\"gige\"");
+
+    const std::string gige_verify_json = ReadFile(gige_bundle_dir / "config_verify.json");
+    AssertContains(gige_verify_json, "\"generic_key\":\"packet_size_bytes\"");
+    AssertContains(gige_verify_json, "\"generic_key\":\"inter_packet_delay_us\"");
+    AssertContains(gige_verify_json, "\"actual\":\"9000\"");
+    AssertContains(gige_verify_json, "\"actual\":\"200\"");
+    AssertContains(gige_verify_json, "\"supported\":true");
+    AssertContains(gige_verify_json, "\"applied\":true");
+
+    const std::string gige_config_report = ReadFile(gige_bundle_dir / "config_report.md");
+    AssertContains(gige_config_report, "packet_size_bytes");
+    AssertContains(gige_config_report, "inter_packet_delay_us");
+    AssertContains(gige_config_report, "✅ applied");
   } else {
-    if (exit_code != labops::core::errors::ToInt(labops::core::errors::ExitCode::kFailure)) {
+    if (usb_exit_code != labops::core::errors::ToInt(labops::core::errors::ExitCode::kFailure)) {
       Fail("expected generic failure exit code when real backend is disabled");
     }
     AssertContains(stderr_output, "device selector resolution failed");

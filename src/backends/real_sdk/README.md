@@ -36,6 +36,11 @@ This folder is that bridge.
     - if supported, applies/clamps and surfaces measurable FPS changes
     - if unsupported/read-only, records unsupported evidence and continues
       even in strict apply mode.
+  - treats GigE transport tuning as best-effort-only:
+    - `packet_size_bytes` (`GevSCPSPacketSize`) with range `[576, 9000]`
+    - `inter_packet_delay_us` (`GevSCPD`) with range `[0, 100000]`
+    - applies only when resolved transport is GigE; otherwise records
+      transport-aware unsupported evidence and continues.
   - includes first practical numeric knob guards for real triage tickets:
     - `exposure` (`ExposureTime`) clamped/validated to `[5, 10000000]` (us)
     - `gain` (`Gain`) clamped/validated to `[0, 48]` (dB)
@@ -55,6 +60,7 @@ This folder is that bridge.
 - `maps/param_key_map.json`:
   - default mapping data for first integration keys:
     - `exposure`, `gain`, `pixel_format`,
+      `packet_size_bytes`, `inter_packet_delay_us`,
       `roi_width`, `roi_height`, `roi_offset_x`, `roi_offset_y`,
       `roi` (legacy alias),
       `trigger_mode`, `trigger_source`, `trigger_activation`, `frame_rate`
