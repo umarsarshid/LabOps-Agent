@@ -30,7 +30,8 @@ stable interface regardless of real hardware availability.
   between runs to prevent lifecycle leaks.
 - `real_frame_acquisition_smoke.cpp`: validates single-thread real-frame pull
   loop behavior (timestamp progression plus received/timeout/incomplete
-  outcomes) and confirms metrics are computable from real-backend samples.
+  outcomes), confirms metrics are computable from real-backend samples, and
+  verifies frame-rate control changes measured FPS approximately when supported.
 - `real_device_enumeration_smoke.cpp`: validates real-device descriptor
   enumeration/mapping into normalized `DeviceInfo` fields (including transport
   normalization and optional IP/MAC/version handling).
@@ -53,7 +54,7 @@ stable interface regardless of real hardware availability.
   for `pixel_format`, trigger enum round-trips
   (`trigger_mode`, `trigger_source`, `trigger_activation`), plus deterministic ROI ordering
   (`roi_width`, `roi_height`, `roi_offset_x`, `roi_offset_y`) with constraint
-  clamping evidence.
+  clamping evidence, and frame-rate best-effort-only behavior when unsupported.
 
 ## Connection to the project
 

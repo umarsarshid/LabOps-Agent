@@ -32,6 +32,10 @@ This folder is that bridge.
     - `trigger_source` (`line0`, `line1`, `software`)
     - `trigger_activation` (`rising_edge`, `falling_edge`, `any_edge`)
     with readback evidence per key.
+  - treats `frame_rate` as best-effort-only:
+    - if supported, applies/clamps and surfaces measurable FPS changes
+    - if unsupported/read-only, records unsupported evidence and continues
+      even in strict apply mode.
   - includes first practical numeric knob guards for real triage tickets:
     - `exposure` (`ExposureTime`) clamped/validated to `[5, 10000000]` (us)
     - `gain` (`Gain`) clamped/validated to `[0, 48]` (dB)

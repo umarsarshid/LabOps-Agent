@@ -77,6 +77,7 @@ int main() {
   using labops::backends::real_sdk::ApplyParamsResult;
   using labops::backends::real_sdk::CreateDefaultNodeMapAdapter;
   using labops::backends::real_sdk::LoadParamKeyMapFromFile;
+  using labops::backends::real_sdk::LoadParamKeyMapFromText;
   using labops::backends::real_sdk::ParamApplyMode;
   using labops::backends::real_sdk::ParamKeyMap;
   using labops::backends::real_sdk::ResolveDefaultParamKeyMapPath;
@@ -302,6 +303,53 @@ int main() {
     }
     if (!saw_applied_frame_rate || !saw_unsupported_pixel_format) {
       Fail("best-effort pixel_format readback rows missing expected applied/unsupported evidence");
+    }
+  }
+
+  // Frame-rate is best-effort-only even in strict mode so unsupported rate
+  // controls do not block the run pipeline on cameras where the node is
+  // missing/read-only.
+  {
+    ParamKeyMap missing_frame_rate_key_map;
+    if (!LoadParamKeyMapFromText("{\n"
+                                 "  \"frame_rate\": \"MissingFrameRateNode\",\n"
+                                 "  \"trigger_mode\": \"TriggerMode\"\n"
+                                 "}\n",
+                                 missing_frame_rate_key_map, error)) {
+      Fail("failed to load frame-rate override key map: " + error);
+    }
+
+    RecordingBackend backend;
+    std::unique_ptr<labops::backends::real_sdk::INodeMapAdapter> adapter =
+        CreateDefaultNodeMapAdapter();
+    ApplyParamsResult result;
+    if (!ApplyParams(backend, missing_frame_rate_key_map, *adapter,
+                     {
+                         ApplyParamInput{"frame_rate", "120"},
+                         ApplyParamInput{"trigger_mode", "hardware"},
+                     },
+                     ParamApplyMode::kStrict, result, error)) {
+      Fail("strict apply should continue when frame_rate is unsupported: " + error);
+    }
+
+    if (result.applied.size() != 1U || result.unsupported.size() != 1U ||
+        result.readback_rows.size() != 2U) {
+      Fail("frame-rate best-effort path should keep supported params and report one unsupported");
+    }
+
+    bool saw_frame_rate_unsupported = false;
+    bool saw_trigger_applied = false;
+    for (const auto& row : result.readback_rows) {
+      if (row.generic_key == "frame_rate" && !row.applied && !row.supported &&
+          row.reason.find("MissingFrameRateNode") != std::string::npos) {
+        saw_frame_rate_unsupported = true;
+      }
+      if (row.generic_key == "trigger_mode" && row.applied && row.actual_value == "hardware") {
+        saw_trigger_applied = true;
+      }
+    }
+    if (!saw_frame_rate_unsupported || !saw_trigger_applied) {
+      Fail("frame-rate best-effort row evidence is incomplete");
     }
   }
 

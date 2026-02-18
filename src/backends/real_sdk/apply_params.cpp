@@ -174,6 +174,20 @@ std::vector<ApplyParamInput> OrderApplyInputs(const std::vector<ApplyParamInput>
   return ordered;
 }
 
+bool IsBestEffortOnlyKey(std::string_view generic_key) {
+  // Some cameras expose stream rate as read-only or transport-constrained.
+  // Treat frame-rate writes as best-effort so a missing/locked rate control
+  // does not block evidence collection runs.
+  return generic_key == "frame_rate";
+}
+
+ParamApplyMode ResolveModeForKey(std::string_view generic_key, ParamApplyMode default_mode) {
+  if (IsBestEffortOnlyKey(generic_key)) {
+    return ParamApplyMode::kBestEffort;
+  }
+  return default_mode;
+}
+
 bool TryReadNodeValueAsString(INodeMapAdapter& node_adapter, std::string_view node_name,
                               std::string& actual_value, std::string& error) {
   actual_value.clear();
@@ -414,12 +428,13 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
     if (generic_key.empty()) {
       continue;
     }
+    const ParamApplyMode effective_mode = ResolveModeForKey(generic_key, mode);
 
     std::string node_name;
     if (!key_map.Resolve(generic_key, node_name)) {
       if (!RecordUnsupportedParameter(generic_key, input.requested_value, std::nullopt,
                                       /*supported=*/false, "no generic->node mapping was found",
-                                      mode, result, error)) {
+                                      effective_mode, result, error)) {
         return false;
       }
       continue;
@@ -429,8 +444,8 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
     if (!node_adapter.Has(node_name)) {
       if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
                                       /*supported=*/false,
-                                      "mapped SDK node '" + node_name + "' is not available", mode,
-                                      result, error)) {
+                                      "mapped SDK node '" + node_name + "' is not available",
+                                      effective_mode, result, error)) {
         return false;
       }
       continue;
@@ -457,8 +472,8 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
       bool parsed = false;
       if (!ParseBool(input.requested_value, parsed)) {
         if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
-                                        /*supported=*/true, "expected boolean value", mode, result,
-                                        error)) {
+                                        /*supported=*/true, "expected boolean value",
+                                        effective_mode, result, error)) {
           return false;
         }
         continue;
@@ -466,7 +481,8 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
       if (!node_adapter.TrySetBool(node_name, parsed, write_error)) {
         const std::string reason = write_error.empty() ? "node rejected bool value" : write_error;
         if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
-                                        /*supported=*/true, reason, mode, result, error)) {
+                                        /*supported=*/true, reason, effective_mode, result,
+                                        error)) {
           return false;
         }
         continue;
@@ -478,8 +494,8 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
       std::int64_t parsed = 0;
       if (!ParseInt64(input.requested_value, parsed)) {
         if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
-                                        /*supported=*/true, "expected integer value", mode, result,
-                                        error)) {
+                                        /*supported=*/true, "expected integer value",
+                                        effective_mode, result, error)) {
           return false;
         }
         continue;
@@ -500,7 +516,8 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
         const std::string reason =
             write_error.empty() ? "node rejected integer value" : write_error;
         if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
-                                        /*supported=*/true, reason, mode, result, error)) {
+                                        /*supported=*/true, reason, effective_mode, result,
+                                        error)) {
           return false;
         }
         continue;
@@ -513,8 +530,8 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
       double parsed = 0.0;
       if (!ParseDouble(input.requested_value, parsed)) {
         if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
-                                        /*supported=*/true, "expected floating-point value", mode,
-                                        result, error)) {
+                                        /*supported=*/true, "expected floating-point value",
+                                        effective_mode, result, error)) {
           return false;
         }
         continue;
@@ -532,7 +549,8 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
       if (!node_adapter.TrySetFloat64(node_name, parsed, write_error)) {
         const std::string reason = write_error.empty() ? "node rejected float value" : write_error;
         if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
-                                        /*supported=*/true, reason, mode, result, error)) {
+                                        /*supported=*/true, reason, effective_mode, result,
+                                        error)) {
           return false;
         }
         continue;
@@ -554,7 +572,8 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
                                        "' is not supported for key '" + node_name +
                                        "' (allowed: " + JoinEnumValues(allowed) + ")";
             if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
-                                            /*supported=*/true, reason, mode, result, error)) {
+                                            /*supported=*/true, reason, effective_mode, result,
+                                            error)) {
               return false;
             }
             continue;
@@ -570,7 +589,8 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
       if (!node_adapter.TrySetString(node_name, normalized_value, write_error)) {
         const std::string reason = write_error.empty() ? "node rejected string value" : write_error;
         if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
-                                        /*supported=*/true, reason, mode, result, error)) {
+                                        /*supported=*/true, reason, effective_mode, result,
+                                        error)) {
           return false;
         }
         continue;
@@ -582,8 +602,8 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
     case NodeValueType::kUnknown:
     default:
       if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
-                                      /*supported=*/false, "node value type is unknown", mode,
-                                      result, error)) {
+                                      /*supported=*/false, "node value type is unknown",
+                                      effective_mode, result, error)) {
         return false;
       }
       continue;
@@ -591,17 +611,13 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
 
     std::string backend_error;
     if (!backend.SetParam(node_name, backend_value, backend_error)) {
-      readback_row.node_name = node_name;
-      readback_row.supported = true;
-      readback_row.applied = false;
-      readback_row.adjusted = applied.adjusted;
-      readback_row.reason = "backend rejected mapped value: " +
-                            (backend_error.empty() ? "unknown error" : backend_error);
-      result.readback_rows.push_back(readback_row);
-      error = "failed to set mapped backend parameter '" + node_name + "' for generic key '" +
-              generic_key +
-              "': " + (backend_error.empty() ? "backend rejected value" : backend_error);
-      return false;
+      const std::string reason = "backend rejected mapped value: " +
+                                 (backend_error.empty() ? "unknown error" : backend_error);
+      if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
+                                      /*supported=*/true, reason, effective_mode, result, error)) {
+        return false;
+      }
+      continue;
     }
 
     readback_row.node_name = node_name;

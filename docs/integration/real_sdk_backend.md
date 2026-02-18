@@ -120,7 +120,7 @@ Maintain a table in your backend module docs/code comments:
 
 | Scenario path | Canonical key | SDK property/API | Unit conversion | Validation |
 | --- | --- | --- | --- | --- |
-| `camera.fps` | `fps` | `SetFrameRate(...)` | integer Hz | `>0` |
+| `camera.fps` | `frame_rate` | `SetFrameRate(...)` | integer Hz | `>0`; best-effort-only when unsupported |
 | `camera.pixel_format` | `pixel_format` | `SetPixelFormat(...)` | enum map | allowed enum |
 | `camera.trigger_mode` | `trigger_mode` | `SetTriggerMode(...)` | enum map | allowed enum |
 | `camera.trigger_source` | `trigger_source` | `SetTriggerSource(...)` | enum map | allowed enum |

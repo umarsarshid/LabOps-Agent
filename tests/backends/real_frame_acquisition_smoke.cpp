@@ -23,6 +23,51 @@ void AssertMonotonicTimestamps(const std::vector<labops::backends::FrameSample>&
   }
 }
 
+void AssertRange(double value, double min_inclusive, double max_inclusive, std::string_view label) {
+  if (value < min_inclusive || value > max_inclusive) {
+    std::cerr << "expected " << label << " in [" << min_inclusive << ", " << max_inclusive
+              << "], got " << value << '\n';
+    std::abort();
+  }
+}
+
+double RunMeasuredAvgFps(std::uint32_t requested_fps) {
+  using labops::backends::real_sdk::RealBackend;
+
+  RealBackend backend;
+  std::string error;
+  if (!backend.Connect(error)) {
+    Fail("expected connect to succeed for frame-rate control check");
+  }
+  if (!backend.SetParam("AcquisitionFrameRate", std::to_string(requested_fps), error)) {
+    Fail("expected AcquisitionFrameRate set to succeed");
+  }
+  if (!backend.SetParam("FrameTimeoutPercent", "0", error) ||
+      !backend.SetParam("FrameIncompletePercent", "0", error)) {
+    Fail("expected zero drop outcomes for frame-rate control check");
+  }
+  if (!backend.Start(error)) {
+    Fail("expected start to succeed for frame-rate control check");
+  }
+
+  const std::chrono::milliseconds duration(8'000);
+  const std::vector<labops::backends::FrameSample> frames = backend.PullFrames(duration, error);
+  if (!error.empty() || frames.empty()) {
+    Fail("expected non-empty frames for frame-rate control check");
+  }
+
+  labops::metrics::FpsReport report;
+  if (!labops::metrics::ComputeFpsReport(frames, duration, std::chrono::milliseconds(1'000), report,
+                                         error)) {
+    Fail("expected fps report for frame-rate control check");
+  }
+  if (!backend.Stop(error)) {
+    Fail("expected stop to succeed for frame-rate control check");
+  }
+
+  return report.avg_fps;
+}
+
 } // namespace
 
 int main() {
@@ -125,6 +170,15 @@ int main() {
 
   if (!backend.Stop(error)) {
     Fail("expected real backend stop to succeed");
+  }
+
+  // Frame-rate control should be visible in measured FPS when supported.
+  const double low_fps_measured = RunMeasuredAvgFps(12U);
+  const double high_fps_measured = RunMeasuredAvgFps(48U);
+  AssertRange(low_fps_measured, 11.0, 13.0, "low_fps_measured");
+  AssertRange(high_fps_measured, 47.0, 49.5, "high_fps_measured");
+  if (high_fps_measured < low_fps_measured + 30.0) {
+    Fail("expected measurable FPS increase after frame-rate change");
   }
 
   std::cout << "real_frame_acquisition_smoke: ok\n";
