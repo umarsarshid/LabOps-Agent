@@ -114,7 +114,10 @@ target_link_libraries(labops_scenarios PUBLIC labops_backends)
 
 # Host probe collectors for machine context evidence (`hostprobe.json`).
 add_library(labops_hostprobe
-  src/hostprobe/system_probe.cpp
+  src/hostprobe/system_probe_common.cpp
+  src/hostprobe/system_probe_linux.cpp
+  src/hostprobe/system_probe_macos.cpp
+  src/hostprobe/system_probe_windows.cpp
 )
 target_include_directories(labops_hostprobe PUBLIC src)
 target_compile_features(labops_hostprobe PUBLIC cxx_std_20)

@@ -1,4 +1,5 @@
 #include "hostprobe/system_probe.hpp"
+#include "hostprobe/system_probe_internal.hpp"
 
 #include "core/json_utils.hpp"
 #include "core/time_utils.hpp"
@@ -9,36 +10,13 @@
 #include <charconv>
 #include <cstdio>
 #include <cstdlib>
-#include <ctime>
-#include <fstream>
-#include <iomanip>
 #include <limits>
 #include <sstream>
 #include <string_view>
 #include <thread>
-#include <time.h>
 
 #if !defined(_WIN32)
 #include <sys/wait.h>
-#endif
-
-#if defined(__APPLE__)
-#include <sys/sysctl.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/utsname.h>
-#include <unistd.h>
-#endif
-
-#if defined(__linux__)
-#include <sys/sysinfo.h>
-#include <sys/utsname.h>
-#include <unistd.h>
-#endif
-
-#if defined(_WIN32)
-#define NOMINMAX
-#include <windows.h>
 #endif
 
 namespace labops::hostprobe {
@@ -284,7 +262,10 @@ void AddNormalizedIdentifierToken(std::vector<std::string>& out, std::string tok
   out.push_back(token);
 }
 
-void AddIdentifierTokenAndVariants(std::vector<std::string>& out, const std::string& token) {
+} // namespace
+
+void internal::AddIdentifierTokenAndVariants(std::vector<std::string>& out,
+                                             const std::string& token) {
   AddNormalizedIdentifierToken(out, token);
 
   // Hostnames may appear either as full FQDN or short host token in artifacts.
@@ -364,7 +345,7 @@ void AddEnvironmentToken(std::vector<std::string>& out, const char* env_name) {
   if (raw == nullptr) {
     return;
   }
-  AddIdentifierTokenAndVariants(out, raw);
+  internal::AddIdentifierTokenAndVariants(out, raw);
 }
 
 void AddEnvironmentPathTailToken(std::vector<std::string>& out, const char* env_name) {
@@ -375,23 +356,7 @@ void AddEnvironmentPathTailToken(std::vector<std::string>& out, const char* env_
   if (raw == nullptr) {
     return;
   }
-  AddIdentifierTokenAndVariants(out, TailPathSegment(raw));
-}
-
-void AddSystemHostnameTokens(std::vector<std::string>& out) {
-#if defined(_WIN32)
-  char name[256] = {};
-  DWORD size = static_cast<DWORD>(sizeof(name) / sizeof(name[0]));
-  if (GetComputerNameA(name, &size) != 0 && size > 0U) {
-    AddIdentifierTokenAndVariants(out, std::string(name, size));
-  }
-#elif defined(__linux__) || defined(__APPLE__)
-  char name[256] = {};
-  if (gethostname(name, sizeof(name)) == 0) {
-    name[sizeof(name) - 1U] = '\0';
-    AddIdentifierTokenAndVariants(out, std::string(name));
-  }
-#endif
+  internal::AddIdentifierTokenAndVariants(out, TailPathSegment(raw));
 }
 
 std::optional<std::string> ParseMacMediaSpeedHint(std::string_view line) {
@@ -415,7 +380,7 @@ std::optional<std::string> ParseMacMediaSpeedHint(std::string_view line) {
   return NormalizeLinkSpeedHint(Trim(trimmed.substr(std::string_view("media:").size())));
 }
 
-std::optional<std::string> ParseLinuxEthtoolSpeedHint(const std::string& output) {
+std::optional<std::string> internal::ParseLinuxEthtoolSpeedHint(const std::string& output) {
   std::istringstream in(output);
   std::string line;
   while (std::getline(in, line)) {
@@ -433,8 +398,8 @@ std::optional<std::string> ParseLinuxEthtoolSpeedHint(const std::string& output)
   return std::nullopt;
 }
 
-NicInterfaceHighlight& GetOrCreateInterface(NicHighlights& highlights,
-                                            const std::string& interface_name) {
+NicInterfaceHighlight& internal::GetOrCreateInterface(NicHighlights& highlights,
+                                                      const std::string& interface_name) {
   for (auto& iface : highlights.interfaces) {
     if (iface.name == interface_name) {
       return iface;
@@ -452,7 +417,7 @@ void MarkDefaultRoute(NicHighlights& highlights, const std::string& interface_na
   }
 
   highlights.default_route_interface = interface_name;
-  NicInterfaceHighlight& iface = GetOrCreateInterface(highlights, interface_name);
+  NicInterfaceHighlight& iface = internal::GetOrCreateInterface(highlights, interface_name);
   iface.has_default_route = true;
 }
 
@@ -503,7 +468,7 @@ bool OutputSuggestsMissingCommand(std::string_view output) {
          lower.find("no such file") != std::string::npos;
 }
 
-bool IsCommandAvailable(const std::string& command_name) {
+bool internal::IsCommandAvailable(const std::string& command_name) {
   std::string output;
   int exit_code = -1;
   std::string error;
@@ -518,7 +483,8 @@ bool IsCommandAvailable(const std::string& command_name) {
   return exit_code == 0;
 }
 
-NicCommandCapture CaptureCommand(const std::string& file_name, const std::string& command) {
+NicCommandCapture internal::CaptureCommand(const std::string& file_name,
+                                           const std::string& command) {
   NicCommandCapture capture;
   capture.file_name = file_name;
   capture.command = command;
@@ -537,7 +503,7 @@ NicCommandCapture CaptureCommand(const std::string& file_name, const std::string
   return capture;
 }
 
-void ParseLinuxIpAddressOutput(const std::string& output, NicHighlights& highlights) {
+void internal::ParseLinuxIpAddressOutput(const std::string& output, NicHighlights& highlights) {
   std::istringstream in(output);
   std::string line;
   std::string current_iface;
@@ -598,7 +564,7 @@ void ParseLinuxIpAddressOutput(const std::string& output, NicHighlights& highlig
   }
 }
 
-void ParseLinuxRouteOutput(const std::string& output, NicHighlights& highlights) {
+void internal::ParseLinuxRouteOutput(const std::string& output, NicHighlights& highlights) {
   std::istringstream in(output);
   std::string line;
   while (std::getline(in, line)) {
@@ -617,7 +583,7 @@ void ParseLinuxRouteOutput(const std::string& output, NicHighlights& highlights)
   }
 }
 
-void ParseMacIfconfigOutput(const std::string& output, NicHighlights& highlights) {
+void internal::ParseMacIfconfigOutput(const std::string& output, NicHighlights& highlights) {
   std::istringstream in(output);
   std::string line;
   std::string current_iface;
@@ -671,7 +637,7 @@ void ParseMacIfconfigOutput(const std::string& output, NicHighlights& highlights
   }
 }
 
-void ParseMacRouteGetDefaultOutput(const std::string& output, NicHighlights& highlights) {
+void internal::ParseMacRouteGetDefaultOutput(const std::string& output, NicHighlights& highlights) {
   std::istringstream in(output);
   std::string line;
   while (std::getline(in, line)) {
@@ -686,7 +652,7 @@ void ParseMacRouteGetDefaultOutput(const std::string& output, NicHighlights& hig
   }
 }
 
-void ParseMacNetstatRouteOutput(const std::string& output, NicHighlights& highlights) {
+void internal::ParseMacNetstatRouteOutput(const std::string& output, NicHighlights& highlights) {
   std::istringstream in(output);
   std::string line;
   while (std::getline(in, line)) {
@@ -716,7 +682,7 @@ std::string NormalizeWindowsAddressToken(std::string value) {
   return FirstToken(value);
 }
 
-void ParseWindowsIpconfigOutput(const std::string& output, NicHighlights& highlights) {
+void internal::ParseWindowsIpconfigOutput(const std::string& output, NicHighlights& highlights) {
   std::istringstream in(output);
   std::string line;
   std::string current_iface;
@@ -798,102 +764,14 @@ void ParseWindowsIpconfigOutput(const std::string& output, NicHighlights& highli
   }
 }
 
-void SortInterfaces(NicHighlights& highlights) {
+void internal::SortInterfaces(NicHighlights& highlights) {
   std::sort(highlights.interfaces.begin(), highlights.interfaces.end(),
             [](const NicInterfaceHighlight& lhs, const NicInterfaceHighlight& rhs) {
               return lhs.name < rhs.name;
             });
 }
 
-void CollectLinuxNicProbe(NicProbeSnapshot& snapshot) {
-  NicCommandCapture ip_a = CaptureCommand("nic_ip_a.txt", "ip a");
-  ParseLinuxIpAddressOutput(ip_a.output, snapshot.highlights);
-  snapshot.raw_captures.push_back(std::move(ip_a));
-
-  NicCommandCapture ip_r = CaptureCommand("nic_ip_r.txt", "ip r");
-  ParseLinuxRouteOutput(ip_r.output, snapshot.highlights);
-  snapshot.raw_captures.push_back(std::move(ip_r));
-
-  NicCommandCapture ethtool_capture;
-  ethtool_capture.file_name = "nic_ethtool.txt";
-  ethtool_capture.command = "ethtool <interface>";
-
-  if (!IsCommandAvailable("ethtool")) {
-    ethtool_capture.command_available = false;
-    ethtool_capture.exit_code = 127;
-    ethtool_capture.output = "ethtool not available on host PATH.\n";
-    snapshot.raw_captures.push_back(std::move(ethtool_capture));
-    SortInterfaces(snapshot.highlights);
-    return;
-  }
-
-  std::vector<std::string> interface_names;
-  interface_names.reserve(snapshot.highlights.interfaces.size());
-  for (const auto& iface : snapshot.highlights.interfaces) {
-    if (iface.name.empty() || iface.name == "lo") {
-      continue;
-    }
-    interface_names.push_back(iface.name);
-  }
-
-  if (interface_names.empty()) {
-    interface_names.push_back("eth0");
-  }
-
-  int aggregate_exit_code = 0;
-  std::ostringstream aggregate;
-  for (const auto& iface_name : interface_names) {
-    const std::string command = "ethtool " + iface_name;
-    NicCommandCapture per_iface = CaptureCommand("", command);
-    NicInterfaceHighlight& iface = GetOrCreateInterface(snapshot.highlights, iface_name);
-    if (const auto speed = ParseLinuxEthtoolSpeedHint(per_iface.output); speed.has_value()) {
-      iface.link_speed_hint = speed.value();
-    }
-    if (per_iface.exit_code != 0) {
-      aggregate_exit_code = per_iface.exit_code;
-    }
-
-    aggregate << "# command: " << command << "\n";
-    aggregate << "# exit_code: " << per_iface.exit_code << "\n\n";
-    aggregate << per_iface.output;
-    if (!per_iface.output.empty() && per_iface.output.back() != '\n') {
-      aggregate << '\n';
-    }
-    aggregate << "\n";
-  }
-
-  ethtool_capture.exit_code = aggregate_exit_code;
-  ethtool_capture.command_available = true;
-  ethtool_capture.output = aggregate.str();
-  snapshot.raw_captures.push_back(std::move(ethtool_capture));
-  SortInterfaces(snapshot.highlights);
-}
-
-void CollectMacNicProbe(NicProbeSnapshot& snapshot) {
-  NicCommandCapture ifconfig_a = CaptureCommand("nic_ifconfig_a.txt", "ifconfig -a");
-  ParseMacIfconfigOutput(ifconfig_a.output, snapshot.highlights);
-  snapshot.raw_captures.push_back(std::move(ifconfig_a));
-
-  NicCommandCapture netstat_rn = CaptureCommand("nic_netstat_rn.txt", "netstat -rn");
-  ParseMacNetstatRouteOutput(netstat_rn.output, snapshot.highlights);
-  snapshot.raw_captures.push_back(std::move(netstat_rn));
-
-  NicCommandCapture route_default =
-      CaptureCommand("nic_route_get_default.txt", "route -n get default");
-  ParseMacRouteGetDefaultOutput(route_default.output, snapshot.highlights);
-  snapshot.raw_captures.push_back(std::move(route_default));
-
-  SortInterfaces(snapshot.highlights);
-}
-
-void CollectWindowsNicProbe(NicProbeSnapshot& snapshot) {
-  NicCommandCapture ipconfig_all = CaptureCommand("nic_ipconfig_all.txt", "ipconfig /all");
-  ParseWindowsIpconfigOutput(ipconfig_all.output, snapshot.highlights);
-  snapshot.raw_captures.push_back(std::move(ipconfig_all));
-  SortInterfaces(snapshot.highlights);
-}
-
-void CollectUnsupportedPlatformNicProbe(NicProbeSnapshot& snapshot) {
+void internal::CollectUnsupportedPlatformNicProbe(NicProbeSnapshot& snapshot) {
   NicCommandCapture unsupported;
   unsupported.file_name = "nic_probe_unavailable.txt";
   unsupported.command = "unsupported_platform";
@@ -915,111 +793,37 @@ std::string DetectOsName() {
 #endif
 }
 
-std::string DetectOsVersion() {
-#if defined(__linux__) || defined(__APPLE__)
-  struct utsname uts{};
-  if (uname(&uts) == 0) {
-    return std::string(uts.release);
-  }
-#endif
+#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__linux__)
+void internal::AddSystemHostnameTokensPlatform(std::vector<std::string>& out) {
+  (void)out;
+}
+
+std::string internal::DetectOsVersionPlatform() {
   return "unknown";
 }
 
-std::string ProbeCpuModel() {
-#if defined(__linux__)
-  std::ifstream input("/proc/cpuinfo");
-  std::string line;
-  constexpr std::string_view kPrefix = "model name";
-  while (std::getline(input, line)) {
-    if (line.rfind(kPrefix, 0) == 0U) {
-      const std::size_t colon = line.find(':');
-      if (colon == std::string::npos || colon + 1U >= line.size()) {
-        continue;
-      }
-      std::string value = line.substr(colon + 1U);
-      const std::size_t first = value.find_first_not_of(" \t");
-      if (first == std::string::npos) {
-        continue;
-      }
-      const std::size_t last = value.find_last_not_of(" \t");
-      return value.substr(first, last - first + 1U);
-    }
-  }
-#elif defined(__APPLE__)
-  char buffer[256] = {};
-  std::size_t length = sizeof(buffer);
-  if (sysctlbyname("machdep.cpu.brand_string", buffer, &length, nullptr, 0) == 0 && length > 0U) {
-    return std::string(buffer);
-  }
-#endif
+std::string internal::ProbeCpuModelPlatform() {
   return "unknown";
 }
 
-std::uint64_t ProbeRamTotalBytes() {
-#if defined(__linux__)
-  struct sysinfo info{};
-  if (sysinfo(&info) == 0) {
-    return static_cast<std::uint64_t>(info.totalram) * static_cast<std::uint64_t>(info.mem_unit);
-  }
-#elif defined(__APPLE__)
-  std::uint64_t value = 0;
-  std::size_t length = sizeof(value);
-  if (sysctlbyname("hw.memsize", &value, &length, nullptr, 0) == 0) {
-    return value;
-  }
-#elif defined(_WIN32)
-  MEMORYSTATUSEX memory_status{};
-  memory_status.dwLength = sizeof(memory_status);
-  if (GlobalMemoryStatusEx(&memory_status) != 0) {
-    return static_cast<std::uint64_t>(memory_status.ullTotalPhys);
-  }
-#endif
+std::uint64_t internal::ProbeRamTotalBytesPlatform() {
   return 0;
 }
 
-std::uint64_t ProbeUptimeSeconds() {
-#if defined(__linux__)
-  struct sysinfo info{};
-  if (sysinfo(&info) == 0 && info.uptime >= 0) {
-    return static_cast<std::uint64_t>(info.uptime);
-  }
-#elif defined(__APPLE__)
-  // Boot time via sysctl keeps this independent of sleep/wake counters.
-  struct timeval boot_time{};
-  std::size_t length = sizeof(boot_time);
-  int mib[2] = {CTL_KERN, KERN_BOOTTIME};
-  if (sysctl(mib, 2, &boot_time, &length, nullptr, 0) == 0 && boot_time.tv_sec > 0) {
-    const auto now_seconds = std::chrono::duration_cast<std::chrono::seconds>(
-                                 std::chrono::system_clock::now().time_since_epoch())
-                                 .count();
-    if (now_seconds > static_cast<std::int64_t>(boot_time.tv_sec)) {
-      return static_cast<std::uint64_t>(now_seconds - static_cast<std::int64_t>(boot_time.tv_sec));
-    }
-  }
-
-  // Fallback for environments where kern.boottime is unavailable.
-  struct timespec uptime_spec{};
-  if (clock_gettime(CLOCK_UPTIME_RAW, &uptime_spec) == 0 && uptime_spec.tv_sec >= 0) {
-    return static_cast<std::uint64_t>(uptime_spec.tv_sec);
-  }
-#elif defined(_WIN32)
-  return static_cast<std::uint64_t>(GetTickCount64() / 1000ULL);
-#endif
+std::uint64_t internal::ProbeUptimeSecondsPlatform() {
   return 0;
 }
 
-std::array<std::optional<double>, 3> ProbeLoadAverages() {
-  std::array<std::optional<double>, 3> values;
-#if defined(__linux__) || defined(__APPLE__)
-  double loads[3] = {0.0, 0.0, 0.0};
-  if (getloadavg(loads, 3) == 3) {
-    values[0] = loads[0];
-    values[1] = loads[1];
-    values[2] = loads[2];
-  }
-#endif
-  return values;
+std::array<std::optional<double>, 3> internal::ProbeLoadAveragesPlatform() {
+  return {};
 }
+
+void internal::CollectNicProbePlatform(NicProbeSnapshot& snapshot) {
+  CollectUnsupportedPlatformNicProbe(snapshot);
+}
+#endif
+
+namespace {
 
 void WriteJsonStringArray(std::ostringstream& out, const std::vector<std::string>& values) {
   out << "[";
@@ -1087,13 +891,13 @@ bool CollectHostProbeSnapshot(HostProbeSnapshot& snapshot, std::string& error) {
 
   snapshot.captured_at = std::chrono::system_clock::now();
   snapshot.os_name = DetectOsName();
-  snapshot.os_version = DetectOsVersion();
-  snapshot.cpu_model = ProbeCpuModel();
+  snapshot.os_version = internal::DetectOsVersionPlatform();
+  snapshot.cpu_model = internal::ProbeCpuModelPlatform();
   snapshot.cpu_logical_cores = std::thread::hardware_concurrency();
-  snapshot.ram_total_bytes = ProbeRamTotalBytes();
-  snapshot.uptime_seconds = ProbeUptimeSeconds();
+  snapshot.ram_total_bytes = internal::ProbeRamTotalBytesPlatform();
+  snapshot.uptime_seconds = internal::ProbeUptimeSecondsPlatform();
 
-  const auto load_averages = ProbeLoadAverages();
+  const auto load_averages = internal::ProbeLoadAveragesPlatform();
   snapshot.load_avg_1m = load_averages[0];
   snapshot.load_avg_5m = load_averages[1];
   snapshot.load_avg_15m = load_averages[2];
@@ -1104,18 +908,10 @@ bool CollectNicProbeSnapshot(NicProbeSnapshot& snapshot, std::string& error) {
   error.clear();
   snapshot = NicProbeSnapshot{};
 
-#if defined(_WIN32)
-  CollectWindowsNicProbe(snapshot);
-#elif defined(__linux__)
-  CollectLinuxNicProbe(snapshot);
-#elif defined(__APPLE__)
-  CollectMacNicProbe(snapshot);
-#else
-  CollectUnsupportedPlatformNicProbe(snapshot);
-#endif
+  internal::CollectNicProbePlatform(snapshot);
 
   if (snapshot.raw_captures.empty()) {
-    CollectUnsupportedPlatformNicProbe(snapshot);
+    internal::CollectUnsupportedPlatformNicProbe(snapshot);
   }
 
   return true;
@@ -1128,7 +924,7 @@ void BuildIdentifierRedactionContext(IdentifierRedactionContext& context) {
   // hosts where the same identifiers show up in multiple command outputs.
   AddEnvironmentToken(context.hostname_tokens, "HOSTNAME");
   AddEnvironmentToken(context.hostname_tokens, "COMPUTERNAME");
-  AddSystemHostnameTokens(context.hostname_tokens);
+  internal::AddSystemHostnameTokensPlatform(context.hostname_tokens);
 
   AddEnvironmentToken(context.username_tokens, "USER");
   AddEnvironmentToken(context.username_tokens, "USERNAME");

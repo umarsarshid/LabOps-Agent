@@ -18,21 +18,28 @@ Camera performance issues are often host-dependent (OS version, driver, NIC sett
 
 ## Current contents
 
-- `system_probe.hpp/.cpp`:
-  - collects lightweight host snapshot fields used by triage:
-    - OS name/version
-    - CPU model/logical core count
-    - total RAM bytes
-    - uptime seconds
-    - load snapshot (`1m/5m/15m` when platform supports it)
-  - collects raw NIC command outputs:
-    - Windows: `ipconfig /all`
-    - Linux: `ip a`, `ip r`, `ethtool` (if available)
-    - macOS: `ifconfig -a`, `netstat -rn`, `route -n get default`
-  - serializes snapshot into stable JSON contract for bundle artifacts.
-  - builds redaction token context from host/user identifiers and applies
-    replacements (`<redacted_host>`, `<redacted_user>`) to hostprobe snapshots
-    and raw NIC command captures when `--redact` is enabled.
+- `system_probe.hpp`:
+  - public hostprobe API used by the CLI and artifact writers.
+- `system_probe_internal.hpp`:
+  - internal cross-file contracts for shared parsing helpers and
+    platform hook points.
+- `system_probe_common.cpp`:
+  - platform-agnostic logic:
+    - JSON serialization
+    - redaction token build/apply
+    - command capture helpers
+    - shared NIC parsers
+    - orchestration that calls platform hooks
+- `system_probe_linux.cpp`:
+  - Linux-only host + NIC probe implementations.
+- `system_probe_macos.cpp`:
+  - macOS-only host + NIC probe implementations.
+- `system_probe_windows.cpp`:
+  - Windows-only host + NIC probe implementations.
+
+All files above preserve the same observable output contract as before
+(`hostprobe.json` plus raw NIC command evidence); this split only improves
+maintainability and platform isolation.
 
 ## Design principle
 
