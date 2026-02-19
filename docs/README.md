@@ -14,6 +14,7 @@ The codebase needs companion documentation for workflows, bundle contracts, play
 - Release verification checklist (`release_verification.md`).
 - Real-backend local setup/safety guide (`real_backend_setup.md`).
 - Real-backend troubleshooting playbook (`real_backend_troubleshooting.md`).
+- Non-functional refactor roadmap (`code_smartness_levelup.md`).
 - Release/readiness verification guidance.
 - Incident and troubleshooting playbooks.
 - Integration implementation guides (for example real SDK backend onboarding).
