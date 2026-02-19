@@ -72,6 +72,9 @@ stable interface regardless of real hardware availability.
 - `real_error_mapper_smoke.cpp`: validates real-backend error classification
   into stable codes plus actionable text so routing/UX can remain consistent
   even if SDK/vendor wording changes.
+- `real_reconnect_policy_smoke.cpp`: validates disconnect classification,
+  reconnect-attempt budgeting, and reconnect execution contract behavior using
+  a scripted mock backend (including retry success and retry-exhausted paths).
 
 ## Connection to the project
 

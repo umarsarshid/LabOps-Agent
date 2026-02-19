@@ -111,6 +111,13 @@ This folder is that bridge.
   - guarantees best-effort stop in destructor and idempotent explicit stop calls.
   - isolates session lifecycle bookkeeping so backend orchestration can safely
     stop in both success and error paths.
+- `reconnect_policy.hpp` / `reconnect_policy.cpp`:
+  - centralizes disconnect-error classification, reconnect retry budgeting, and
+    reconnect attempt execution (`connect -> start`) for real runs.
+  - keeps reconnect warning/error mapping consistent through
+    `error_mapper`-backed formatting and stable retry-attempt accounting.
+  - isolates retry policy from CLI stream orchestration so reconnect strategy
+    can evolve without modifying frame-loop control flow.
 - `sdk_context.hpp` / `sdk_context.cpp`:
   - process-level SDK lifecycle wrapper.
   - guarantees init happens once across concurrent backend handles.

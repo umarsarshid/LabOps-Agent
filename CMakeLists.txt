@@ -81,6 +81,7 @@ add_library(labops_backends
   src/backends/real_sdk/param_key_map.cpp
   src/backends/real_sdk/real_backend.cpp
   src/backends/real_sdk/real_backend_factory.cpp
+  src/backends/real_sdk/reconnect_policy.cpp
   src/backends/real_sdk/sdk_context.cpp
   src/backends/real_sdk/stream_session.cpp
   src/backends/real_sdk/transport_counters.cpp
@@ -566,6 +567,15 @@ add_labops_smoke_test(
   NAME real_error_mapper_smoke
   SOURCES
     tests/backends/real_error_mapper_smoke.cpp
+  LIBRARIES
+    labops_backends
+)
+
+# Smoke test for disconnect classification and reconnect-attempt policy flow.
+add_labops_smoke_test(
+  NAME real_reconnect_policy_smoke
+  SOURCES
+    tests/backends/real_reconnect_policy_smoke.cpp
   LIBRARIES
     labops_backends
 )

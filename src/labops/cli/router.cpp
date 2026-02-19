@@ -18,6 +18,7 @@
 #include "backends/real_sdk/apply_params.hpp"
 #include "backends/real_sdk/error_mapper.hpp"
 #include "backends/real_sdk/real_backend_factory.hpp"
+#include "backends/real_sdk/reconnect_policy.hpp"
 #include "backends/real_sdk/transport_counters.hpp"
 #include "backends/sim/scenario_config.hpp"
 #include "backends/sim/sim_camera_backend.hpp"
@@ -1519,16 +1520,6 @@ std::string ToLowerAscii(std::string value) {
   return value;
 }
 
-bool IsLikelyDisconnectError(std::string_view error_text) {
-  if (error_text.empty()) {
-    return false;
-  }
-  const std::string normalized = ToLowerAscii(std::string(error_text));
-  return normalized.find("disconnect") != std::string::npos ||
-         normalized.find("connection lost") != std::string::npos ||
-         normalized.find("link down") != std::string::npos;
-}
-
 struct RealFailureDetails {
   std::string code;
   std::string actionable_message;
@@ -1542,59 +1533,6 @@ RealFailureDetails MapRealFailure(std::string_view operation, std::string_view r
   details.actionable_message = mapped.actionable_message;
   details.formatted_message = backends::real_sdk::FormatRealBackendError(operation, raw_error);
   return details;
-}
-
-bool TryReconnectAfterDisconnect(backends::ICameraBackend& backend, std::uint32_t max_attempts,
-                                 std::uint32_t& attempts_used, core::logging::Logger& logger,
-                                 std::string& error) {
-  if (max_attempts == 0U) {
-    error = "reconnect attempts exhausted";
-    return false;
-  }
-
-  for (std::uint32_t attempt = 1; attempt <= max_attempts; ++attempt) {
-    ++attempts_used;
-    std::string connect_error;
-    if (!backend.Connect(connect_error)) {
-      const RealFailureDetails mapped = MapRealFailure("connect", connect_error);
-      logger.Warn("reconnect attempt connect failed",
-                  {{"attempt", std::to_string(attempt)},
-                   {"attempts_used_total", std::to_string(attempts_used)},
-                   {"max_attempts_for_disconnect", std::to_string(max_attempts)},
-                   {"error_code", mapped.code},
-                   {"error_action", mapped.actionable_message},
-                   {"error", connect_error}});
-      error = mapped.formatted_message;
-      continue;
-    }
-
-    std::string start_error;
-    if (!backend.Start(start_error)) {
-      const RealFailureDetails mapped = MapRealFailure("start", start_error);
-      logger.Warn("reconnect attempt start failed",
-                  {{"attempt", std::to_string(attempt)},
-                   {"attempts_used_total", std::to_string(attempts_used)},
-                   {"max_attempts_for_disconnect", std::to_string(max_attempts)},
-                   {"error_code", mapped.code},
-                   {"error_action", mapped.actionable_message},
-                   {"error", start_error}});
-      std::string stop_error;
-      (void)backend.Stop(stop_error);
-      error = mapped.formatted_message;
-      continue;
-    }
-
-    logger.Info("reconnect attempt succeeded",
-                {{"attempt", std::to_string(attempt)},
-                 {"attempts_used_total", std::to_string(attempts_used)}});
-    error.clear();
-    return true;
-  }
-
-  if (error.empty()) {
-    error = "reconnect attempts exhausted";
-  }
-  return false;
 }
 
 bool IsGigETransport(const core::schema::RunInfo& run_info) {
@@ -1945,7 +1883,7 @@ struct RunExecutionContext {
   fs::path bundle_zip_path;
 };
 
-constexpr std::uint32_t kReconnectRetryLimit = 3;
+constexpr std::uint32_t kReconnectRetryLimit = backends::real_sdk::kDefaultReconnectRetryLimit;
 
 void StopBackendIfStreamStarted(RunExecutionContext& ctx) {
   if (!ctx.stream_started || ctx.backend == nullptr) {
@@ -2462,12 +2400,11 @@ int ExecuteStreaming(const RunOptions& options, std::string_view success_prefix,
         const std::vector<backends::FrameSample> pulled_frames =
             ctx.backend->PullFrames(chunk_duration, ctx.error);
         if (!ctx.error.empty()) {
-          if (IsLikelyDisconnectError(ctx.error)) {
+          if (backends::real_sdk::IsLikelyDisconnectError(ctx.error)) {
             const std::string disconnect_error = ctx.error;
             const std::uint32_t reconnect_attempts_remaining =
-                ctx.reconnect_attempts_used >= kReconnectRetryLimit
-                    ? 0U
-                    : (kReconnectRetryLimit - ctx.reconnect_attempts_used);
+                backends::real_sdk::ComputeReconnectAttemptsRemaining(kReconnectRetryLimit,
+                                                                      ctx.reconnect_attempts_used);
             ctx.logger.Warn(
                 "device disconnected during stream",
                 {{"error", disconnect_error},
@@ -2503,16 +2440,18 @@ int ExecuteStreaming(const RunOptions& options, std::string_view success_prefix,
             }
 
             ctx.error.clear();
-            std::string reconnect_error;
-            if (TryReconnectAfterDisconnect(*ctx.backend, reconnect_attempts_remaining,
-                                            ctx.reconnect_attempts_used, ctx.logger,
-                                            reconnect_error)) {
+            const backends::real_sdk::ReconnectAttemptResult reconnect_result =
+                backends::real_sdk::ExecuteReconnectAttempts(
+                    *ctx.backend, reconnect_attempts_remaining, ctx.reconnect_attempts_used,
+                    ctx.logger);
+            ctx.reconnect_attempts_used = reconnect_result.attempts_used_total;
+            if (reconnect_result.reconnected) {
               continue;
             }
 
             ctx.disconnect_failure = true;
             ctx.disconnect_failure_error =
-                reconnect_error.empty() ? disconnect_error : reconnect_error;
+                reconnect_result.error.empty() ? disconnect_error : reconnect_result.error;
             ctx.logger.Error(
                 "reconnect attempts exhausted after disconnect",
                 {{"disconnect_error", disconnect_error},
