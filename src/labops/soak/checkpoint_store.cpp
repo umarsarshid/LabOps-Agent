@@ -1,11 +1,14 @@
 #include "labops/soak/checkpoint_store.hpp"
 
 #include "core/fs_utils.hpp"
+#include "core/json_dom.hpp"
 #include "core/json_utils.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <ios>
@@ -20,6 +23,10 @@ namespace labops::soak {
 
 namespace {
 
+using JsonValue = core::json::Value;
+using JsonParser = core::json::Parser;
+using JsonObject = JsonValue::Object;
+
 bool ReadTextFile(const fs::path& path, std::string& contents, std::string& error) {
   std::ifstream file(path, std::ios::binary);
   if (!file) {
@@ -28,6 +35,94 @@ bool ReadTextFile(const fs::path& path, std::string& contents, std::string& erro
   }
 
   contents.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+  return true;
+}
+
+bool IsInterruptedWriteSimulationEnabled() {
+  const char* raw = std::getenv("LABOPS_SOAK_TEST_INTERRUPT_CHECKPOINT_WRITE");
+  return raw != nullptr && std::string_view(raw) == "1";
+}
+
+bool WriteCheckpointTextAtomic(const fs::path& output_path, std::string_view text,
+                               std::string& error) {
+  if (!IsInterruptedWriteSimulationEnabled()) {
+    return core::WriteTextFileAtomic(output_path, text, error);
+  }
+
+  // Test-only failure injection: simulate a process interruption after
+  // checkpoint payload generation but before publish/rename.
+  if (!core::EnsureParentDirectory(output_path, error)) {
+    return false;
+  }
+
+  const fs::path temp_path = output_path.string() + ".tmp.interrupted";
+  std::ofstream out_file(temp_path, std::ios::binary | std::ios::trunc);
+  if (!out_file) {
+    error = "failed to open simulated interrupted temp output file '" + temp_path.string() + "'";
+    return false;
+  }
+  out_file << text;
+  if (!out_file) {
+    error =
+        "failed while writing simulated interrupted temp output file '" + temp_path.string() + "'";
+    return false;
+  }
+  error = "simulated interrupted checkpoint write before publish";
+  return false;
+}
+
+const JsonValue* FindObjectField(const JsonObject& object, std::string_view key) {
+  const auto it = object.find(std::string(key));
+  if (it == object.end()) {
+    return nullptr;
+  }
+  return &it->second;
+}
+
+bool ParseRequiredStringField(const JsonObject& object, std::string_view key, std::string& value,
+                              std::string& error) {
+  const JsonValue* field = FindObjectField(object, key);
+  if (field == nullptr) {
+    error = "checkpoint missing required field '" + std::string(key) + "'";
+    return false;
+  }
+  if (field->type != JsonValue::Type::kString) {
+    error = "checkpoint field '" + std::string(key) + "' must be a string";
+    return false;
+  }
+  value = field->string_value;
+  return true;
+}
+
+bool ParseOptionalStringField(const JsonObject& object, std::string_view key, std::string& value) {
+  value.clear();
+  const JsonValue* field = FindObjectField(object, key);
+  if (field == nullptr || field->type != JsonValue::Type::kString) {
+    return false;
+  }
+  value = field->string_value;
+  return true;
+}
+
+bool ParseRequiredUnsignedField(const JsonObject& object, std::string_view key,
+                                std::uint64_t& value, std::string& error) {
+  const JsonValue* field = FindObjectField(object, key);
+  if (field == nullptr) {
+    error = "checkpoint missing required field '" + std::string(key) + "'";
+    return false;
+  }
+  if (field->type != JsonValue::Type::kNumber) {
+    error = "checkpoint field '" + std::string(key) + "' must be a non-negative integer";
+    return false;
+  }
+
+  const double number = field->number_value;
+  if (!std::isfinite(number) || number < 0.0 || std::floor(number) != number ||
+      number > static_cast<double>(std::numeric_limits<std::uint64_t>::max())) {
+    error = "checkpoint field '" + std::string(key) + "' must be a non-negative integer";
+    return false;
+  }
+  value = static_cast<std::uint64_t>(number);
   return true;
 }
 
@@ -66,73 +161,7 @@ std::optional<std::uint64_t> FindUnsignedJsonField(const std::string& text, std:
   if (ec != std::errc() || ptr != end) {
     return std::nullopt;
   }
-
   return parsed;
-}
-
-std::optional<std::string> FindStringJsonField(const std::string& text, std::string_view key) {
-  const std::string needle = "\"" + std::string(key) + "\"";
-  const std::size_t key_pos = text.find(needle);
-  if (key_pos == std::string::npos) {
-    return std::nullopt;
-  }
-
-  const std::size_t colon_pos = text.find(':', key_pos + needle.size());
-  if (colon_pos == std::string::npos) {
-    return std::nullopt;
-  }
-
-  std::size_t value_pos = colon_pos + 1;
-  while (value_pos < text.size() &&
-         std::isspace(static_cast<unsigned char>(text[value_pos])) != 0) {
-    ++value_pos;
-  }
-  if (value_pos >= text.size() || text[value_pos] != '"') {
-    return std::nullopt;
-  }
-  ++value_pos;
-
-  std::string parsed;
-  while (value_pos < text.size()) {
-    const char c = text[value_pos++];
-    if (c == '"') {
-      return parsed;
-    }
-    if (c == '\\') {
-      if (value_pos >= text.size()) {
-        return std::nullopt;
-      }
-      const char esc = text[value_pos++];
-      switch (esc) {
-      case '"':
-      case '\\':
-      case '/':
-        parsed.push_back(esc);
-        break;
-      case 'b':
-        parsed.push_back('\b');
-        break;
-      case 'f':
-        parsed.push_back('\f');
-        break;
-      case 'n':
-        parsed.push_back('\n');
-        break;
-      case 'r':
-        parsed.push_back('\r');
-        break;
-      case 't':
-        parsed.push_back('\t');
-        break;
-      default:
-        return std::nullopt;
-      }
-      continue;
-    }
-    parsed.push_back(c);
-  }
-
-  return std::nullopt;
 }
 
 bool FindBoolJsonField(const std::string& text, std::string_view key, bool& value) {
@@ -248,7 +277,7 @@ bool WriteCheckpointJson(const CheckpointState& state, const fs::path& output_pa
       << core::EscapeJson((state.bundle_dir / "soak_checkpoint.json").string()) << "\"\n"
       << "}\n";
 
-  if (!core::WriteTextFileAtomic(output_path, out.str(), error)) {
+  if (!WriteCheckpointTextAtomic(output_path, out.str(), error)) {
     error = "failed while writing soak checkpoint output '" + output_path.string() + "' (" + error +
             ")";
     return false;
@@ -280,68 +309,88 @@ bool LoadCheckpoint(const fs::path& checkpoint_path, CheckpointState& state, std
     return false;
   }
 
-  const auto run_id = FindStringJsonField(text, "run_id");
-  const auto scenario_path = FindStringJsonField(text, "scenario_path");
-  const auto bundle_dir = FindStringJsonField(text, "bundle_dir");
-  const auto frame_cache_path = FindStringJsonField(text, "frame_cache_path");
-  const auto status_text = FindStringJsonField(text, "status");
-  const auto total_duration_ms = FindUnsignedJsonField(text, "total_duration_ms");
-  const auto completed_duration_ms = FindUnsignedJsonField(text, "completed_duration_ms");
-  const auto checkpoints_written = FindUnsignedJsonField(text, "checkpoints_written");
-  const auto frames_total = FindUnsignedJsonField(text, "frames_total");
-  const auto frames_received = FindUnsignedJsonField(text, "frames_received");
-  const auto frames_dropped = FindUnsignedJsonField(text, "frames_dropped");
-  const auto created_at_epoch_ms = FindUnsignedJsonField(text, "created_at_epoch_ms");
-  const auto started_at_epoch_ms = FindUnsignedJsonField(text, "started_at_epoch_ms");
-  const auto finished_at_epoch_ms = FindUnsignedJsonField(text, "finished_at_epoch_ms");
-  const auto updated_at_epoch_ms = FindUnsignedJsonField(text, "updated_at_epoch_ms");
+  JsonValue root;
+  std::string parse_error;
+  JsonParser parser(text);
+  if (!parser.Parse(root, parse_error)) {
+    error = "invalid checkpoint JSON '" + checkpoint_path.string() + "': " + parse_error;
+    return false;
+  }
+  if (root.type != JsonValue::Type::kObject) {
+    error = "checkpoint root must be a JSON object";
+    return false;
+  }
 
-  if (!run_id.has_value() || !scenario_path.has_value() || !bundle_dir.has_value() ||
-      !status_text.has_value() || !total_duration_ms.has_value() ||
-      !completed_duration_ms.has_value() || !checkpoints_written.has_value() ||
-      !frames_total.has_value() || !frames_received.has_value() || !frames_dropped.has_value() ||
-      !created_at_epoch_ms.has_value() || !started_at_epoch_ms.has_value() ||
-      !finished_at_epoch_ms.has_value() || !updated_at_epoch_ms.has_value()) {
-    error = "checkpoint is missing required fields: " + checkpoint_path.string();
+  const JsonObject& object = root.object_value;
+  std::string run_id;
+  std::string scenario_path;
+  std::string bundle_dir;
+  std::string status_text;
+  std::uint64_t total_duration_ms = 0;
+  std::uint64_t completed_duration_ms = 0;
+  std::uint64_t checkpoints_written = 0;
+  std::uint64_t frames_total = 0;
+  std::uint64_t frames_received = 0;
+  std::uint64_t frames_dropped = 0;
+  std::uint64_t created_at_epoch_ms = 0;
+  std::uint64_t started_at_epoch_ms = 0;
+  std::uint64_t finished_at_epoch_ms = 0;
+  std::uint64_t updated_at_epoch_ms = 0;
+  if (!ParseRequiredStringField(object, "run_id", run_id, error) ||
+      !ParseRequiredStringField(object, "scenario_path", scenario_path, error) ||
+      !ParseRequiredStringField(object, "bundle_dir", bundle_dir, error) ||
+      !ParseRequiredStringField(object, "status", status_text, error) ||
+      !ParseRequiredUnsignedField(object, "total_duration_ms", total_duration_ms, error) ||
+      !ParseRequiredUnsignedField(object, "completed_duration_ms", completed_duration_ms, error) ||
+      !ParseRequiredUnsignedField(object, "checkpoints_written", checkpoints_written, error) ||
+      !ParseRequiredUnsignedField(object, "frames_total", frames_total, error) ||
+      !ParseRequiredUnsignedField(object, "frames_received", frames_received, error) ||
+      !ParseRequiredUnsignedField(object, "frames_dropped", frames_dropped, error) ||
+      !ParseRequiredUnsignedField(object, "created_at_epoch_ms", created_at_epoch_ms, error) ||
+      !ParseRequiredUnsignedField(object, "started_at_epoch_ms", started_at_epoch_ms, error) ||
+      !ParseRequiredUnsignedField(object, "finished_at_epoch_ms", finished_at_epoch_ms, error) ||
+      !ParseRequiredUnsignedField(object, "updated_at_epoch_ms", updated_at_epoch_ms, error)) {
+    error = "checkpoint parse failed for '" + checkpoint_path.string() + "': " + error;
     return false;
   }
 
   CheckpointStatus status = CheckpointStatus::kRunning;
-  if (!ParseCheckpointStatus(status_text.value(), status)) {
-    error = "checkpoint has unsupported status value: " + status_text.value();
+  if (!ParseCheckpointStatus(status_text, status)) {
+    error = "checkpoint has unsupported status value: " + status_text;
     return false;
   }
 
-  if (completed_duration_ms.value() > total_duration_ms.value()) {
+  if (completed_duration_ms > total_duration_ms) {
     error = "checkpoint completed_duration_ms exceeds total_duration_ms";
     return false;
   }
 
-  if (run_id->empty() || scenario_path->empty() || bundle_dir->empty()) {
+  if (run_id.empty() || scenario_path.empty() || bundle_dir.empty()) {
     error = "checkpoint contains empty required identity fields";
     return false;
   }
 
-  state.run_id = *run_id;
-  state.scenario_path = fs::path(*scenario_path);
-  state.bundle_dir = fs::path(*bundle_dir);
-  state.frame_cache_path = frame_cache_path.has_value() && !frame_cache_path->empty()
-                               ? fs::path(*frame_cache_path)
-                               : state.bundle_dir / "soak_frames.jsonl";
-  state.total_duration =
-      std::chrono::milliseconds(static_cast<std::int64_t>(total_duration_ms.value()));
+  std::string frame_cache_path;
+  ParseOptionalStringField(object, "frame_cache_path", frame_cache_path);
+
+  state.run_id = run_id;
+  state.scenario_path = fs::path(scenario_path);
+  state.bundle_dir = fs::path(bundle_dir);
+  state.frame_cache_path = !frame_cache_path.empty() ? fs::path(frame_cache_path)
+                                                     : state.bundle_dir / "soak_frames.jsonl";
+  state.total_duration = std::chrono::milliseconds(static_cast<std::int64_t>(total_duration_ms));
   state.completed_duration =
-      std::chrono::milliseconds(static_cast<std::int64_t>(completed_duration_ms.value()));
-  state.checkpoints_written = checkpoints_written.value();
-  state.frames_total = frames_total.value();
-  state.frames_received = frames_received.value();
-  state.frames_dropped = frames_dropped.value();
-  state.timestamps.created_at = FromEpochMilliseconds(created_at_epoch_ms.value());
-  state.timestamps.started_at = FromEpochMilliseconds(started_at_epoch_ms.value());
-  state.timestamps.finished_at = FromEpochMilliseconds(finished_at_epoch_ms.value());
-  state.updated_at = FromEpochMilliseconds(updated_at_epoch_ms.value());
+      std::chrono::milliseconds(static_cast<std::int64_t>(completed_duration_ms));
+  state.checkpoints_written = checkpoints_written;
+  state.frames_total = frames_total;
+  state.frames_received = frames_received;
+  state.frames_dropped = frames_dropped;
+  state.timestamps.created_at = FromEpochMilliseconds(created_at_epoch_ms);
+  state.timestamps.started_at = FromEpochMilliseconds(started_at_epoch_ms);
+  state.timestamps.finished_at = FromEpochMilliseconds(finished_at_epoch_ms);
+  state.updated_at = FromEpochMilliseconds(updated_at_epoch_ms);
   state.status = status;
-  state.stop_reason = FindStringJsonField(text, "stop_reason").value_or("");
+  ParseOptionalStringField(object, "stop_reason", state.stop_reason);
   return true;
 }
 

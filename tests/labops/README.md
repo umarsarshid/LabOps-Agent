@@ -109,6 +109,10 @@ This keeps each test focused on contract verification instead of setup code.
   periodic checkpoints, supports safe pause at checkpoint boundaries, resumes
   from `soak_checkpoint.json`, and completes with full artifacts without
   losing previously captured evidence.
+- `soak_checkpoint_resilience_smoke.cpp`: verifies checkpoint-store robustness
+  behavior by simulating interrupted checkpoint publish (existing checkpoint
+  remains intact) and validating malformed-checkpoint parse diagnostics plus
+  clean recovery after rewriting a valid checkpoint.
 
 ## Connection to the project
 

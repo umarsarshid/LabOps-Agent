@@ -15,6 +15,10 @@ Separating this into its own module makes the behavior easier to reason about, e
   - `soak_checkpoint.json`
   - `checkpoints/checkpoint_<n>.json`
   - `soak_frames.jsonl`
+  - checkpoint JSON loading via shared core DOM parser for stronger malformed
+    diagnostics during resume
+  - atomic checkpoint file publish semantics so interrupted writes do not
+    corrupt existing checkpoint artifacts
 
 ## Connection to the project
 

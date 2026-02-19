@@ -891,6 +891,17 @@ add_labops_smoke_test(
     labops_soak
 )
 
+# Module-level smoke test for checkpoint robustness:
+# - interrupted atomic-write simulation keeps existing checkpoint intact
+# - malformed checkpoint parsing fails clearly and recovers after rewrite.
+add_labops_smoke_test(
+  NAME soak_checkpoint_resilience_smoke
+  SOURCES
+    tests/labops/soak_checkpoint_resilience_smoke.cpp
+  LIBRARIES
+    labops_soak
+)
+
 # Scenario schema validation smoke tests.
 add_labops_smoke_test(
   NAME scenario_validation_smoke
