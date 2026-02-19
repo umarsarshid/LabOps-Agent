@@ -199,6 +199,46 @@ bool ParseScenarioModelRoot(const JsonValue& root, ScenarioModel& model, std::st
   model.thresholds.max_disconnect_count =
       ReadNumberField(root, {"thresholds", "max_disconnect_count"}, {"max_disconnect_count"});
 
+  // Webcam-specific optional section.
+  //
+  // Parsing remains lenient by design: type mismatches in optional fields are
+  // treated as unset values so runtime loading behavior stays backward
+  // compatible while validator remains the strict schema gate.
+  model.webcam.requested_width =
+      ReadU64Field(root, {"webcam", "requested_width"}, {"requested_width"});
+  model.webcam.requested_height =
+      ReadU64Field(root, {"webcam", "requested_height"}, {"requested_height"});
+  model.webcam.requested_fps =
+      ReadNumberField(root, {"webcam", "requested_fps"}, {"requested_fps"});
+  model.webcam.requested_pixel_format =
+      ReadStringField(root, {"webcam", "requested_pixel_format"}, {"requested_pixel_format"});
+
+  const JsonValue* webcam_selector = FindScenarioField(root, {"webcam", "device_selector"}, {});
+  model.webcam.device_selector.reset();
+  if (webcam_selector != nullptr && webcam_selector->type == JsonValue::Type::kObject) {
+    ScenarioModel::Webcam::DeviceSelector parsed_selector;
+    if (const JsonValue* index_value = FindObjectMember(*webcam_selector, "index");
+        index_value != nullptr) {
+      std::uint64_t parsed_index = 0;
+      if (TryGetNonNegativeInteger(*index_value, parsed_index)) {
+        parsed_selector.index = parsed_index;
+      }
+    }
+    if (const JsonValue* id_value = FindObjectMember(*webcam_selector, "id");
+        id_value != nullptr && id_value->type == JsonValue::Type::kString) {
+      parsed_selector.id = id_value->string_value;
+    }
+    if (const JsonValue* name_contains_value = FindObjectMember(*webcam_selector, "name_contains");
+        name_contains_value != nullptr && name_contains_value->type == JsonValue::Type::kString) {
+      parsed_selector.name_contains = name_contains_value->string_value;
+    }
+
+    if (parsed_selector.index.has_value() || parsed_selector.id.has_value() ||
+        parsed_selector.name_contains.has_value()) {
+      model.webcam.device_selector = std::move(parsed_selector);
+    }
+  }
+
   model.netem_profile = ReadStringField(root, {"netem_profile"}, {});
   model.device_selector = ReadStringField(root, {"device_selector"}, {});
 

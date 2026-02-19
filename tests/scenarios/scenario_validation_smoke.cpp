@@ -91,6 +91,38 @@ int main() {
   }
 
   {
+    const std::string valid_webcam_json = R"json(
+{
+  "schema_version": "1.0",
+  "scenario_id": "webcam_selector_smoke",
+  "backend": "webcam",
+  "duration": { "duration_ms": 2000 },
+  "camera": { "fps": 30 },
+  "webcam": {
+    "device_selector": {
+      "index": 0,
+      "name_contains": "usb"
+    },
+    "requested_width": 1280,
+    "requested_height": 720,
+    "requested_fps": 29.97,
+    "requested_pixel_format": "MJPG"
+  },
+  "thresholds": { "min_avg_fps": 1.0 }
+}
+)json";
+
+    labops::scenarios::ValidationReport report;
+    std::string error;
+    if (!labops::scenarios::ValidateScenarioText(valid_webcam_json, report, error)) {
+      Fail("ValidateScenarioText failed unexpectedly for valid webcam json: " + error);
+    }
+    if (!report.valid || !report.issues.empty()) {
+      Fail("expected valid webcam scenario to produce zero validation issues");
+    }
+  }
+
+  {
     const fs::path temp_root = CreateUniqueTempDir("labops-netem-profile-smoke");
     const fs::path tools_dir = temp_root / "tools" / "netem_profiles";
     const fs::path scenarios_dir = temp_root / "scenarios";
@@ -158,6 +190,50 @@ int main() {
     }
 
     fs::remove_all(temp_root, ec);
+  }
+
+  {
+    const std::string invalid_webcam_json = R"json(
+{
+  "schema_version": "1.0",
+  "scenario_id": "webcam_invalid_fields",
+  "backend": "webcam",
+  "duration": { "duration_ms": 1000 },
+  "camera": { "fps": 20 },
+  "webcam": {
+    "device_selector": {},
+    "requested_width": 0,
+    "requested_height": -1,
+    "requested_fps": 0,
+    "requested_pixel_format": ""
+  },
+  "thresholds": { "min_avg_fps": 1.0 }
+}
+)json";
+
+    labops::scenarios::ValidationReport report;
+    std::string error;
+    if (!labops::scenarios::ValidateScenarioText(invalid_webcam_json, report, error)) {
+      Fail("ValidateScenarioText failed unexpectedly for invalid webcam json: " + error);
+    }
+    if (report.valid) {
+      Fail("expected invalid webcam scenario to fail validation");
+    }
+    if (!ContainsIssue(report, "webcam.device_selector", "at least one selector key")) {
+      Fail("missing actionable issue for webcam.device_selector");
+    }
+    if (!ContainsIssue(report, "webcam.requested_width", "positive integer")) {
+      Fail("missing actionable issue for webcam.requested_width");
+    }
+    if (!ContainsIssue(report, "webcam.requested_height", "positive integer")) {
+      Fail("missing actionable issue for webcam.requested_height");
+    }
+    if (!ContainsIssue(report, "webcam.requested_fps", "positive number")) {
+      Fail("missing actionable issue for webcam.requested_fps");
+    }
+    if (!ContainsIssue(report, "webcam.requested_pixel_format", "non-empty string")) {
+      Fail("missing actionable issue for webcam.requested_pixel_format");
+    }
   }
 
   {

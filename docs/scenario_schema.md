@@ -27,6 +27,7 @@ A scenario JSON document is an object with these top-level sections:
 - `backend`
 - `apply_mode`
 - `device_selector`
+- `webcam`
 - `netem_profile`
 - `camera`
 - `sim_faults`
@@ -72,6 +73,7 @@ A scenario JSON document is an object with these top-level sections:
 - Purpose: selects execution backend implementation.
 - Allowed values:
   - `"sim"` (default when field is omitted)
+  - `"webcam"` (direct webcam backend path)
   - `"real_stub"` (deterministic non-SDK stub path useful for integration
     contract testing)
 
@@ -143,6 +145,28 @@ A scenario JSON document is an object with these top-level sections:
     - `inter_packet_delay_us` (integer, optional, `>= 0`)
     - runtime note: real backend applies these as GigE-only best-effort knobs
       (USB/non-GigE runs continue and record unsupported evidence)
+
+### `webcam` (optional)
+
+- Type: object
+- Purpose: minimal additive webcam request hints and webcam-specific selector.
+- Fields:
+  - `device_selector` (object, optional)
+    - `index` (integer, optional, `>= 0`)
+    - `id` (string, optional, non-empty)
+    - `name_contains` (string, optional, non-empty)
+    - constraint: at least one selector key should be present when
+      `device_selector` is provided.
+  - `requested_width` (integer, optional, `> 0`)
+  - `requested_height` (integer, optional, `> 0`)
+  - `requested_fps` (number, optional, `> 0`; accepts integer or decimal)
+  - `requested_pixel_format` (string, optional, non-empty)
+
+Notes:
+
+- This section is additive and does not replace existing `camera` fields.
+- Current milestone behavior is validation/model support; backend application
+  wiring follows in later webcam milestones.
 
 ### `sim_faults` (optional)
 

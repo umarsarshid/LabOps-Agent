@@ -61,6 +61,22 @@ struct ScenarioModel {
     std::optional<double> max_disconnect_count;
   } thresholds;
 
+  struct Webcam {
+    struct DeviceSelector {
+      std::optional<std::uint64_t> index;
+      std::optional<std::string> id;
+      std::optional<std::string> name_contains;
+
+      bool operator==(const DeviceSelector& other) const = default;
+    };
+
+    std::optional<DeviceSelector> device_selector;
+    std::optional<std::uint64_t> requested_width;
+    std::optional<std::uint64_t> requested_height;
+    std::optional<double> requested_fps;
+    std::optional<std::string> requested_pixel_format;
+  } webcam;
+
   std::optional<std::string> backend;
   std::optional<std::string> apply_mode;
   std::optional<std::string> netem_profile;

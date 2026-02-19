@@ -569,6 +569,86 @@ void ValidateDeviceSelector(const JsonValue& root, ValidationReport& report) {
   }
 }
 
+void ValidateWebcam(const JsonValue& root, ValidationReport& report) {
+  const JsonValue* webcam = GetField(root, "webcam");
+  if (webcam == nullptr) {
+    return;
+  }
+  if (!IsObject(webcam)) {
+    AddIssue(report, "webcam", "must be an object when provided");
+    return;
+  }
+
+  if (const JsonValue* requested_width = GetField(*webcam, "requested_width");
+      requested_width != nullptr) {
+    std::uint64_t parsed = 0;
+    if (!TryGetNonNegativeInteger(*requested_width, parsed) || parsed == 0U) {
+      AddIssue(report, "webcam.requested_width", "must be a positive integer");
+    }
+  }
+
+  if (const JsonValue* requested_height = GetField(*webcam, "requested_height");
+      requested_height != nullptr) {
+    std::uint64_t parsed = 0;
+    if (!TryGetNonNegativeInteger(*requested_height, parsed) || parsed == 0U) {
+      AddIssue(report, "webcam.requested_height", "must be a positive integer");
+    }
+  }
+
+  if (const JsonValue* requested_fps = GetField(*webcam, "requested_fps");
+      requested_fps != nullptr) {
+    if (!IsNumber(requested_fps) || !std::isfinite(requested_fps->number_value) ||
+        requested_fps->number_value <= 0.0) {
+      AddIssue(report, "webcam.requested_fps", "must be a positive number");
+    }
+  }
+
+  if (const JsonValue* requested_pixel_format = GetField(*webcam, "requested_pixel_format");
+      requested_pixel_format != nullptr) {
+    if (!IsString(requested_pixel_format) || requested_pixel_format->string_value.empty()) {
+      AddIssue(report, "webcam.requested_pixel_format", "must be a non-empty string");
+    }
+  }
+
+  const JsonValue* device_selector = GetField(*webcam, "device_selector");
+  if (device_selector == nullptr) {
+    return;
+  }
+  if (!IsObject(device_selector)) {
+    AddIssue(report, "webcam.device_selector", "must be an object when provided");
+    return;
+  }
+
+  bool has_selector_field = false;
+  if (const JsonValue* index = GetField(*device_selector, "index"); index != nullptr) {
+    has_selector_field = true;
+    std::uint64_t parsed = 0;
+    if (!TryGetNonNegativeInteger(*index, parsed)) {
+      AddIssue(report, "webcam.device_selector.index", "must be a non-negative integer");
+    }
+  }
+
+  if (const JsonValue* id = GetField(*device_selector, "id"); id != nullptr) {
+    has_selector_field = true;
+    if (!IsString(id) || id->string_value.empty()) {
+      AddIssue(report, "webcam.device_selector.id", "must be a non-empty string");
+    }
+  }
+
+  if (const JsonValue* name_contains = GetField(*device_selector, "name_contains");
+      name_contains != nullptr) {
+    has_selector_field = true;
+    if (!IsString(name_contains) || name_contains->string_value.empty()) {
+      AddIssue(report, "webcam.device_selector.name_contains", "must be a non-empty string");
+    }
+  }
+
+  if (!has_selector_field) {
+    AddIssue(report, "webcam.device_selector",
+             "must include at least one selector key: index, id, or name_contains");
+  }
+}
+
 void ValidateScenarioObject(const JsonValue& root, const fs::path& scenario_path,
                             ValidationReport& report) {
   if (root.type != JsonValue::Type::kObject) {
@@ -604,6 +684,7 @@ void ValidateScenarioObject(const JsonValue& root, const fs::path& scenario_path
   ValidateNetemProfile(root, scenario_path, report);
   ValidateBackend(root, report);
   ValidateDeviceSelector(root, report);
+  ValidateWebcam(root, report);
 }
 
 } // namespace

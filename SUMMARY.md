@@ -1,76 +1,87 @@
 # LabOps Summary
 
-## Commit: explicit config-status event emission helper
+## Commit: additive webcam scenario fields
 
 Date: 2026-02-19
 
 ### Goal
-Add a single explicit event helper for config-status outcomes so `CONFIG_APPLIED`, `CONFIG_UNSUPPORTED`, and `CONFIG_ADJUSTED` are emitted through one contract path, while preserving existing payload schemas and run behavior.
+Add minimal, additive webcam-specific scenario fields so old scenarios remain valid and new webcam scenarios can be validated cleanly.
 
 ### Implemented
 
-1. Added unified config-status emission API in events facade
-- Updated `src/events/emitter.hpp`:
-  - added `Emitter::ConfigStatusEvent` with `Kind`:
-    - `kApplied`
-    - `kUnsupported`
-    - `kAdjusted`
-  - added `EmitConfigStatus(const ConfigStatusEvent&, std::string&)`
-- Updated `src/events/emitter.cpp`:
-  - implemented `EmitConfigStatus(...)` with explicit switch-to-event mapping:
-    - `kApplied -> CONFIG_APPLIED`
-    - `kUnsupported -> CONFIG_UNSUPPORTED`
-    - `kAdjusted -> CONFIG_ADJUSTED`
-  - keeps payload keys exactly aligned with existing event contract.
+1. Extended `ScenarioModel` with optional webcam fields
+- Updated `src/scenarios/model.hpp`:
+  - added `ScenarioModel::Webcam` section with:
+    - `device_selector` object:
+      - `index`
+      - `id`
+      - `name_contains`
+    - `requested_width`
+    - `requested_height`
+    - `requested_fps`
+    - `requested_pixel_format`
+- Updated `src/scenarios/model.cpp` parser:
+  - parses canonical `webcam.*` fields.
+  - keeps parsing lenient for optional fields (type mismatches treated as unset).
+  - added compatibility fallback parsing for top-level requested webcam hints:
+    - `requested_width`, `requested_height`, `requested_fps`,
+      `requested_pixel_format`.
 
 Why:
-- Before this change, config outcome payload construction was spread across multiple methods/callsites.
-- One helper centralizes contract enforcement and reduces drift risk.
+- Provides a normalized place for webcam-specific requests without changing
+  existing `camera` structures.
+- Keeps run-path compatibility behavior stable while adding new schema surface.
 
-2. Kept legacy typed emitter methods as wrappers (backward-compatible)
-- `EmitConfigApplied(...)`, `EmitConfigUnsupported(...)`, and
-  `EmitConfigAdjusted(...)` now delegate to `EmitConfigStatus(...)`.
-
-Why:
-- Preserves current callsites/tests and avoids breaking external/internal usage.
-- Introduces the new helper without changing behavior expectations.
-
-3. Wired run orchestration to the explicit helper
-- Updated `src/labops/cli/router.cpp`:
-  - real apply path now emits unsupported and adjusted rows through
-    `EmitConfigStatus(...)`.
-  - config-applied emission points also route through `EmitConfigStatus(...)`.
-
-Why:
-- Ensures backend config outcome reporting uses the unified helper in real
-  execution flow, not only in isolated emitter tests.
-- Keeps unsupported knobs reportable in best-effort runs without changing
-  pass/fail semantics.
-
-4. Extended emitter smoke coverage for unsupported/adjusted
-- Updated `tests/events/emitter_smoke.cpp`:
-  - emits `CONFIG_UNSUPPORTED` and `CONFIG_ADJUSTED` via the new helper.
-  - verifies payload fields remain contract-accurate.
-  - updated expected event-line count and ordering assertions.
+2. Added strict validator rules for new webcam section
+- Updated `src/scenarios/validator.cpp`:
+  - new `ValidateWebcam(...)` checks:
+    - `webcam` must be an object when present.
+    - `webcam.device_selector` must be object when present.
+    - selector must include at least one key of `index`, `id`, `name_contains`.
+    - `index` must be non-negative integer.
+    - `id` and `name_contains` must be non-empty strings.
+    - `requested_width` and `requested_height` must be positive integers.
+    - `requested_fps` must be a positive number (int or decimal).
+    - `requested_pixel_format` must be a non-empty string.
+  - wired webcam validation into scenario object validation flow.
 
 Why:
-- Locks the new helper contract with explicit payload assertions.
-- Prevents regression where helper emits incorrect keys or misses fields.
+- Gives actionable schema errors for webcam scenarios.
+- Keeps old scenarios unaffected (additive optional section only).
 
-5. Updated module docs
-- Updated `src/events/README.md` to document explicit config-status helper usage.
-- Updated `tests/events/README.md` to include emitter smoke coverage details.
+3. Added/expanded tests to prove additive compatibility
+- Updated `tests/scenarios/scenario_validation_smoke.cpp`:
+  - added valid webcam scenario that passes validation.
+  - added invalid webcam scenario with targeted assertion checks for each new
+    field’s error path/message.
+- Updated `tests/scenarios/scenario_model_equivalence_smoke.cpp`:
+  - compares parsed webcam request fields in canonical vs legacy-style forms.
+  - adds dedicated parse test for `webcam.device_selector` object values.
 
 Why:
-- Keeps design intent and test surface discoverable for future contributors.
+- Demonstrates old+new validation behavior explicitly.
+- Prevents future regressions in parser/validator treatment of webcam fields.
+
+4. Updated schema docs/readmes
+- Updated `docs/scenario_schema.md`:
+  - top-level shape includes `webcam`.
+  - backend enum docs include `webcam`.
+  - documents all new webcam field definitions and constraints.
+- Updated `src/scenarios/README.md` and `tests/scenarios/README.md`.
+
+Why:
+- Keeps operator/developer documentation aligned with actual validator/model
+  behavior.
 
 ### Files changed
-- `src/events/emitter.hpp`
-- `src/events/emitter.cpp`
-- `src/labops/cli/router.cpp`
-- `tests/events/emitter_smoke.cpp`
-- `src/events/README.md`
-- `tests/events/README.md`
+- `docs/scenario_schema.md`
+- `src/scenarios/README.md`
+- `src/scenarios/model.hpp`
+- `src/scenarios/model.cpp`
+- `src/scenarios/validator.cpp`
+- `tests/scenarios/README.md`
+- `tests/scenarios/scenario_validation_smoke.cpp`
+- `tests/scenarios/scenario_model_equivalence_smoke.cpp`
 - `SUMMARY.md`
 
 ### Verification
@@ -84,7 +95,7 @@ Why:
 - Result: passed
 
 3. Focused tests
-- `ctest --test-dir build -R "emitter_smoke|real_apply_mode_events_smoke|run_stream_trace_smoke" --output-on-failure`
+- `ctest --test-dir build -R "scenario_validation_smoke|scenario_model_equivalence_smoke|validate_actionable_smoke" --output-on-failure`
 - Result: passed
 
 4. Full suite
@@ -92,6 +103,5 @@ Why:
 - Result: passed (`75/75`)
 
 ### Notes
-- No event payload schema changes were introduced.
-- Best-effort real-backend runs still record unsupported knobs as evidence
-  (`CONFIG_UNSUPPORTED`) without failing the run, matching existing behavior.
+- Existing scenarios remain valid because all webcam additions are optional.
+- New webcam scenarios now validate with clear, field-specific messages.

@@ -79,6 +79,17 @@ void AssertModelEquivalent(const labops::scenarios::ScenarioModel& canonical,
   AssertOptionalEqual(canonical.thresholds.max_disconnect_count,
                       legacy.thresholds.max_disconnect_count, "thresholds.max_disconnect_count");
 
+  AssertOptionalEqual(canonical.webcam.requested_width, legacy.webcam.requested_width,
+                      "webcam.requested_width");
+  AssertOptionalEqual(canonical.webcam.requested_height, legacy.webcam.requested_height,
+                      "webcam.requested_height");
+  AssertOptionalEqual(canonical.webcam.requested_fps, legacy.webcam.requested_fps,
+                      "webcam.requested_fps");
+  AssertOptionalEqual(canonical.webcam.requested_pixel_format, legacy.webcam.requested_pixel_format,
+                      "webcam.requested_pixel_format");
+  AssertOptionalEqual(canonical.webcam.device_selector, legacy.webcam.device_selector,
+                      "webcam.device_selector");
+
   AssertOptionalEqual(canonical.netem_profile, legacy.netem_profile, "netem_profile");
   AssertOptionalEqual(canonical.device_selector, legacy.device_selector, "device_selector");
 }
@@ -108,6 +119,12 @@ int main() {
       "packet_size_bytes": 9000,
       "inter_packet_delay_us": 200
     }
+  },
+  "webcam": {
+    "requested_width": 1280,
+    "requested_height": 720,
+    "requested_fps": 59.94,
+    "requested_pixel_format": "MJPG"
   },
   "sim_faults": {
     "seed": 99,
@@ -145,6 +162,10 @@ int main() {
   "trigger_source": "line1",
   "trigger_activation": "rising_edge",
   "roi": { "x": 16, "y": 32, "width": 640, "height": 480 },
+  "requested_width": 1280,
+  "requested_height": 720,
+  "requested_fps": 59.94,
+  "requested_pixel_format": "MJPG",
   "packet_size_bytes": 9000,
   "inter_packet_delay_us": 200,
   "seed": 99,
@@ -175,6 +196,41 @@ int main() {
     }
 
     AssertModelEquivalent(canonical_model, legacy_model);
+  }
+
+  {
+    const std::string webcam_selector_json = R"json(
+{
+  "schema_version": "1.0",
+  "scenario_id": "webcam_selector_model",
+  "duration": { "duration_ms": 1000 },
+  "camera": { "fps": 30 },
+  "thresholds": { "min_avg_fps": 1.0 },
+  "webcam": {
+    "device_selector": {
+      "index": 2,
+      "id": "dev-123",
+      "name_contains": "logitech"
+    }
+  }
+}
+)json";
+
+    labops::scenarios::ScenarioModel model;
+    std::string error;
+    if (!labops::scenarios::ParseScenarioModelText(webcam_selector_json, model, error)) {
+      Fail("failed to parse webcam selector scenario model: " + error);
+    }
+    if (!model.webcam.device_selector.has_value()) {
+      Fail("expected webcam.device_selector to be parsed");
+    }
+    AssertOptionalEqual(model.webcam.device_selector->index, std::optional<std::uint64_t>(2),
+                        "webcam.device_selector.index");
+    AssertOptionalEqual(model.webcam.device_selector->id, std::optional<std::string>("dev-123"),
+                        "webcam.device_selector.id");
+    AssertOptionalEqual(model.webcam.device_selector->name_contains,
+                        std::optional<std::string>("logitech"),
+                        "webcam.device_selector.name_contains");
   }
 
   {
