@@ -88,6 +88,12 @@ add_library(labops_backends
   src/backends/sdk_stub/real_camera_backend_stub.cpp
   src/backends/sim/scenario_config.cpp
   src/backends/sim/sim_camera_backend.cpp
+  src/backends/webcam/capabilities.cpp
+  src/backends/webcam/platform_probe.cpp
+  src/backends/webcam/linux/platform_probe_linux.cpp
+  src/backends/webcam/macos/platform_probe_macos.cpp
+  src/backends/webcam/windows/platform_probe_windows.cpp
+  src/backends/webcam/webcam_backend.cpp
 )
 target_include_directories(labops_backends PUBLIC src)
 target_compile_features(labops_backends PUBLIC cxx_std_20)
@@ -444,6 +450,17 @@ add_labops_smoke_test(
   NAME sdk_stub_backend_smoke
   SOURCES
     tests/backends/sdk_stub_backend_smoke.cpp
+  LIBRARIES
+    labops_backends
+)
+
+# Smoke test validating webcam backend scaffolding:
+# compile-stable module with explicit BACKEND_NOT_AVAILABLE behavior until
+# per-platform capture implementations are integrated.
+add_labops_smoke_test(
+  NAME webcam_backend_smoke
+  SOURCES
+    tests/backends/webcam_backend_smoke.cpp
   LIBRARIES
     labops_backends
 )

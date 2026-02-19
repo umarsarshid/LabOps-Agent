@@ -56,12 +56,22 @@ The project needs one consistent workflow that can run on different camera stack
 - `sdk_stub/`: non-proprietary real-backend integration boundary.
   - includes `RealCameraBackendStub` so builds can compile without vendor SDKs.
   - controlled by `LABOPS_ENABLE_REAL_BACKEND` build flag (default `OFF`).
+- `webcam/`: cross-platform webcam backend scaffold.
+  - adds a standalone `WebcamBackend` implementing `ICameraBackend`.
+  - introduces a capability model (`unsupported`, `best_effort`, `supported`)
+    for key webcam controls (`exposure`, `gain`, `pixel_format`, `roi`,
+    `trigger`, `frame_rate`).
+  - includes per-platform availability probes under `linux/`, `macos/`, and
+    `windows/` with explicit `BACKEND_NOT_AVAILABLE` reasons until capture
+    loops are implemented.
 
 ## Current and planned backends
 
 - `sim/`: deterministic simulator for development and CI.
 - `real_sdk/`: SDK-enabled real-backend skeleton and object factory.
 - `sdk_stub/`: integration-ready stub path for proprietary camera SDKs.
+- `webcam/`: direct webcam backend path (Linux V4L2 / macOS AVFoundation /
+  Windows Media Foundation) scaffolded for incremental implementation.
 
 ## Connection to the project
 

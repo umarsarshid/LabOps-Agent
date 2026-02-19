@@ -19,6 +19,10 @@ stable interface regardless of real hardware availability.
 - `sdk_stub_backend_smoke.cpp`: validates that the real-backend stub compiles
   without proprietary SDK dependencies and returns actionable non-implemented
   errors.
+- `webcam_backend_smoke.cpp`: validates that the webcam backend module compiles
+  across platforms, preserves config params, and returns explicit
+  `BACKEND_NOT_AVAILABLE` errors until platform capture implementations are
+  wired.
 - `real_backend_factory_smoke.cpp`: validates real-backend factory behavior in
   both build states (enabled -> real skeleton, disabled -> sdk_stub fallback)
   and verifies enabled-lifecycle start/stop safety without requiring camera
