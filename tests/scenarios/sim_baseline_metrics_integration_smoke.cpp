@@ -1,9 +1,10 @@
-#include "labops/cli/router.hpp"
+#include "../common/assertions.hpp"
+#include "../common/run_fixtures.hpp"
+#include "../common/scenario_fixtures.hpp"
+#include "../common/temp_dir.hpp"
 
 #include <cctype>
-#include <chrono>
 #include <cmath>
-#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -17,10 +18,11 @@ namespace fs = std::filesystem;
 
 namespace {
 
-void Fail(std::string_view message) {
-  std::cerr << message << '\n';
-  std::abort();
-}
+using labops::tests::common::CreateUniqueTempDir;
+using labops::tests::common::Fail;
+using labops::tests::common::RequireScenarioPath;
+using labops::tests::common::RequireSingleRunBundleDir;
+using labops::tests::common::RunScenarioOrFail;
 
 void AssertRange(double value, double min_inclusive, double max_inclusive, std::string_view name) {
   if (value < min_inclusive || value > max_inclusive) {
@@ -87,75 +89,17 @@ std::optional<double> ParseNestedNumber(std::string_view text, std::string_view 
   return ParseNumberAfterKey(text, field_key, object_pos + object_needle.size());
 }
 
-fs::path ResolveBaselineScenarioPath() {
-  const std::vector<fs::path> roots = {
-      fs::current_path(),
-      fs::current_path() / "..",
-      fs::current_path() / "../..",
-  };
-
-  for (const auto& root : roots) {
-    const fs::path candidate = root / "scenarios" / "sim_baseline.json";
-    if (fs::exists(candidate) && fs::is_regular_file(candidate)) {
-      return candidate;
-    }
-  }
-  return {};
-}
-
-fs::path ResolveSingleBundleDir(const fs::path& out_root) {
-  if (!fs::exists(out_root)) {
-    Fail("output root does not exist");
-  }
-
-  std::vector<fs::path> bundle_dirs;
-  for (const auto& entry : fs::directory_iterator(out_root)) {
-    if (!entry.is_directory()) {
-      continue;
-    }
-    const std::string name = entry.path().filename().string();
-    if (name.rfind("run-", 0) == 0U) {
-      bundle_dirs.push_back(entry.path());
-    }
-  }
-
-  if (bundle_dirs.size() != 1U) {
-    Fail("expected exactly one run bundle directory");
-  }
-  return bundle_dirs.front();
-}
-
 } // namespace
 
 int main() {
-  const fs::path scenario_path = ResolveBaselineScenarioPath();
-  if (scenario_path.empty()) {
-    Fail("unable to resolve scenarios/sim_baseline.json");
-  }
-
-  const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                          std::chrono::system_clock::now().time_since_epoch())
-                          .count();
-  const fs::path out_dir =
-      fs::temp_directory_path() / ("labops-baseline-metrics-" + std::to_string(now_ms));
+  const fs::path scenario_path = RequireScenarioPath("sim_baseline.json");
+  const fs::path temp_root = CreateUniqueTempDir("labops-baseline-metrics");
+  const fs::path out_dir = temp_root / "out";
   std::error_code cleanup_ec;
-  fs::remove_all(out_dir, cleanup_ec);
+  RunScenarioOrFail(scenario_path, out_dir, {},
+                    "labops run failed for scenarios/sim_baseline.json");
 
-  std::vector<std::string> argv_storage = {
-      "labops", "run", scenario_path.string(), "--out", out_dir.string(),
-  };
-  std::vector<char*> argv;
-  argv.reserve(argv_storage.size());
-  for (auto& arg : argv_storage) {
-    argv.push_back(arg.data());
-  }
-
-  const int exit_code = labops::cli::Dispatch(static_cast<int>(argv.size()), argv.data());
-  if (exit_code != 0) {
-    Fail("labops run failed for scenarios/sim_baseline.json");
-  }
-
-  const fs::path bundle_dir = ResolveSingleBundleDir(out_dir);
+  const fs::path bundle_dir = RequireSingleRunBundleDir(out_dir);
   const fs::path bundle_manifest_path = bundle_dir / "bundle_manifest.json";
   const fs::path metrics_json_path = bundle_dir / "metrics.json";
   if (!fs::exists(bundle_manifest_path)) {
@@ -205,7 +149,7 @@ int main() {
   AssertRange(interval_p95.value(), 30000.0, 36000.0, "inter_frame_interval_us.p95_us");
   AssertRange(jitter_p95.value(), 0.0, 1000.0, "inter_frame_jitter_us.p95_us");
 
-  fs::remove_all(out_dir, cleanup_ec);
+  fs::remove_all(temp_root, cleanup_ec);
   std::cout << "sim_baseline_metrics_integration_smoke: ok\n";
   return 0;
 }

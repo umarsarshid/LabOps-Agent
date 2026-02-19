@@ -1,90 +1,25 @@
-#include "labops/cli/router.hpp"
+#include "../common/assertions.hpp"
+#include "../common/run_fixtures.hpp"
+#include "../common/scenario_fixtures.hpp"
+#include "../common/temp_dir.hpp"
 
 #include <algorithm>
-#include <chrono>
-#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <vector>
 
 namespace fs = std::filesystem;
 
 namespace {
 
-void Fail(std::string_view message) {
-  std::cerr << message << '\n';
-  std::abort();
-}
-
-fs::path ResolveBaselineScenarioPath() {
-  const std::vector<fs::path> roots = {
-      fs::current_path(),
-      fs::current_path() / "..",
-      fs::current_path() / "../..",
-  };
-
-  for (const auto& root : roots) {
-    const fs::path candidate = root / "scenarios" / "sim_baseline.json";
-    if (fs::exists(candidate) && fs::is_regular_file(candidate)) {
-      return candidate;
-    }
-  }
-
-  return {};
-}
-
-void RunScenario(const fs::path& scenario_path, const fs::path& out_root) {
-  std::vector<std::string> argv_storage = {
-      "labops", "run", scenario_path.string(), "--out", out_root.string(),
-  };
-  std::vector<char*> argv;
-  argv.reserve(argv_storage.size());
-  for (auto& arg : argv_storage) {
-    argv.push_back(arg.data());
-  }
-
-  const int exit_code = labops::cli::Dispatch(static_cast<int>(argv.size()), argv.data());
-  if (exit_code != 0) {
-    Fail("labops run returned non-zero exit code");
-  }
-}
-
-std::vector<fs::path> CollectBundleDirs(const fs::path& out_root) {
-  if (!fs::exists(out_root)) {
-    Fail("output root does not exist");
-  }
-
-  std::vector<fs::path> bundle_dirs;
-  for (const auto& entry : fs::directory_iterator(out_root)) {
-    if (!entry.is_directory()) {
-      continue;
-    }
-    const std::string name = entry.path().filename().string();
-    if (name.rfind("run-", 0) == 0U) {
-      bundle_dirs.push_back(entry.path());
-    }
-  }
-
-  std::sort(bundle_dirs.begin(), bundle_dirs.end());
-  return bundle_dirs;
-}
-
-std::size_t CountNicRawFiles(const fs::path& bundle_dir) {
-  std::size_t count = 0;
-  for (const auto& entry : fs::directory_iterator(bundle_dir)) {
-    if (!entry.is_regular_file()) {
-      continue;
-    }
-    const std::string name = entry.path().filename().string();
-    if (name.rfind("nic_", 0) == 0U && entry.path().extension() == ".txt") {
-      ++count;
-    }
-  }
-  return count;
-}
+using labops::tests::common::CollectRunBundleDirs;
+using labops::tests::common::CountFilesWithPrefixAndExtension;
+using labops::tests::common::CreateUniqueTempDir;
+using labops::tests::common::Fail;
+using labops::tests::common::RequireScenarioPath;
+using labops::tests::common::RunScenarioOrFail;
 
 void AssertBundleHasRequiredFiles(const fs::path& bundle_dir) {
   const fs::path run_json = bundle_dir / "run.json";
@@ -124,7 +59,7 @@ void AssertBundleHasRequiredFiles(const fs::path& bundle_dir) {
   if (!fs::exists(report_html)) {
     Fail("bundle missing report.html");
   }
-  if (CountNicRawFiles(bundle_dir) == 0U) {
+  if (CountFilesWithPrefixAndExtension(bundle_dir, "nic_", ".txt") == 0U) {
     Fail("bundle missing raw NIC command output files (nic_*.txt)");
   }
 }
@@ -132,26 +67,16 @@ void AssertBundleHasRequiredFiles(const fs::path& bundle_dir) {
 } // namespace
 
 int main() {
-  const fs::path scenario_path = ResolveBaselineScenarioPath();
-  if (scenario_path.empty()) {
-    Fail("unable to resolve scenarios/sim_baseline.json");
-  }
+  const fs::path scenario_path = RequireScenarioPath("sim_baseline.json");
 
-  const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                          std::chrono::system_clock::now().time_since_epoch())
-                          .count();
-  const fs::path root =
-      fs::temp_directory_path() / ("labops-bundle-layout-" + std::to_string(now_ms));
+  const fs::path root = CreateUniqueTempDir("labops-bundle-layout");
   const fs::path out_root = root / "out";
 
   std::error_code ec;
-  fs::remove_all(root, ec);
+  RunScenarioOrFail(scenario_path, out_root);
+  RunScenarioOrFail(scenario_path, out_root);
 
-  RunScenario(scenario_path, out_root);
-  std::this_thread::sleep_for(std::chrono::milliseconds(2));
-  RunScenario(scenario_path, out_root);
-
-  const std::vector<fs::path> bundle_dirs = CollectBundleDirs(out_root);
+  const std::vector<fs::path> bundle_dirs = CollectRunBundleDirs(out_root);
   if (bundle_dirs.size() != 2U) {
     Fail("expected two run bundle directories after two runs");
   }

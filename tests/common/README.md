@@ -23,6 +23,14 @@ Centralizing these keeps tests shorter and makes failure behavior consistent.
   - `RemovePathBestEffort(...)`
 - `cli_dispatch.hpp`
   - `DispatchArgs(...)` for vector-of-strings CLI invocation.
+- `scenario_fixtures.hpp`
+  - `ResolveScenarioPath(...)` / `RequireScenarioPath(...)`
+  - `WriteFixtureFile(...)` / `WriteScenarioFixture(...)`
+- `run_fixtures.hpp`
+  - `DispatchRunScenario(...)` / `RunScenarioOrFail(...)`
+  - `CollectRunBundleDirs(...)` / `RequireSingleRunBundleDir(...)`
+  - `CollectFilesWithPrefixAndExtension(...)`
+  - `CountFilesWithPrefixAndExtension(...)`
 
 ## Connection to the project
 

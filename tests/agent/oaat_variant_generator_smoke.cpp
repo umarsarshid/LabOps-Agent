@@ -1,77 +1,29 @@
+#include "../common/assertions.hpp"
+#include "../common/scenario_fixtures.hpp"
+#include "../common/temp_dir.hpp"
 #include "agent/variant_generator.hpp"
 
-#include <chrono>
-#include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
-#include <iterator>
 #include <string>
-#include <string_view>
-#include <vector>
 
 namespace fs = std::filesystem;
 
 namespace {
 
-void Fail(std::string_view message) {
-  std::cerr << message << '\n';
-  std::abort();
-}
-
-void AssertContains(std::string_view text, std::string_view needle) {
-  if (text.find(needle) == std::string_view::npos) {
-    std::cerr << "expected to find: " << needle << '\n';
-    std::cerr << "actual text: " << text << '\n';
-    std::abort();
-  }
-}
-
-fs::path ResolveScenarioPath(const std::string& scenario_name) {
-  const std::vector<fs::path> roots = {
-      fs::current_path(),
-      fs::current_path() / "..",
-      fs::current_path() / "../..",
-  };
-
-  for (const auto& root : roots) {
-    const fs::path candidate = root / "scenarios" / scenario_name;
-    if (fs::exists(candidate) && fs::is_regular_file(candidate)) {
-      return candidate;
-    }
-  }
-
-  return {};
-}
-
-std::string ReadFile(const fs::path& path) {
-  std::ifstream input(path, std::ios::binary);
-  if (!input) {
-    Fail("failed to read file: " + path.string());
-  }
-  return std::string((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-}
+using labops::tests::common::AssertContains;
+using labops::tests::common::CreateUniqueTempDir;
+using labops::tests::common::Fail;
+using labops::tests::common::ReadFileToString;
+using labops::tests::common::RequireScenarioPath;
 
 } // namespace
 
 int main() {
-  const fs::path base_scenario_path = ResolveScenarioPath("dropped_frames.json");
-  if (base_scenario_path.empty()) {
-    Fail("unable to resolve scenarios/dropped_frames.json");
-  }
-
-  const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                          std::chrono::system_clock::now().time_since_epoch())
-                          .count();
-  const fs::path temp_root =
-      fs::temp_directory_path() / ("labops-oaat-variant-generator-" + std::to_string(now_ms));
+  const fs::path base_scenario_path = RequireScenarioPath("dropped_frames.json");
+  const fs::path temp_root = CreateUniqueTempDir("labops-oaat-variant-generator");
 
   std::error_code ec;
-  fs::remove_all(temp_root, ec);
-  fs::create_directories(temp_root, ec);
-  if (ec) {
-    Fail("failed to create temp root");
-  }
 
   const fs::path original_cwd = fs::current_path(ec);
   if (ec) {
@@ -128,7 +80,7 @@ int main() {
     AssertContains(file_name, expected_base_name);
     AssertContains(file_name, variant.knob_name);
 
-    const std::string scenario_text = ReadFile(variant.scenario_path);
+    const std::string scenario_text = ReadFileToString(variant.scenario_path);
     AssertContains(scenario_text, "\"scenario_id\"");
     AssertContains(scenario_text, variant.knob_path.substr(0, variant.knob_path.find('.')));
   }
@@ -138,7 +90,7 @@ int main() {
     Fail("variants_manifest.json missing");
   }
 
-  const std::string manifest_text = ReadFile(result.manifest_path);
+  const std::string manifest_text = ReadFileToString(result.manifest_path);
   AssertContains(manifest_text, "\"playbook_id\":\"dropped_frames_oaat_v1\"");
   AssertContains(manifest_text, "\"knob_name\":\"packet_delay_ms\"");
   AssertContains(manifest_text, "\"knob_name\":\"fps\"");

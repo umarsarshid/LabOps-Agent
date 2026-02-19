@@ -1,5 +1,7 @@
 #include "../common/assertions.hpp"
 #include "../common/cli_dispatch.hpp"
+#include "../common/run_fixtures.hpp"
+#include "../common/scenario_fixtures.hpp"
 #include "../common/temp_dir.hpp"
 
 #include <cmath>
@@ -18,42 +20,8 @@ using labops::tests::common::CreateUniqueTempDir;
 using labops::tests::common::DispatchArgs;
 using labops::tests::common::Fail;
 using labops::tests::common::ReadFileToString;
-
-fs::path ResolveScenarioPath(const std::string& scenario_name) {
-  const std::vector<fs::path> roots = {
-      fs::current_path(),
-      fs::current_path() / "..",
-      fs::current_path() / "../..",
-  };
-
-  for (const auto& root : roots) {
-    const fs::path candidate = root / "scenarios" / scenario_name;
-    if (fs::exists(candidate) && fs::is_regular_file(candidate)) {
-      return candidate;
-    }
-  }
-
-  return {};
-}
-
-fs::path ResolveSingleRunBundleDir(const fs::path& out_root) {
-  std::vector<fs::path> bundle_dirs;
-  for (const auto& entry : fs::directory_iterator(out_root)) {
-    if (!entry.is_directory()) {
-      continue;
-    }
-    const std::string name = entry.path().filename().string();
-    if (name.rfind("run-", 0) == 0U) {
-      bundle_dirs.push_back(entry.path());
-    }
-  }
-
-  if (bundle_dirs.size() != 1U) {
-    Fail("expected exactly one run bundle directory");
-  }
-
-  return bundle_dirs.front();
-}
+using labops::tests::common::RequireScenarioPath;
+using labops::tests::common::RequireSingleRunBundleDir;
 
 double ExtractDeltaForMetricFromDiffJson(const std::string& diff_json,
                                          const std::string& metric_name) {
@@ -103,15 +71,8 @@ double ExtractDeltaForMetricFromDiffJson(const std::string& diff_json,
 } // namespace
 
 int main() {
-  const fs::path baseline_scenario_path = ResolveScenarioPath("sim_baseline.json");
-  if (baseline_scenario_path.empty()) {
-    Fail("unable to resolve scenarios/sim_baseline.json");
-  }
-
-  const fs::path run_scenario_path = ResolveScenarioPath("dropped_frames.json");
-  if (run_scenario_path.empty()) {
-    Fail("unable to resolve scenarios/dropped_frames.json");
-  }
+  const fs::path baseline_scenario_path = RequireScenarioPath("sim_baseline.json");
+  const fs::path run_scenario_path = RequireScenarioPath("dropped_frames.json");
 
   const fs::path temp_root = CreateUniqueTempDir("labops-compare-diff");
   const fs::path out_dir = temp_root / "out";
@@ -137,7 +98,7 @@ int main() {
     Fail("run command failed");
   }
 
-  const fs::path run_bundle_dir = ResolveSingleRunBundleDir(out_dir);
+  const fs::path run_bundle_dir = RequireSingleRunBundleDir(out_dir);
   const fs::path baseline_dir = temp_root / "baselines" / "sim_baseline";
 
   if (DispatchArgs({"labops", "compare", "--baseline", baseline_dir.string(), "--run",

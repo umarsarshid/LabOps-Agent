@@ -1,7 +1,8 @@
-#include "labops/cli/router.hpp"
+#include "../common/assertions.hpp"
+#include "../common/run_fixtures.hpp"
+#include "../common/scenario_fixtures.hpp"
 
 #include <chrono>
-#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -13,10 +14,11 @@ namespace fs = std::filesystem;
 
 namespace {
 
-void Fail(std::string_view message) {
-  std::cerr << message << '\n';
-  std::abort();
-}
+using labops::tests::common::CountFilesWithPrefixAndExtension;
+using labops::tests::common::Fail;
+using labops::tests::common::RequireScenarioPath;
+using labops::tests::common::RequireSingleRunBundleDir;
+using labops::tests::common::RunScenarioOrFail;
 
 std::vector<std::string> ReadNonEmptyLines(const fs::path& file_path) {
   std::ifstream input(file_path, std::ios::binary);
@@ -44,87 +46,19 @@ bool ContainsEventType(const std::vector<std::string>& lines, std::string_view e
   return false;
 }
 
-fs::path ResolveSingleBundleDir(const fs::path& out_root) {
-  if (!fs::exists(out_root)) {
-    Fail("output root does not exist");
-  }
-
-  std::vector<fs::path> bundle_dirs;
-  for (const auto& entry : fs::directory_iterator(out_root)) {
-    if (!entry.is_directory()) {
-      continue;
-    }
-    const std::string name = entry.path().filename().string();
-    if (name.rfind("run-", 0) == 0U) {
-      bundle_dirs.push_back(entry.path());
-    }
-  }
-
-  if (bundle_dirs.size() != 1U) {
-    Fail("expected exactly one run bundle directory");
-  }
-  return bundle_dirs.front();
-}
-
-fs::path ResolveScenarioPath(const std::string& scenario_name) {
-  // The test can run from different working directories depending on IDE/CI.
-  // Probe common roots so the scenario files remain discoverable.
-  const std::vector<fs::path> roots = {
-      fs::current_path(),
-      fs::current_path() / "..",
-      fs::current_path() / "../..",
-  };
-
-  for (const auto& root : roots) {
-    const fs::path candidate = root / "scenarios" / scenario_name;
-    if (fs::exists(candidate) && fs::is_regular_file(candidate)) {
-      return candidate;
-    }
-  }
-
-  return {};
-}
-
-std::size_t CountNicRawFiles(const fs::path& bundle_dir) {
-  std::size_t count = 0;
-  for (const auto& entry : fs::directory_iterator(bundle_dir)) {
-    if (!entry.is_regular_file()) {
-      continue;
-    }
-    const std::string name = entry.path().filename().string();
-    if (name.rfind("nic_", 0) == 0U && entry.path().extension() == ".txt") {
-      ++count;
-    }
-  }
-  return count;
-}
-
 void RunScenarioE2E(const std::string& scenario_name, std::uint64_t run_suffix) {
-  const fs::path scenario_path = ResolveScenarioPath(scenario_name);
-  if (scenario_path.empty()) {
-    Fail("unable to resolve scenario path for: " + scenario_name);
-  }
+  const fs::path scenario_path = RequireScenarioPath(scenario_name);
 
   const fs::path out_dir = fs::temp_directory_path() /
                            ("labops-starter-" + scenario_name + "-" + std::to_string(run_suffix));
   std::error_code ec;
   fs::remove_all(out_dir, ec);
 
-  std::vector<std::string> argv_storage = {
-      "labops", "run", scenario_path.string(), "--out", out_dir.string(),
-  };
-  std::vector<char*> argv;
-  argv.reserve(argv_storage.size());
-  for (auto& arg : argv_storage) {
-    argv.push_back(arg.data());
-  }
+  RunScenarioOrFail(scenario_path, out_dir, {},
+                    std::string("labops run returned non-zero exit code for scenario: ") +
+                        scenario_name);
 
-  const int exit_code = labops::cli::Dispatch(static_cast<int>(argv.size()), argv.data());
-  if (exit_code != 0) {
-    Fail("labops run returned non-zero exit code for scenario: " + scenario_name);
-  }
-
-  const fs::path bundle_dir = ResolveSingleBundleDir(out_dir);
+  const fs::path bundle_dir = RequireSingleRunBundleDir(out_dir);
   const fs::path run_json = bundle_dir / "run.json";
   const fs::path scenario_json = bundle_dir / "scenario.json";
   const fs::path hostprobe_json = bundle_dir / "hostprobe.json";
@@ -161,7 +95,7 @@ void RunScenarioE2E(const std::string& scenario_name, std::uint64_t run_suffix) 
   if (!fs::exists(report_html)) {
     Fail("report.html missing for scenario: " + scenario_name);
   }
-  if (CountNicRawFiles(bundle_dir) == 0U) {
+  if (CountFilesWithPrefixAndExtension(bundle_dir, "nic_", ".txt") == 0U) {
     Fail("raw NIC command outputs missing for scenario: " + scenario_name);
   }
 

@@ -1,48 +1,22 @@
+#include "../common/assertions.hpp"
+#include "../common/scenario_fixtures.hpp"
+#include "../common/temp_dir.hpp"
 #include "agent/experiment_runner.hpp"
 
-#include <chrono>
-#include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
-#include <iterator>
 #include <string>
 #include <string_view>
-#include <vector>
 
 namespace fs = std::filesystem;
 
 namespace {
 
-void Fail(std::string_view message) {
-  std::cerr << message << '\n';
-  std::abort();
-}
-
-void AssertContains(std::string_view text, std::string_view needle) {
-  if (text.find(needle) == std::string_view::npos) {
-    std::cerr << "expected to find: " << needle << '\n';
-    std::cerr << "actual text: " << text << '\n';
-    std::abort();
-  }
-}
-
-fs::path ResolveScenarioPath(const std::string& scenario_name) {
-  const std::vector<fs::path> roots = {
-      fs::current_path(),
-      fs::current_path() / "..",
-      fs::current_path() / "../..",
-  };
-
-  for (const auto& root : roots) {
-    const fs::path candidate = root / "scenarios" / scenario_name;
-    if (fs::exists(candidate) && fs::is_regular_file(candidate)) {
-      return candidate;
-    }
-  }
-
-  return {};
-}
+using labops::tests::common::AssertContains;
+using labops::tests::common::CreateUniqueTempDir;
+using labops::tests::common::Fail;
+using labops::tests::common::ReadFileToString;
+using labops::tests::common::RequireScenarioPath;
 
 void AssertRequiredRunArtifacts(const fs::path& bundle_dir) {
   const std::vector<fs::path> required = {
@@ -59,40 +33,15 @@ void AssertRequiredRunArtifacts(const fs::path& bundle_dir) {
   }
 }
 
-std::string ReadFile(const fs::path& path) {
-  std::ifstream input(path, std::ios::binary);
-  if (!input) {
-    Fail("failed to read file: " + path.string());
-  }
-  return std::string((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-}
-
 } // namespace
 
 int main() {
-  const fs::path baseline_scenario_path = ResolveScenarioPath("sim_baseline.json");
-  if (baseline_scenario_path.empty()) {
-    Fail("unable to resolve scenarios/sim_baseline.json");
-  }
-
-  const fs::path variant_scenario_path = ResolveScenarioPath("dropped_frames.json");
-  if (variant_scenario_path.empty()) {
-    Fail("unable to resolve scenarios/dropped_frames.json");
-  }
-
-  const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                          std::chrono::system_clock::now().time_since_epoch())
-                          .count();
-  const fs::path temp_root =
-      fs::temp_directory_path() / ("labops-agent-experiment-runner-" + std::to_string(now_ms));
+  const fs::path baseline_scenario_path = RequireScenarioPath("sim_baseline.json");
+  const fs::path variant_scenario_path = RequireScenarioPath("dropped_frames.json");
+  const fs::path temp_root = CreateUniqueTempDir("labops-agent-experiment-runner");
   const fs::path output_root = temp_root / "agent-output";
 
   std::error_code ec;
-  fs::remove_all(temp_root, ec);
-  fs::create_directories(temp_root, ec);
-  if (ec) {
-    Fail("failed to create temp root");
-  }
 
   labops::agent::ExperimentRunRequest request;
   request.baseline_scenario_path = baseline_scenario_path.string();
@@ -127,10 +76,10 @@ int main() {
   }
   AssertRequiredRunArtifacts(result.variant_bundle_dir);
 
-  const std::string baseline_run_json = ReadFile(result.baseline_dir / "run.json");
+  const std::string baseline_run_json = ReadFileToString(result.baseline_dir / "run.json");
   AssertContains(baseline_run_json, "\"scenario_id\":\"sim_baseline\"");
 
-  const std::string variant_run_json = ReadFile(result.variant_bundle_dir / "run.json");
+  const std::string variant_run_json = ReadFileToString(result.variant_bundle_dir / "run.json");
   AssertContains(variant_run_json, "\"scenario_id\":\"dropped_frames\"");
 
   fs::remove_all(temp_root, ec);

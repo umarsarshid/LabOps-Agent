@@ -1,64 +1,25 @@
-#include "labops/cli/router.hpp"
+#include "../common/assertions.hpp"
+#include "../common/cli_dispatch.hpp"
+#include "../common/run_fixtures.hpp"
+#include "../common/scenario_fixtures.hpp"
+#include "../common/temp_dir.hpp"
 
-#include <chrono>
-#include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
-#include <iterator>
 #include <string>
 #include <string_view>
-#include <vector>
 
 namespace fs = std::filesystem;
 
 namespace {
 
-void Fail(std::string_view message) {
-  std::cerr << message << '\n';
-  std::abort();
-}
-
-void AssertContains(std::string_view text, std::string_view needle) {
-  if (text.find(needle) == std::string_view::npos) {
-    std::cerr << "expected to find: " << needle << '\n';
-    std::cerr << "actual text: " << text << '\n';
-    std::abort();
-  }
-}
-
-fs::path ResolveScenarioPath(const std::string& scenario_name) {
-  // Integration tests can execute from different working directories in
-  // editors and CI. Probe a few common roots to keep scenario lookup stable.
-  const std::vector<fs::path> roots = {
-      fs::current_path(),
-      fs::current_path() / "..",
-      fs::current_path() / "../..",
-  };
-
-  for (const auto& root : roots) {
-    const fs::path candidate = root / "scenarios" / scenario_name;
-    if (fs::exists(candidate) && fs::is_regular_file(candidate)) {
-      return candidate;
-    }
-  }
-
-  return {};
-}
-
-std::vector<fs::path> CollectNicRawFiles(const fs::path& bundle_dir) {
-  std::vector<fs::path> files;
-  for (const auto& entry : fs::directory_iterator(bundle_dir)) {
-    if (!entry.is_regular_file()) {
-      continue;
-    }
-    const std::string name = entry.path().filename().string();
-    if (name.rfind("nic_", 0) == 0U && entry.path().extension() == ".txt") {
-      files.push_back(entry.path());
-    }
-  }
-  return files;
-}
+using labops::tests::common::AssertContains;
+using labops::tests::common::CollectFilesWithPrefixAndExtension;
+using labops::tests::common::CreateUniqueTempDir;
+using labops::tests::common::DispatchArgs;
+using labops::tests::common::Fail;
+using labops::tests::common::ReadFileToString;
+using labops::tests::common::RequireScenarioPath;
 
 void AssertNoRunIdSubdirectories(const fs::path& baseline_dir) {
   for (const auto& entry : fs::directory_iterator(baseline_dir)) {
@@ -75,23 +36,10 @@ void AssertNoRunIdSubdirectories(const fs::path& baseline_dir) {
 } // namespace
 
 int main() {
-  const fs::path scenario_path = ResolveScenarioPath("sim_baseline.json");
-  if (scenario_path.empty()) {
-    Fail("unable to resolve scenarios/sim_baseline.json");
-  }
-
-  const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                          std::chrono::system_clock::now().time_since_epoch())
-                          .count();
-  const fs::path temp_root =
-      fs::temp_directory_path() / ("labops-baseline-capture-" + std::to_string(now_ms));
+  const fs::path scenario_path = RequireScenarioPath("sim_baseline.json");
+  const fs::path temp_root = CreateUniqueTempDir("labops-baseline-capture");
 
   std::error_code ec;
-  fs::remove_all(temp_root, ec);
-  fs::create_directories(temp_root, ec);
-  if (ec) {
-    Fail("failed to create temporary root");
-  }
 
   const fs::path original_cwd = fs::current_path(ec);
   if (ec) {
@@ -103,19 +51,7 @@ int main() {
     Fail("failed to switch cwd for baseline capture test");
   }
 
-  std::vector<std::string> argv_storage = {
-      "labops",
-      "baseline",
-      "capture",
-      scenario_path.string(),
-  };
-  std::vector<char*> argv;
-  argv.reserve(argv_storage.size());
-  for (auto& arg : argv_storage) {
-    argv.push_back(arg.data());
-  }
-
-  const int exit_code = labops::cli::Dispatch(static_cast<int>(argv.size()), argv.data());
+  const int exit_code = DispatchArgs({"labops", "baseline", "capture", scenario_path.string()});
   if (exit_code != 0) {
     fs::current_path(original_cwd, ec);
     Fail("labops baseline capture returned non-zero exit code");
@@ -173,28 +109,16 @@ int main() {
     fs::current_path(original_cwd, ec);
     Fail("baseline missing bundle_manifest.json");
   }
-  if (CollectNicRawFiles(baseline_dir).empty()) {
+  if (CollectFilesWithPrefixAndExtension(baseline_dir, "nic_", ".txt").empty()) {
     fs::current_path(original_cwd, ec);
     Fail("baseline missing raw NIC command output files (nic_*.txt)");
   }
 
-  std::ifstream metrics_csv_input(metrics_csv, std::ios::binary);
-  if (!metrics_csv_input) {
-    fs::current_path(original_cwd, ec);
-    Fail("failed to open baseline metrics.csv");
-  }
-  const std::string metrics_csv_content((std::istreambuf_iterator<char>(metrics_csv_input)),
-                                        std::istreambuf_iterator<char>());
+  const std::string metrics_csv_content = ReadFileToString(metrics_csv);
   AssertContains(metrics_csv_content, "avg_fps,");
   AssertContains(metrics_csv_content, "drop_rate_percent");
 
-  std::ifstream metrics_json_input(metrics_json, std::ios::binary);
-  if (!metrics_json_input) {
-    fs::current_path(original_cwd, ec);
-    Fail("failed to open baseline metrics.json");
-  }
-  const std::string metrics_json_content((std::istreambuf_iterator<char>(metrics_json_input)),
-                                         std::istreambuf_iterator<char>());
+  const std::string metrics_json_content = ReadFileToString(metrics_json);
   AssertContains(metrics_json_content, "\"avg_fps\":");
   AssertContains(metrics_json_content, "\"drop_rate_percent\":");
 
