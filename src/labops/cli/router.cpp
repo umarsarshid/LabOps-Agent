@@ -24,8 +24,8 @@
 #include "core/errors/exit_codes.hpp"
 #include "core/json_dom.hpp"
 #include "core/schema/run_contract.hpp"
+#include "events/emitter.hpp"
 #include "events/event_model.hpp"
-#include "events/jsonl_writer.hpp"
 #include "events/transport_anomaly.hpp"
 #include "hostprobe/system_probe.hpp"
 #include "labops/soak/checkpoint_store.hpp"
@@ -40,6 +40,7 @@
 #include <chrono>
 #include <cmath>
 #include <csignal>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -1628,59 +1629,8 @@ fs::path ResolveExecutionOutputDir(const RunOptions& options, const core::schema
 bool AppendTraceEvent(events::EventType type, std::chrono::system_clock::time_point ts,
                       std::map<std::string, std::string> payload, const fs::path& output_dir,
                       fs::path& events_path, std::string& error) {
-  events::Event event;
-  event.ts = ts;
-  event.type = type;
-  event.payload = std::move(payload);
-  return events::AppendEventJsonl(event, output_dir, events_path, error);
-}
-
-std::map<std::string, std::string>
-BuildConfigAppliedPayload(const core::schema::RunInfo& run_info,
-                          const backends::BackendConfig& applied_params) {
-  std::map<std::string, std::string> payload = {
-      {"run_id", run_info.run_id},
-      {"scenario_id", run_info.config.scenario_id},
-      {"applied_count", std::to_string(applied_params.size())},
-  };
-
-  // Prefix backend params so reserved metadata fields (`run_id`, `scenario_id`)
-  // remain unambiguous in downstream parsers.
-  for (const auto& [key, value] : applied_params) {
-    payload["param." + key] = value;
-  }
-
-  return payload;
-}
-
-std::map<std::string, std::string>
-BuildConfigUnsupportedPayload(const core::schema::RunInfo& run_info,
-                              const backends::real_sdk::UnsupportedParam& unsupported,
-                              const backends::real_sdk::ParamApplyMode mode) {
-  return {
-      {"run_id", run_info.run_id},
-      {"scenario_id", run_info.config.scenario_id},
-      {"apply_mode", backends::real_sdk::ToString(mode)},
-      {"generic_key", unsupported.generic_key},
-      {"requested_value", unsupported.requested_value},
-      {"reason", unsupported.reason},
-  };
-}
-
-std::map<std::string, std::string>
-BuildConfigAdjustedPayload(const core::schema::RunInfo& run_info,
-                           const backends::real_sdk::AppliedParam& adjusted,
-                           const backends::real_sdk::ParamApplyMode mode) {
-  return {
-      {"run_id", run_info.run_id},
-      {"scenario_id", run_info.config.scenario_id},
-      {"apply_mode", backends::real_sdk::ToString(mode)},
-      {"generic_key", adjusted.generic_key},
-      {"node_name", adjusted.node_name},
-      {"requested_value", adjusted.requested_value},
-      {"applied_value", adjusted.applied_value},
-      {"reason", adjusted.adjustment_reason},
-  };
+  events::Emitter emitter(output_dir, events_path);
+  return emitter.EmitRaw(type, ts, std::move(payload), error);
 }
 
 std::string ToLowerAscii(std::string value) {
@@ -1788,6 +1738,7 @@ bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan&
   config_verify_path.clear();
   camera_config_path.clear();
   config_report_path.clear();
+  events::Emitter emitter(bundle_dir, events_path);
 
   backends::real_sdk::ApplyParamsResult apply_result;
   auto write_human_config_reports = [&](std::string_view collection_error,
@@ -1886,10 +1837,17 @@ bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan&
     }
     for (const auto& unsupported : apply_result.unsupported) {
       std::string event_error;
-      if (!AppendTraceEvent(
-              events::EventType::kConfigUnsupported, std::chrono::system_clock::now(),
-              BuildConfigUnsupportedPayload(run_info, unsupported, run_plan.real_apply_mode),
-              bundle_dir, events_path, event_error)) {
+      if (!emitter.EmitConfigUnsupported(
+              {
+                  .ts = std::chrono::system_clock::now(),
+                  .run_id = run_info.run_id,
+                  .scenario_id = run_info.config.scenario_id,
+                  .apply_mode = backends::real_sdk::ToString(run_plan.real_apply_mode),
+                  .generic_key = unsupported.generic_key,
+                  .requested_value = unsupported.requested_value,
+                  .reason = unsupported.reason,
+              },
+              event_error)) {
         logger.Warn("failed to append CONFIG_UNSUPPORTED event on strict apply failure",
                     {{"error", event_error}});
       }
@@ -1899,10 +1857,17 @@ bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan&
   append_skipped_transport_tuning_rows();
 
   for (const auto& unsupported : apply_result.unsupported) {
-    if (!AppendTraceEvent(
-            events::EventType::kConfigUnsupported, std::chrono::system_clock::now(),
-            BuildConfigUnsupportedPayload(run_info, unsupported, run_plan.real_apply_mode),
-            bundle_dir, events_path, error)) {
+    if (!emitter.EmitConfigUnsupported(
+            {
+                .ts = std::chrono::system_clock::now(),
+                .run_id = run_info.run_id,
+                .scenario_id = run_info.config.scenario_id,
+                .apply_mode = backends::real_sdk::ToString(run_plan.real_apply_mode),
+                .generic_key = unsupported.generic_key,
+                .requested_value = unsupported.requested_value,
+                .reason = unsupported.reason,
+            },
+            error)) {
       return false;
     }
     logger.Warn("config unsupported in best-effort mode",
@@ -1914,9 +1879,19 @@ bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan&
     if (!applied.adjusted) {
       continue;
     }
-    if (!AppendTraceEvent(events::EventType::kConfigAdjusted, std::chrono::system_clock::now(),
-                          BuildConfigAdjustedPayload(run_info, applied, run_plan.real_apply_mode),
-                          bundle_dir, events_path, error)) {
+    if (!emitter.EmitConfigAdjusted(
+            {
+                .ts = std::chrono::system_clock::now(),
+                .run_id = run_info.run_id,
+                .scenario_id = run_info.config.scenario_id,
+                .apply_mode = backends::real_sdk::ToString(run_plan.real_apply_mode),
+                .generic_key = applied.generic_key,
+                .node_name = applied.node_name,
+                .requested_value = applied.requested_value,
+                .applied_value = applied.applied_value,
+                .reason = applied.adjustment_reason,
+            },
+            error)) {
       return false;
     }
   }
@@ -2325,6 +2300,8 @@ int InitializeArtifacts(const RunOptions& options, RunExecutionContext& ctx) {
 
 int ConfigureBackend(const RunOptions& options, ScenarioRunResult* run_result,
                      RunExecutionContext& ctx) {
+  events::Emitter emitter(ctx.bundle_dir, ctx.events_path);
+
   if (!BuildBackendFromRunPlan(ctx.run_plan, ctx.backend, ctx.error)) {
     ctx.logger.Error("backend selection failed", {{"error", ctx.error}});
     std::cerr << "error: backend selection failed: " << ctx.error << '\n';
@@ -2360,9 +2337,14 @@ int ConfigureBackend(const RunOptions& options, ScenarioRunResult* run_result,
       return kExitFailure;
     }
 
-    if (!AppendTraceEvent(events::EventType::kConfigApplied, std::chrono::system_clock::now(),
-                          BuildConfigAppliedPayload(ctx.run_info, ctx.applied_params),
-                          ctx.bundle_dir, ctx.events_path, ctx.error)) {
+    if (!emitter.EmitConfigApplied(
+            {
+                .ts = std::chrono::system_clock::now(),
+                .run_id = ctx.run_info.run_id,
+                .scenario_id = ctx.run_info.config.scenario_id,
+                .applied_params = ctx.applied_params,
+            },
+            ctx.error)) {
       ctx.logger.Error("failed to append CONFIG_APPLIED event", {{"error", ctx.error}});
       std::cerr << "error: failed to append CONFIG_APPLIED event: " << ctx.error << '\n';
       return kExitFailure;
@@ -2436,9 +2418,14 @@ int ConfigureBackend(const RunOptions& options, ScenarioRunResult* run_result,
 
   if (!ctx.config_applied_event_emitted) {
     const auto config_applied_at = std::chrono::system_clock::now();
-    if (!AppendTraceEvent(events::EventType::kConfigApplied, config_applied_at,
-                          BuildConfigAppliedPayload(ctx.run_info, ctx.applied_params),
-                          ctx.bundle_dir, ctx.events_path, ctx.error)) {
+    if (!emitter.EmitConfigApplied(
+            {
+                .ts = config_applied_at,
+                .run_id = ctx.run_info.run_id,
+                .scenario_id = ctx.run_info.config.scenario_id,
+                .applied_params = ctx.applied_params,
+            },
+            ctx.error)) {
       ctx.logger.Error("failed to append CONFIG_APPLIED event", {{"error", ctx.error}});
       std::cerr << "error: failed to append CONFIG_APPLIED event: " << ctx.error << '\n';
       return kExitFailure;
@@ -2477,18 +2464,19 @@ int ConfigureBackend(const RunOptions& options, ScenarioRunResult* run_result,
     ctx.run_info.timestamps.started_at = started_at;
   }
 
-  if (!AppendTraceEvent(events::EventType::kStreamStarted, started_at,
-                        {
-                            {"run_id", ctx.run_info.run_id},
-                            {"scenario_id", ctx.run_info.config.scenario_id},
-                            {"backend", ctx.run_info.config.backend},
-                            {"duration_ms", std::to_string(ctx.run_plan.duration.count())},
-                            {"fps", std::to_string(ctx.run_plan.sim_config.fps)},
-                            {"seed", std::to_string(ctx.run_plan.sim_config.seed)},
-                            {"soak_mode", options.soak_mode ? "true" : "false"},
-                            {"resume", ctx.is_resume ? "true" : "false"},
-                        },
-                        ctx.bundle_dir, ctx.events_path, ctx.error)) {
+  if (!emitter.EmitStreamStarted(
+          {
+              .ts = started_at,
+              .run_id = ctx.run_info.run_id,
+              .scenario_id = ctx.run_info.config.scenario_id,
+              .backend = ctx.run_info.config.backend,
+              .duration_ms = static_cast<std::uint64_t>(ctx.run_plan.duration.count()),
+              .fps = ctx.run_plan.sim_config.fps,
+              .seed = ctx.run_plan.sim_config.seed,
+              .soak_mode = options.soak_mode,
+              .resume = ctx.is_resume,
+          },
+          ctx.error)) {
     ctx.logger.Error("failed to append STREAM_STARTED event", {{"error", ctx.error}});
     StopBackendIfStreamStarted(ctx);
     std::cerr << "error: failed to append STREAM_STARTED event: " << ctx.error << '\n';
@@ -2511,26 +2499,28 @@ int ConfigureBackend(const RunOptions& options, ScenarioRunResult* run_result,
 
 int ExecuteStreaming(const RunOptions& options, std::string_view success_prefix,
                      ScenarioRunResult* run_result, RunExecutionContext& ctx) {
+  events::Emitter emitter(ctx.bundle_dir, ctx.events_path);
+
   auto append_frame_event = [&](const backends::FrameSample& frame) {
     const bool dropped = frame.dropped.has_value() && frame.dropped.value();
-    events::EventType event_type = events::EventType::kFrameReceived;
+    events::Emitter::FrameOutcomeKind outcome_kind = events::Emitter::FrameOutcomeKind::kReceived;
     std::string drop_reason;
     switch (frame.outcome) {
     case backends::FrameOutcome::kDropped:
-      event_type = events::EventType::kFrameDropped;
+      outcome_kind = events::Emitter::FrameOutcomeKind::kDropped;
       drop_reason = "sim_fault_injection";
       break;
     case backends::FrameOutcome::kTimeout:
-      event_type = events::EventType::kFrameTimeout;
+      outcome_kind = events::Emitter::FrameOutcomeKind::kTimeout;
       drop_reason = "acquisition_timeout";
       break;
     case backends::FrameOutcome::kIncomplete:
-      event_type = events::EventType::kFrameIncomplete;
+      outcome_kind = events::Emitter::FrameOutcomeKind::kIncomplete;
       drop_reason = "incomplete_frame";
       break;
     case backends::FrameOutcome::kReceived:
     default:
-      event_type = events::EventType::kFrameReceived;
+      outcome_kind = events::Emitter::FrameOutcomeKind::kReceived;
       break;
     }
 
@@ -2543,17 +2533,17 @@ int ExecuteStreaming(const RunOptions& options, std::string_view success_prefix,
       ++ctx.received_count;
     }
 
-    std::map<std::string, std::string> payload = {
-        {"run_id", ctx.run_info.run_id},
-        {"frame_id", std::to_string(frame.frame_id)},
-        {"size_bytes", std::to_string(frame.size_bytes)},
-        {"dropped", dropped ? "true" : "false"},
-    };
-    if (dropped) {
-      payload["reason"] = drop_reason.empty() ? "backend_marked_dropped" : drop_reason;
-    }
-    return AppendTraceEvent(event_type, frame.timestamp, std::move(payload), ctx.bundle_dir,
-                            ctx.events_path, ctx.error);
+    return emitter.EmitFrameOutcome(
+        {
+            .ts = frame.timestamp,
+            .outcome = outcome_kind,
+            .run_id = ctx.run_info.run_id,
+            .frame_id = frame.frame_id,
+            .size_bytes = frame.size_bytes,
+            .dropped = dropped,
+            .reason = drop_reason.empty() ? std::nullopt : std::optional<std::string>(drop_reason),
+        },
+        ctx.error);
   };
 
   ScopedInterruptSignalHandler scoped_signal_handler;
@@ -3016,6 +3006,8 @@ int ExecuteStreaming(const RunOptions& options, std::string_view success_prefix,
 
 int FinalizeMetricsAndReports(const RunOptions& options, ScenarioRunResult* run_result,
                               RunExecutionContext& ctx) {
+  events::Emitter emitter(ctx.bundle_dir, ctx.events_path);
+
   if (ctx.run_plan.backend == kBackendRealStub) {
     AttachTransportCountersToRunInfo(ctx.backend->DumpConfig(), ctx.run_info);
   }
@@ -3095,15 +3087,18 @@ int FinalizeMetricsAndReports(const RunOptions& options, ScenarioRunResult* run_
   }
   for (const auto& anomaly : transport_anomalies) {
     ctx.top_anomalies.push_back(anomaly.summary);
-    if (!AppendTraceEvent(events::EventType::kTransportAnomaly, ctx.run_info.timestamps.finished_at,
-                          {{"run_id", ctx.run_info.run_id},
-                           {"scenario_id", ctx.run_info.config.scenario_id},
-                           {"heuristic_id", anomaly.heuristic_id},
-                           {"counter", anomaly.counter_name},
-                           {"observed_value", std::to_string(anomaly.observed_value)},
-                           {"threshold", std::to_string(anomaly.threshold)},
-                           {"summary", anomaly.summary}},
-                          ctx.bundle_dir, ctx.events_path, ctx.error)) {
+    if (!emitter.EmitTransportAnomaly(
+            {
+                .ts = ctx.run_info.timestamps.finished_at,
+                .run_id = ctx.run_info.run_id,
+                .scenario_id = ctx.run_info.config.scenario_id,
+                .heuristic_id = anomaly.heuristic_id,
+                .counter = anomaly.counter_name,
+                .observed_value = anomaly.observed_value,
+                .threshold = anomaly.threshold,
+                .summary = anomaly.summary,
+            },
+            ctx.error)) {
       ctx.logger.Error("failed to append TRANSPORT_ANOMALY event", {{"error", ctx.error}});
       std::cerr << "error: failed to append TRANSPORT_ANOMALY event: " << ctx.error << '\n';
       return kExitFailure;

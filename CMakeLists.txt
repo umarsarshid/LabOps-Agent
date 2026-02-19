@@ -62,6 +62,7 @@ target_compile_features(labops_schema PUBLIC cxx_std_20)
 
 # Event model and JSONL writer for timeline evidence emission.
 add_library(labops_events
+  src/events/emitter.cpp
   src/events/event_model.cpp
   src/events/jsonl_writer.cpp
   src/events/transport_anomaly.cpp
@@ -404,6 +405,15 @@ add_labops_smoke_test(
   NAME events_jsonl_smoke
   SOURCES
     tests/events/events_jsonl_smoke.cpp
+  LIBRARIES
+    labops_events
+)
+
+# Smoke test for typed event emitter facade payload contracts.
+add_labops_smoke_test(
+  NAME emitter_smoke
+  SOURCES
+    tests/events/emitter_smoke.cpp
   LIBRARIES
     labops_events
 )
