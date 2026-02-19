@@ -2036,18 +2036,75 @@ std::vector<fs::path> CollectNicRawArtifactPaths(const fs::path& bundle_dir) {
   return paths;
 }
 
-// Centralized run execution keeps `run` and `baseline capture` behavior aligned
-// so artifact contracts and metrics math never diverge between modes.
-int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundle_dir,
-                               bool allow_zip_bundle, std::string_view success_prefix,
-                               ScenarioRunResult* run_result) {
-  core::logging::Logger logger(options.log_level);
+// Shared mutable state for one scenario execution. This keeps stage boundaries
+// explicit while preserving the existing run artifacts and exit-code contract.
+struct RunExecutionContext {
+  explicit RunExecutionContext(core::logging::LogLevel log_level) : logger(log_level) {}
 
-  if (run_result != nullptr) {
-    *run_result = ScenarioRunResult{};
+  core::logging::Logger logger;
+  std::string error;
+  RunPlan run_plan;
+  std::optional<ResolvedDeviceSelection> resolved_device_selection;
+  std::optional<artifacts::NetemCommandSuggestions> netem_suggestions;
+  bool is_resume = false;
+  soak::CheckpointState resume_checkpoint;
+  std::chrono::milliseconds completed_duration{0};
+  std::vector<backends::FrameSample> frames;
+  core::schema::RunInfo run_info;
+  fs::path bundle_dir;
+  fs::path soak_frame_cache_path;
+  fs::path soak_checkpoint_latest_path;
+  fs::path soak_checkpoint_history_path;
+  fs::path scenario_artifact_path;
+  fs::path hostprobe_artifact_path;
+  std::vector<fs::path> hostprobe_raw_artifact_paths;
+  std::unique_ptr<backends::ICameraBackend> backend;
+  std::unique_ptr<ScopedNetemTeardown> netem_teardown_guard;
+  fs::path sdk_log_artifact_path;
+  backends::BackendConfig selected_device_params;
+  fs::path events_path;
+  fs::path config_verify_artifact_path;
+  fs::path camera_config_artifact_path;
+  fs::path config_report_artifact_path;
+  backends::BackendConfig applied_params;
+  bool config_applied_event_emitted = false;
+  bool stream_started = false;
+  std::uint64_t dropped_count = 0;
+  std::uint64_t received_count = 0;
+  std::optional<std::chrono::system_clock::time_point> latest_frame_ts;
+  bool interrupted_by_signal = false;
+  std::chrono::milliseconds non_soak_completed_duration{0};
+  bool disconnect_failure = false;
+  std::uint32_t reconnect_attempts_used = 0;
+  std::string disconnect_failure_error;
+  bool soak_paused = false;
+  fs::path run_artifact_path;
+  metrics::FpsReport fps_report;
+  fs::path metrics_csv_path;
+  fs::path metrics_json_path;
+  bool thresholds_passed = true;
+  std::vector<std::string> threshold_failures;
+  std::vector<std::string> top_anomalies;
+  fs::path summary_markdown_path;
+  fs::path report_html_path;
+  fs::path bundle_manifest_path;
+  fs::path bundle_zip_path;
+};
+
+constexpr std::uint32_t kReconnectRetryLimit = 3;
+
+void StopBackendIfStreamStarted(RunExecutionContext& ctx) {
+  if (!ctx.stream_started || ctx.backend == nullptr) {
+    return;
   }
+  std::string stop_error;
+  (void)ctx.backend->Stop(stop_error);
+  ctx.stream_started = false;
+}
 
-  logger.Info(
+int PrepareRunContext(const RunOptions& options, bool use_per_run_bundle_dir, bool allow_zip_bundle,
+                      ScenarioRunResult* run_result, RunExecutionContext& ctx) {
+  ctx.logger.Info(
       "run execution requested",
       {{"scenario_path", options.scenario_path},
        {"output_root", options.output_dir.string()},
@@ -2058,47 +2115,45 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
        {"netem_apply", options.apply_netem ? "true" : "false"},
        {"device_selector", options.device_selector.empty() ? "-" : options.device_selector}});
 
-  std::string error;
   if (options.soak_mode && !use_per_run_bundle_dir) {
-    logger.Error("soak mode is only supported for per-run bundle execution");
+    ctx.logger.Error("soak mode is only supported for per-run bundle execution");
     std::cerr << "error: soak mode is only supported by labops run\n";
     return kExitUsage;
   }
   if (options.soak_mode && options.checkpoint_interval <= std::chrono::milliseconds::zero()) {
-    logger.Error("invalid soak checkpoint interval");
+    ctx.logger.Error("invalid soak checkpoint interval");
     std::cerr << "error: checkpoint interval must be greater than 0 milliseconds\n";
     return kExitUsage;
   }
   if (options.zip_bundle && !allow_zip_bundle) {
-    logger.Error("zip output is not supported for this command");
+    ctx.logger.Error("zip output is not supported for this command");
     std::cerr << "error: zip output is not supported for this command\n";
     return kExitUsage;
   }
 
-  if (!ValidateScenarioPath(options.scenario_path, error)) {
-    logger.Error("scenario path validation failed",
-                 {{"scenario_path", options.scenario_path}, {"error", error}});
-    std::cerr << "error: " << error << '\n';
+  if (!ValidateScenarioPath(options.scenario_path, ctx.error)) {
+    ctx.logger.Error("scenario path validation failed",
+                     {{"scenario_path", options.scenario_path}, {"error", ctx.error}});
+    std::cerr << "error: " << ctx.error << '\n';
     return kExitFailure;
   }
 
-  RunPlan run_plan;
-  if (!LoadRunPlanFromScenario(options.scenario_path, run_plan, error)) {
-    logger.Error("failed to load run plan from scenario",
-                 {{"scenario_path", options.scenario_path}, {"error", error}});
-    std::cerr << "error: " << error << '\n';
+  if (!LoadRunPlanFromScenario(options.scenario_path, ctx.run_plan, ctx.error)) {
+    ctx.logger.Error("failed to load run plan from scenario",
+                     {{"scenario_path", options.scenario_path}, {"error", ctx.error}});
+    std::cerr << "error: " << ctx.error << '\n';
     return kExitSchemaInvalid;
   }
 
-  std::optional<ResolvedDeviceSelection> resolved_device_selection;
-  if (!ResolveDeviceSelectionForRun(run_plan, options, resolved_device_selection, error)) {
-    logger.Error("device selector resolution failed", {{"error", error}});
-    std::cerr << "error: device selector resolution failed: " << error << '\n';
+  if (!ResolveDeviceSelectionForRun(ctx.run_plan, options, ctx.resolved_device_selection,
+                                    ctx.error)) {
+    ctx.logger.Error("device selector resolution failed", {{"error", ctx.error}});
+    std::cerr << "error: device selector resolution failed: " << ctx.error << '\n';
     return kExitFailure;
   }
-  if (resolved_device_selection.has_value()) {
-    const ResolvedDeviceSelection& selected = resolved_device_selection.value();
-    logger.Info(
+  if (ctx.resolved_device_selection.has_value()) {
+    const ResolvedDeviceSelection& selected = ctx.resolved_device_selection.value();
+    ctx.logger.Info(
         "device selector resolved",
         {{"selector", selected.selector_text},
          {"selected_index", std::to_string(selected.discovered_index)},
@@ -2107,363 +2162,355 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
          {"selected_user_id", selected.device.user_id.empty() ? "(none)" : selected.device.user_id},
          {"selected_transport", selected.device.transport}});
     if (selected.device.firmware_version.has_value()) {
-      logger.Info("device selector firmware detected",
-                  {{"selected_firmware_version", selected.device.firmware_version.value()}});
+      ctx.logger.Info("device selector firmware detected",
+                      {{"selected_firmware_version", selected.device.firmware_version.value()}});
     }
     if (selected.device.sdk_version.has_value()) {
-      logger.Info("device selector sdk version detected",
-                  {{"selected_sdk_version", selected.device.sdk_version.value()}});
+      ctx.logger.Info("device selector sdk version detected",
+                      {{"selected_sdk_version", selected.device.sdk_version.value()}});
     }
   }
 
-  std::optional<artifacts::NetemCommandSuggestions> netem_suggestions;
   std::string netem_warning;
-  if (!BuildNetemCommandSuggestions(options.scenario_path, run_plan, netem_suggestions,
+  if (!BuildNetemCommandSuggestions(options.scenario_path, ctx.run_plan, ctx.netem_suggestions,
                                     netem_warning)) {
-    logger.Error("failed to build netem command suggestions");
+    ctx.logger.Error("failed to build netem command suggestions");
     std::cerr << "error: failed to build netem command suggestions\n";
     return kExitFailure;
   }
   if (!netem_warning.empty()) {
-    logger.Warn("netem suggestion warning", {{"warning", netem_warning}});
+    ctx.logger.Warn("netem suggestion warning", {{"warning", netem_warning}});
     std::cerr << "warning: " << netem_warning << '\n';
   }
 
-  const bool is_resume = options.soak_mode && !options.resume_checkpoint_path.empty();
-  soak::CheckpointState resume_checkpoint;
-  std::chrono::milliseconds completed_duration{0};
-  std::vector<backends::FrameSample> frames;
-
+  ctx.is_resume = options.soak_mode && !options.resume_checkpoint_path.empty();
   const auto created_at = std::chrono::system_clock::now();
-  core::schema::RunInfo run_info = BuildRunInfo(options, run_plan, created_at);
-  AttachResolvedDeviceMetadataToRunInfo(resolved_device_selection, run_info);
-  fs::path bundle_dir = ResolveExecutionOutputDir(options, run_info, use_per_run_bundle_dir);
-  fs::path soak_frame_cache_path;
-  fs::path soak_checkpoint_latest_path;
-  fs::path soak_checkpoint_history_path;
+  ctx.run_info = BuildRunInfo(options, ctx.run_plan, created_at);
+  AttachResolvedDeviceMetadataToRunInfo(ctx.resolved_device_selection, ctx.run_info);
+  ctx.bundle_dir = ResolveExecutionOutputDir(options, ctx.run_info, use_per_run_bundle_dir);
 
-  if (is_resume) {
-    if (!soak::LoadCheckpoint(options.resume_checkpoint_path, resume_checkpoint, error)) {
-      logger.Error("failed to load soak checkpoint",
-                   {{"checkpoint", options.resume_checkpoint_path.string()}, {"error", error}});
-      std::cerr << "error: failed to load soak checkpoint: " << error << '\n';
+  if (ctx.is_resume) {
+    if (!soak::LoadCheckpoint(options.resume_checkpoint_path, ctx.resume_checkpoint, ctx.error)) {
+      ctx.logger.Error(
+          "failed to load soak checkpoint",
+          {{"checkpoint", options.resume_checkpoint_path.string()}, {"error", ctx.error}});
+      std::cerr << "error: failed to load soak checkpoint: " << ctx.error << '\n';
       return kExitFailure;
     }
 
     if (fs::path(options.scenario_path).lexically_normal() !=
-        resume_checkpoint.scenario_path.lexically_normal()) {
-      logger.Error("resume scenario mismatch",
-                   {{"scenario_path", options.scenario_path},
-                    {"checkpoint_scenario", resume_checkpoint.scenario_path.string()}});
+        ctx.resume_checkpoint.scenario_path.lexically_normal()) {
+      ctx.logger.Error("resume scenario mismatch",
+                       {{"scenario_path", options.scenario_path},
+                        {"checkpoint_scenario", ctx.resume_checkpoint.scenario_path.string()}});
       std::cerr << "error: resume scenario mismatch: expected "
-                << resume_checkpoint.scenario_path.string() << '\n';
+                << ctx.resume_checkpoint.scenario_path.string() << '\n';
       return kExitFailure;
     }
-    if (resume_checkpoint.status == soak::CheckpointStatus::kCompleted) {
-      logger.Error("resume requested for already completed checkpoint");
+    if (ctx.resume_checkpoint.status == soak::CheckpointStatus::kCompleted) {
+      ctx.logger.Error("resume requested for already completed checkpoint");
       std::cerr << "error: checkpoint is already completed\n";
       return kExitFailure;
     }
-    if (resume_checkpoint.completed_duration >= resume_checkpoint.total_duration) {
-      logger.Error("resume requested but checkpoint has no remaining duration");
+    if (ctx.resume_checkpoint.completed_duration >= ctx.resume_checkpoint.total_duration) {
+      ctx.logger.Error("resume requested but checkpoint has no remaining duration");
       std::cerr << "error: checkpoint has no remaining soak duration\n";
       return kExitFailure;
     }
-    if (run_plan.duration.count() != resume_checkpoint.total_duration.count()) {
-      logger.Error(
-          "resume duration mismatch",
-          {{"scenario_duration_ms", std::to_string(run_plan.duration.count())},
-           {"checkpoint_duration_ms", std::to_string(resume_checkpoint.total_duration.count())}});
+    if (ctx.run_plan.duration.count() != ctx.resume_checkpoint.total_duration.count()) {
+      ctx.logger.Error("resume duration mismatch",
+                       {{"scenario_duration_ms", std::to_string(ctx.run_plan.duration.count())},
+                        {"checkpoint_duration_ms",
+                         std::to_string(ctx.resume_checkpoint.total_duration.count())}});
       std::cerr << "error: scenario duration does not match checkpoint duration\n";
       return kExitFailure;
     }
 
-    run_info.run_id = resume_checkpoint.run_id;
-    run_info.timestamps.created_at = resume_checkpoint.timestamps.created_at;
-    run_info.timestamps.started_at = resume_checkpoint.timestamps.started_at;
-    run_info.timestamps.finished_at = resume_checkpoint.timestamps.finished_at;
-    completed_duration = resume_checkpoint.completed_duration;
-    bundle_dir = resume_checkpoint.bundle_dir;
-    soak_frame_cache_path = resume_checkpoint.frame_cache_path.empty()
-                                ? (bundle_dir / "soak_frames.jsonl")
-                                : resume_checkpoint.frame_cache_path;
+    ctx.run_info.run_id = ctx.resume_checkpoint.run_id;
+    ctx.run_info.timestamps.created_at = ctx.resume_checkpoint.timestamps.created_at;
+    ctx.run_info.timestamps.started_at = ctx.resume_checkpoint.timestamps.started_at;
+    ctx.run_info.timestamps.finished_at = ctx.resume_checkpoint.timestamps.finished_at;
+    ctx.completed_duration = ctx.resume_checkpoint.completed_duration;
+    ctx.bundle_dir = ctx.resume_checkpoint.bundle_dir;
+    ctx.soak_frame_cache_path = ctx.resume_checkpoint.frame_cache_path.empty()
+                                    ? (ctx.bundle_dir / "soak_frames.jsonl")
+                                    : ctx.resume_checkpoint.frame_cache_path;
 
-    if (!soak::LoadFrameCache(soak_frame_cache_path, frames, error)) {
-      logger.Error("failed to load soak frame cache",
-                   {{"path", soak_frame_cache_path.string()}, {"error", error}});
-      std::cerr << "error: failed to load soak frame cache: " << error << '\n';
+    if (!soak::LoadFrameCache(ctx.soak_frame_cache_path, ctx.frames, ctx.error)) {
+      ctx.logger.Error("failed to load soak frame cache",
+                       {{"path", ctx.soak_frame_cache_path.string()}, {"error", ctx.error}});
+      std::cerr << "error: failed to load soak frame cache: " << ctx.error << '\n';
       return kExitFailure;
     }
   } else if (options.soak_mode) {
-    soak_frame_cache_path = bundle_dir / "soak_frames.jsonl";
+    ctx.soak_frame_cache_path = ctx.bundle_dir / "soak_frames.jsonl";
   }
 
-  logger.SetRunId(run_info.run_id);
-  logger.Info("run initialized", {{"scenario_id", run_info.config.scenario_id},
-                                  {"backend", run_info.config.backend},
-                                  {"bundle_dir", bundle_dir.string()},
-                                  {"duration_ms", std::to_string(run_plan.duration.count())}});
+  ctx.logger.SetRunId(ctx.run_info.run_id);
+  ctx.logger.Info("run initialized",
+                  {{"scenario_id", ctx.run_info.config.scenario_id},
+                   {"backend", ctx.run_info.config.backend},
+                   {"bundle_dir", ctx.bundle_dir.string()},
+                   {"duration_ms", std::to_string(ctx.run_plan.duration.count())}});
   if (run_result != nullptr) {
-    run_result->run_id = run_info.run_id;
-    run_result->bundle_dir = bundle_dir;
+    run_result->run_id = ctx.run_info.run_id;
+    run_result->bundle_dir = ctx.bundle_dir;
   }
+  return kExitSuccess;
+}
 
-  fs::path scenario_artifact_path = bundle_dir / "scenario.json";
-  if (!is_resume || !fs::exists(scenario_artifact_path)) {
-    if (!artifacts::WriteScenarioJson(options.scenario_path, bundle_dir, scenario_artifact_path,
-                                      error)) {
-      logger.Error("failed to write scenario snapshot",
-                   {{"bundle_dir", bundle_dir.string()}, {"error", error}});
-      std::cerr << "error: failed to write scenario snapshot: " << error << '\n';
+int InitializeArtifacts(const RunOptions& options, RunExecutionContext& ctx) {
+  ctx.scenario_artifact_path = ctx.bundle_dir / "scenario.json";
+  if (!ctx.is_resume || !fs::exists(ctx.scenario_artifact_path)) {
+    if (!artifacts::WriteScenarioJson(options.scenario_path, ctx.bundle_dir,
+                                      ctx.scenario_artifact_path, ctx.error)) {
+      ctx.logger.Error("failed to write scenario snapshot",
+                       {{"bundle_dir", ctx.bundle_dir.string()}, {"error", ctx.error}});
+      std::cerr << "error: failed to write scenario snapshot: " << ctx.error << '\n';
       return kExitFailure;
     }
-    logger.Debug("scenario snapshot written", {{"path", scenario_artifact_path.string()}});
+    ctx.logger.Debug("scenario snapshot written", {{"path", ctx.scenario_artifact_path.string()}});
   } else {
-    logger.Info("resume mode reusing existing scenario snapshot",
-                {{"path", scenario_artifact_path.string()}});
+    ctx.logger.Info("resume mode reusing existing scenario snapshot",
+                    {{"path", ctx.scenario_artifact_path.string()}});
   }
 
-  fs::path hostprobe_artifact_path = bundle_dir / "hostprobe.json";
-  std::vector<fs::path> hostprobe_raw_artifact_paths;
-  if (is_resume && fs::exists(hostprobe_artifact_path)) {
-    hostprobe_raw_artifact_paths = CollectNicRawArtifactPaths(bundle_dir);
-    logger.Info("resume mode reusing existing host probe artifacts",
-                {{"hostprobe", hostprobe_artifact_path.string()},
-                 {"hostprobe_raw_count", std::to_string(hostprobe_raw_artifact_paths.size())}});
-  } else {
-    hostprobe::HostProbeSnapshot host_snapshot;
-    if (!hostprobe::CollectHostProbeSnapshot(host_snapshot, error)) {
-      logger.Error("failed to collect host probe data", {{"error", error}});
-      std::cerr << "error: failed to collect host probe data: " << error << '\n';
-      return kExitFailure;
-    }
+  ctx.hostprobe_artifact_path = ctx.bundle_dir / "hostprobe.json";
+  if (ctx.is_resume && fs::exists(ctx.hostprobe_artifact_path)) {
+    ctx.hostprobe_raw_artifact_paths = CollectNicRawArtifactPaths(ctx.bundle_dir);
+    ctx.logger.Info(
+        "resume mode reusing existing host probe artifacts",
+        {{"hostprobe", ctx.hostprobe_artifact_path.string()},
+         {"hostprobe_raw_count", std::to_string(ctx.hostprobe_raw_artifact_paths.size())}});
+    return kExitSuccess;
+  }
 
-    hostprobe::NicProbeSnapshot nic_probe;
-    if (!hostprobe::CollectNicProbeSnapshot(nic_probe, error)) {
-      logger.Warn("NIC probe collection issue", {{"warning", error}});
-      std::cerr << "warning: NIC probe collection issue: " << error << '\n';
-    }
+  hostprobe::HostProbeSnapshot host_snapshot;
+  if (!hostprobe::CollectHostProbeSnapshot(host_snapshot, ctx.error)) {
+    ctx.logger.Error("failed to collect host probe data", {{"error", ctx.error}});
+    std::cerr << "error: failed to collect host probe data: " << ctx.error << '\n';
+    return kExitFailure;
+  }
+
+  hostprobe::NicProbeSnapshot nic_probe;
+  if (!hostprobe::CollectNicProbeSnapshot(nic_probe, ctx.error)) {
+    ctx.logger.Warn("NIC probe collection issue", {{"warning", ctx.error}});
+    std::cerr << "warning: NIC probe collection issue: " << ctx.error << '\n';
+  }
+  host_snapshot.nic_highlights = nic_probe.highlights;
+
+  if (options.redact_identifiers) {
+    hostprobe::IdentifierRedactionContext redaction_context;
+    hostprobe::BuildIdentifierRedactionContext(redaction_context);
+    hostprobe::RedactHostProbeSnapshot(host_snapshot, redaction_context);
+    hostprobe::RedactNicProbeSnapshot(nic_probe, redaction_context);
     host_snapshot.nic_highlights = nic_probe.highlights;
-
-    if (options.redact_identifiers) {
-      hostprobe::IdentifierRedactionContext redaction_context;
-      hostprobe::BuildIdentifierRedactionContext(redaction_context);
-      hostprobe::RedactHostProbeSnapshot(host_snapshot, redaction_context);
-      hostprobe::RedactNicProbeSnapshot(nic_probe, redaction_context);
-      host_snapshot.nic_highlights = nic_probe.highlights;
-    }
-
-    if (!artifacts::WriteHostProbeJson(host_snapshot, bundle_dir, hostprobe_artifact_path, error)) {
-      logger.Error("failed to write host probe artifact", {{"error", error}});
-      std::cerr << "error: failed to write hostprobe.json: " << error << '\n';
-      return kExitFailure;
-    }
-
-    if (!artifacts::WriteHostProbeRawCommandOutputs(nic_probe.raw_captures, bundle_dir,
-                                                    hostprobe_raw_artifact_paths, error)) {
-      logger.Error("failed to write NIC raw command artifacts", {{"error", error}});
-      std::cerr << "error: failed to write NIC raw command artifacts: " << error << '\n';
-      return kExitFailure;
-    }
   }
 
-  std::unique_ptr<backends::ICameraBackend> backend;
-  if (!BuildBackendFromRunPlan(run_plan, backend, error)) {
-    logger.Error("backend selection failed", {{"error", error}});
-    std::cerr << "error: backend selection failed: " << error << '\n';
+  if (!artifacts::WriteHostProbeJson(host_snapshot, ctx.bundle_dir, ctx.hostprobe_artifact_path,
+                                     ctx.error)) {
+    ctx.logger.Error("failed to write host probe artifact", {{"error", ctx.error}});
+    std::cerr << "error: failed to write hostprobe.json: " << ctx.error << '\n';
     return kExitFailure;
   }
 
-  fs::path sdk_log_artifact_path;
-  if (!ConfigureOptionalSdkLogCapture(options, run_plan, *backend, bundle_dir,
-                                      sdk_log_artifact_path, logger, error)) {
-    logger.Error("failed to configure sdk log capture", {{"error", error}});
-    std::cerr << "error: " << error << '\n';
+  if (!artifacts::WriteHostProbeRawCommandOutputs(nic_probe.raw_captures, ctx.bundle_dir,
+                                                  ctx.hostprobe_raw_artifact_paths, ctx.error)) {
+    ctx.logger.Error("failed to write NIC raw command artifacts", {{"error", ctx.error}});
+    std::cerr << "error: failed to write NIC raw command artifacts: " << ctx.error << '\n';
+    return kExitFailure;
+  }
+  return kExitSuccess;
+}
+
+int ConfigureBackend(const RunOptions& options, ScenarioRunResult* run_result,
+                     RunExecutionContext& ctx) {
+  if (!BuildBackendFromRunPlan(ctx.run_plan, ctx.backend, ctx.error)) {
+    ctx.logger.Error("backend selection failed", {{"error", ctx.error}});
+    std::cerr << "error: backend selection failed: " << ctx.error << '\n';
     return kExitFailure;
   }
 
-  backends::BackendConfig selected_device_params;
-  if (resolved_device_selection.has_value() &&
-      !ApplyDeviceSelectionToBackend(*backend, resolved_device_selection.value(),
-                                     selected_device_params, error)) {
-    logger.Error("failed to apply resolved device selector", {{"error", error}});
-    std::cerr << "error: failed to apply resolved device selector: " << error << '\n';
+  if (!ConfigureOptionalSdkLogCapture(options, ctx.run_plan, *ctx.backend, ctx.bundle_dir,
+                                      ctx.sdk_log_artifact_path, ctx.logger, ctx.error)) {
+    ctx.logger.Error("failed to configure sdk log capture", {{"error", ctx.error}});
+    std::cerr << "error: " << ctx.error << '\n';
     return kExitFailure;
   }
 
-  fs::path events_path;
-  fs::path config_verify_artifact_path;
-  fs::path camera_config_artifact_path;
-  fs::path config_report_artifact_path;
-  backends::BackendConfig applied_params;
-  for (const auto& [key, value] : selected_device_params) {
-    applied_params[key] = value;
+  if (ctx.resolved_device_selection.has_value() &&
+      !ApplyDeviceSelectionToBackend(*ctx.backend, ctx.resolved_device_selection.value(),
+                                     ctx.selected_device_params, ctx.error)) {
+    ctx.logger.Error("failed to apply resolved device selector", {{"error", ctx.error}});
+    std::cerr << "error: failed to apply resolved device selector: " << ctx.error << '\n';
+    return kExitFailure;
   }
 
-  bool config_applied_event_emitted = false;
-  if (run_plan.backend == kBackendRealStub) {
-    if (!ApplyRealParamsWithEvents(*backend, run_plan, run_info, bundle_dir, applied_params,
-                                   events_path, config_verify_artifact_path,
-                                   camera_config_artifact_path, config_report_artifact_path, logger,
-                                   error)) {
-      logger.Error("backend config apply failed", {{"error", error}});
-      std::cerr << "error: backend config failed: " << error << '\n';
+  for (const auto& [key, value] : ctx.selected_device_params) {
+    ctx.applied_params[key] = value;
+  }
+
+  if (ctx.run_plan.backend == kBackendRealStub) {
+    if (!ApplyRealParamsWithEvents(*ctx.backend, ctx.run_plan, ctx.run_info, ctx.bundle_dir,
+                                   ctx.applied_params, ctx.events_path,
+                                   ctx.config_verify_artifact_path, ctx.camera_config_artifact_path,
+                                   ctx.config_report_artifact_path, ctx.logger, ctx.error)) {
+      ctx.logger.Error("backend config apply failed", {{"error", ctx.error}});
+      std::cerr << "error: backend config failed: " << ctx.error << '\n';
       return kExitFailure;
     }
 
     if (!AppendTraceEvent(events::EventType::kConfigApplied, std::chrono::system_clock::now(),
-                          BuildConfigAppliedPayload(run_info, applied_params), bundle_dir,
-                          events_path, error)) {
-      logger.Error("failed to append CONFIG_APPLIED event", {{"error", error}});
-      std::cerr << "error: failed to append CONFIG_APPLIED event: " << error << '\n';
+                          BuildConfigAppliedPayload(ctx.run_info, ctx.applied_params),
+                          ctx.bundle_dir, ctx.events_path, ctx.error)) {
+      ctx.logger.Error("failed to append CONFIG_APPLIED event", {{"error", ctx.error}});
+      std::cerr << "error: failed to append CONFIG_APPLIED event: " << ctx.error << '\n';
       return kExitFailure;
     }
-    config_applied_event_emitted = true;
+    ctx.config_applied_event_emitted = true;
   }
 
-  if (!backend->Connect(error)) {
+  if (!ctx.backend->Connect(ctx.error)) {
     std::optional<RealFailureDetails> mapped_connect_error;
-    if (run_plan.backend == kBackendRealStub) {
-      mapped_connect_error = MapRealFailure("connect", error);
-      logger.Error("backend connect failed",
-                   {{"backend", run_info.config.backend},
-                    {"error_code", mapped_connect_error->code},
-                    {"error_action", mapped_connect_error->actionable_message},
-                    {"error", error}});
+    if (ctx.run_plan.backend == kBackendRealStub) {
+      mapped_connect_error = MapRealFailure("connect", ctx.error);
+      ctx.logger.Error("backend connect failed",
+                       {{"backend", ctx.run_info.config.backend},
+                        {"error_code", mapped_connect_error->code},
+                        {"error_action", mapped_connect_error->actionable_message},
+                        {"error", ctx.error}});
     } else {
-      logger.Error("backend connect failed",
-                   {{"backend", run_info.config.backend}, {"error", error}});
+      ctx.logger.Error("backend connect failed",
+                       {{"backend", ctx.run_info.config.backend}, {"error", ctx.error}});
     }
-    run_info.timestamps.finished_at = std::chrono::system_clock::now();
-    if (run_plan.backend == kBackendRealStub) {
-      // Capture whatever transport counters are currently exposed so connect
-      // failure bundles still provide explicit availability evidence.
-      AttachTransportCountersToRunInfo(backend->DumpConfig(), run_info);
+    ctx.run_info.timestamps.finished_at = std::chrono::system_clock::now();
+    if (ctx.run_plan.backend == kBackendRealStub) {
+      AttachTransportCountersToRunInfo(ctx.backend->DumpConfig(), ctx.run_info);
     }
-    fs::path run_artifact_path;
+
     std::string run_write_error;
-    if (!artifacts::WriteRunJson(run_info, bundle_dir, run_artifact_path, run_write_error)) {
-      logger.Error("failed to write run.json after backend connect failure",
-                   {{"error", run_write_error}});
+    if (!artifacts::WriteRunJson(ctx.run_info, ctx.bundle_dir, ctx.run_artifact_path,
+                                 run_write_error)) {
+      ctx.logger.Error("failed to write run.json after backend connect failure",
+                       {{"error", run_write_error}});
       std::cerr << "warning: failed to write run.json after backend connect failure: "
                 << run_write_error << '\n';
     } else if (run_result != nullptr) {
-      run_result->run_json_path = run_artifact_path;
+      run_result->run_json_path = ctx.run_artifact_path;
     }
-    if (!config_verify_artifact_path.empty()) {
-      std::cerr << "info: config verify artifact: " << config_verify_artifact_path.string() << '\n';
+    if (!ctx.config_verify_artifact_path.empty()) {
+      std::cerr << "info: config verify artifact: " << ctx.config_verify_artifact_path.string()
+                << '\n';
     }
-    if (!camera_config_artifact_path.empty()) {
-      std::cerr << "info: camera config artifact: " << camera_config_artifact_path.string() << '\n';
+    if (!ctx.camera_config_artifact_path.empty()) {
+      std::cerr << "info: camera config artifact: " << ctx.camera_config_artifact_path.string()
+                << '\n';
     }
-    if (!config_report_artifact_path.empty()) {
-      std::cerr << "info: config report artifact: " << config_report_artifact_path.string() << '\n';
+    if (!ctx.config_report_artifact_path.empty()) {
+      std::cerr << "info: config report artifact: " << ctx.config_report_artifact_path.string()
+                << '\n';
     }
-    if (!sdk_log_artifact_path.empty() && fs::exists(sdk_log_artifact_path)) {
-      std::cerr << "info: sdk log artifact: " << sdk_log_artifact_path.string() << '\n';
+    if (!ctx.sdk_log_artifact_path.empty() && fs::exists(ctx.sdk_log_artifact_path)) {
+      std::cerr << "info: sdk log artifact: " << ctx.sdk_log_artifact_path.string() << '\n';
     }
     if (mapped_connect_error.has_value()) {
       std::cerr << "error: backend connect failed: " << mapped_connect_error->formatted_message
                 << '\n';
     } else {
-      std::cerr << "error: backend connect failed: " << error << '\n';
+      std::cerr << "error: backend connect failed: " << ctx.error << '\n';
     }
     return kExitBackendConnectFailed;
   }
-  logger.Info("backend connected", {{"backend", run_info.config.backend}});
+  ctx.logger.Info("backend connected", {{"backend", ctx.run_info.config.backend}});
 
-  if (run_plan.backend == kBackendSim) {
-    if (!backends::sim::ApplyScenarioConfig(*backend, run_plan.sim_config, error,
-                                            &applied_params)) {
-      logger.Error("backend config apply failed", {{"error", error}});
-      std::cerr << "error: backend config failed: " << error << '\n';
+  if (ctx.run_plan.backend == kBackendSim) {
+    if (!backends::sim::ApplyScenarioConfig(*ctx.backend, ctx.run_plan.sim_config, ctx.error,
+                                            &ctx.applied_params)) {
+      ctx.logger.Error("backend config apply failed", {{"error", ctx.error}});
+      std::cerr << "error: backend config failed: " << ctx.error << '\n';
       return kExitFailure;
     }
   }
-  logger.Debug("backend config applied", {{"param_count", std::to_string(applied_params.size())}});
+  ctx.logger.Debug("backend config applied",
+                   {{"param_count", std::to_string(ctx.applied_params.size())}});
 
-  if (!config_applied_event_emitted) {
+  if (!ctx.config_applied_event_emitted) {
     const auto config_applied_at = std::chrono::system_clock::now();
     if (!AppendTraceEvent(events::EventType::kConfigApplied, config_applied_at,
-                          BuildConfigAppliedPayload(run_info, applied_params), bundle_dir,
-                          events_path, error)) {
-      logger.Error("failed to append CONFIG_APPLIED event", {{"error", error}});
-      std::cerr << "error: failed to append CONFIG_APPLIED event: " << error << '\n';
+                          BuildConfigAppliedPayload(ctx.run_info, ctx.applied_params),
+                          ctx.bundle_dir, ctx.events_path, ctx.error)) {
+      ctx.logger.Error("failed to append CONFIG_APPLIED event", {{"error", ctx.error}});
+      std::cerr << "error: failed to append CONFIG_APPLIED event: " << ctx.error << '\n';
       return kExitFailure;
     }
   }
 
-  ScopedNetemTeardown netem_teardown_guard(&logger);
-  if (!ApplyNetemIfRequested(options, netem_suggestions, netem_teardown_guard, error)) {
-    logger.Error("netem apply failed", {{"error", error}});
-    std::cerr << "error: " << error << '\n';
+  ctx.netem_teardown_guard = std::make_unique<ScopedNetemTeardown>(&ctx.logger);
+  if (!ApplyNetemIfRequested(options, ctx.netem_suggestions, *ctx.netem_teardown_guard,
+                             ctx.error)) {
+    ctx.logger.Error("netem apply failed", {{"error", ctx.error}});
+    std::cerr << "error: " << ctx.error << '\n';
     return kExitFailure;
   }
 
-  if (!backend->Start(error)) {
-    if (run_plan.backend == kBackendRealStub) {
-      const RealFailureDetails mapped_start_error = MapRealFailure("start", error);
-      logger.Error("backend start failed", {{"error_code", mapped_start_error.code},
-                                            {"error_action", mapped_start_error.actionable_message},
-                                            {"error", error}});
+  if (!ctx.backend->Start(ctx.error)) {
+    if (ctx.run_plan.backend == kBackendRealStub) {
+      const RealFailureDetails mapped_start_error = MapRealFailure("start", ctx.error);
+      ctx.logger.Error("backend start failed",
+                       {{"error_code", mapped_start_error.code},
+                        {"error_action", mapped_start_error.actionable_message},
+                        {"error", ctx.error}});
       std::cerr << "error: backend start failed: " << mapped_start_error.formatted_message << '\n';
     } else {
-      logger.Error("backend start failed", {{"error", error}});
-      std::cerr << "error: backend start failed: " << error << '\n';
+      ctx.logger.Error("backend start failed", {{"error", ctx.error}});
+      std::cerr << "error: backend start failed: " << ctx.error << '\n';
     }
     return kExitFailure;
   }
-  logger.Info("stream started", {{"fps", std::to_string(run_plan.sim_config.fps)},
-                                 {"duration_ms", std::to_string(run_plan.duration.count())}});
+  ctx.logger.Info("stream started",
+                  {{"fps", std::to_string(ctx.run_plan.sim_config.fps)},
+                   {"duration_ms", std::to_string(ctx.run_plan.duration.count())}});
+  ctx.stream_started = true;
 
-  bool stream_started = true;
   const auto started_at = std::chrono::system_clock::now();
-  if (!is_resume) {
-    run_info.timestamps.started_at = started_at;
+  if (!ctx.is_resume) {
+    ctx.run_info.timestamps.started_at = started_at;
   }
-
-  auto stop_if_started = [&]() {
-    if (!stream_started) {
-      return;
-    }
-    std::string stop_error;
-    (void)backend->Stop(stop_error);
-    stream_started = false;
-  };
 
   if (!AppendTraceEvent(events::EventType::kStreamStarted, started_at,
                         {
-                            {"run_id", run_info.run_id},
-                            {"scenario_id", run_info.config.scenario_id},
-                            {"backend", run_info.config.backend},
-                            {"duration_ms", std::to_string(run_plan.duration.count())},
-                            {"fps", std::to_string(run_plan.sim_config.fps)},
-                            {"seed", std::to_string(run_plan.sim_config.seed)},
+                            {"run_id", ctx.run_info.run_id},
+                            {"scenario_id", ctx.run_info.config.scenario_id},
+                            {"backend", ctx.run_info.config.backend},
+                            {"duration_ms", std::to_string(ctx.run_plan.duration.count())},
+                            {"fps", std::to_string(ctx.run_plan.sim_config.fps)},
+                            {"seed", std::to_string(ctx.run_plan.sim_config.seed)},
                             {"soak_mode", options.soak_mode ? "true" : "false"},
-                            {"resume", is_resume ? "true" : "false"},
+                            {"resume", ctx.is_resume ? "true" : "false"},
                         },
-                        bundle_dir, events_path, error)) {
-    logger.Error("failed to append STREAM_STARTED event", {{"error", error}});
-    stop_if_started();
-    std::cerr << "error: failed to append STREAM_STARTED event: " << error << '\n';
+                        ctx.bundle_dir, ctx.events_path, ctx.error)) {
+    ctx.logger.Error("failed to append STREAM_STARTED event", {{"error", ctx.error}});
+    StopBackendIfStreamStarted(ctx);
+    std::cerr << "error: failed to append STREAM_STARTED event: " << ctx.error << '\n';
     return kExitFailure;
   }
 
-  std::uint64_t dropped_count = 0;
-  std::uint64_t received_count = 0;
-  std::optional<std::chrono::system_clock::time_point> latest_frame_ts;
-  for (const auto& frame : frames) {
+  for (const auto& frame : ctx.frames) {
     const bool dropped = frame.dropped.has_value() && frame.dropped.value();
-    if (!latest_frame_ts.has_value() || frame.timestamp > latest_frame_ts.value()) {
-      latest_frame_ts = frame.timestamp;
+    if (!ctx.latest_frame_ts.has_value() || frame.timestamp > ctx.latest_frame_ts.value()) {
+      ctx.latest_frame_ts = frame.timestamp;
     }
     if (dropped) {
-      ++dropped_count;
+      ++ctx.dropped_count;
     } else {
-      ++received_count;
+      ++ctx.received_count;
     }
   }
+  return kExitSuccess;
+}
 
+int ExecuteStreaming(const RunOptions& options, std::string_view success_prefix,
+                     ScenarioRunResult* run_result, RunExecutionContext& ctx) {
   auto append_frame_event = [&](const backends::FrameSample& frame) {
     const bool dropped = frame.dropped.has_value() && frame.dropped.value();
     events::EventType event_type = events::EventType::kFrameReceived;
@@ -2487,17 +2534,17 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
       break;
     }
 
-    if (!latest_frame_ts.has_value() || frame.timestamp > latest_frame_ts.value()) {
-      latest_frame_ts = frame.timestamp;
+    if (!ctx.latest_frame_ts.has_value() || frame.timestamp > ctx.latest_frame_ts.value()) {
+      ctx.latest_frame_ts = frame.timestamp;
     }
     if (dropped) {
-      ++dropped_count;
+      ++ctx.dropped_count;
     } else {
-      ++received_count;
+      ++ctx.received_count;
     }
 
     std::map<std::string, std::string> payload = {
-        {"run_id", run_info.run_id},
+        {"run_id", ctx.run_info.run_id},
         {"frame_id", std::to_string(frame.frame_id)},
         {"size_bytes", std::to_string(frame.size_bytes)},
         {"dropped", dropped ? "true" : "false"},
@@ -2505,115 +2552,113 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     if (dropped) {
       payload["reason"] = drop_reason.empty() ? "backend_marked_dropped" : drop_reason;
     }
-    return AppendTraceEvent(event_type, frame.timestamp, std::move(payload), bundle_dir,
-                            events_path, error);
+    return AppendTraceEvent(event_type, frame.timestamp, std::move(payload), ctx.bundle_dir,
+                            ctx.events_path, ctx.error);
   };
 
   ScopedInterruptSignalHandler scoped_signal_handler;
-  bool interrupted_by_signal = false;
-  std::chrono::milliseconds non_soak_completed_duration = run_plan.duration;
-  constexpr std::uint32_t kReconnectRetryLimit = 3;
-  bool disconnect_failure = false;
-  std::uint32_t reconnect_attempts_used = 0;
-  std::string disconnect_failure_error;
+  ctx.non_soak_completed_duration = ctx.run_plan.duration;
   if (!options.soak_mode) {
-    if (run_plan.backend != kBackendRealStub) {
+    if (ctx.run_plan.backend != kBackendRealStub) {
       const std::vector<backends::FrameSample> pulled_frames =
-          backend->PullFrames(run_plan.duration, error);
-      if (!error.empty()) {
-        logger.Error("backend pull_frames failed", {{"error", error}});
-        stop_if_started();
-        std::cerr << "error: backend pull_frames failed: " << error << '\n';
+          ctx.backend->PullFrames(ctx.run_plan.duration, ctx.error);
+      if (!ctx.error.empty()) {
+        ctx.logger.Error("backend pull_frames failed", {{"error", ctx.error}});
+        StopBackendIfStreamStarted(ctx);
+        std::cerr << "error: backend pull_frames failed: " << ctx.error << '\n';
         return kExitFailure;
       }
 
       for (const auto& frame : pulled_frames) {
         if (!append_frame_event(frame)) {
-          logger.Error("failed to append frame event", {{"error", error}});
-          stop_if_started();
-          std::cerr << "error: failed to append frame event: " << error << '\n';
+          ctx.logger.Error("failed to append frame event", {{"error", ctx.error}});
+          StopBackendIfStreamStarted(ctx);
+          std::cerr << "error: failed to append frame event: " << ctx.error << '\n';
           return kExitFailure;
         }
-        frames.push_back(frame);
+        ctx.frames.push_back(frame);
       }
     } else {
-      // Real-backend runs are chunked so Ctrl+C can stop at safe boundaries
-      // without dropping partially written artifacts.
       constexpr std::chrono::milliseconds kInterruptPollInterval(250);
-      non_soak_completed_duration = std::chrono::milliseconds::zero();
-      std::chrono::milliseconds remaining_duration = run_plan.duration;
+      ctx.non_soak_completed_duration = std::chrono::milliseconds::zero();
+      std::chrono::milliseconds remaining_duration = ctx.run_plan.duration;
       while (remaining_duration > std::chrono::milliseconds::zero()) {
         if (g_run_interrupt_requested.load()) {
-          interrupted_by_signal = true;
+          ctx.interrupted_by_signal = true;
           break;
         }
 
         const std::chrono::milliseconds chunk_duration =
             std::min(kInterruptPollInterval, remaining_duration);
         const std::vector<backends::FrameSample> pulled_frames =
-            backend->PullFrames(chunk_duration, error);
-        if (!error.empty()) {
-          if (IsLikelyDisconnectError(error)) {
-            const std::string disconnect_error = error;
+            ctx.backend->PullFrames(chunk_duration, ctx.error);
+        if (!ctx.error.empty()) {
+          if (IsLikelyDisconnectError(ctx.error)) {
+            const std::string disconnect_error = ctx.error;
             const std::uint32_t reconnect_attempts_remaining =
-                reconnect_attempts_used >= kReconnectRetryLimit
+                ctx.reconnect_attempts_used >= kReconnectRetryLimit
                     ? 0U
-                    : (kReconnectRetryLimit - reconnect_attempts_used);
-            logger.Warn(
+                    : (kReconnectRetryLimit - ctx.reconnect_attempts_used);
+            ctx.logger.Warn(
                 "device disconnected during stream",
                 {{"error", disconnect_error},
-                 {"reconnect_attempts_used_total", std::to_string(reconnect_attempts_used)},
+                 {"reconnect_attempts_used_total", std::to_string(ctx.reconnect_attempts_used)},
                  {"reconnect_attempts_remaining", std::to_string(reconnect_attempts_remaining)},
                  {"reconnect_retry_limit", std::to_string(kReconnectRetryLimit)}});
             if (!AppendTraceEvent(
                     events::EventType::kDeviceDisconnected, std::chrono::system_clock::now(),
                     {
-                        {"run_id", run_info.run_id},
-                        {"scenario_id", run_info.config.scenario_id},
+                        {"run_id", ctx.run_info.run_id},
+                        {"scenario_id", ctx.run_info.config.scenario_id},
                         {"error", disconnect_error},
-                        {"reconnect_attempts_used_total", std::to_string(reconnect_attempts_used)},
+                        {"reconnect_attempts_used_total",
+                         std::to_string(ctx.reconnect_attempts_used)},
                         {"reconnect_attempts_remaining",
                          std::to_string(reconnect_attempts_remaining)},
                         {"reconnect_retry_limit", std::to_string(kReconnectRetryLimit)},
                     },
-                    bundle_dir, events_path, error)) {
-              logger.Error("failed to append DEVICE_DISCONNECTED event", {{"error", error}});
-              stop_if_started();
-              std::cerr << "error: failed to append DEVICE_DISCONNECTED event: " << error << '\n';
+                    ctx.bundle_dir, ctx.events_path, ctx.error)) {
+              ctx.logger.Error("failed to append DEVICE_DISCONNECTED event",
+                               {{"error", ctx.error}});
+              StopBackendIfStreamStarted(ctx);
+              std::cerr << "error: failed to append DEVICE_DISCONNECTED event: " << ctx.error
+                        << '\n';
               return kExitFailure;
             }
 
             if (reconnect_attempts_remaining == 0U) {
-              disconnect_failure = true;
-              disconnect_failure_error =
+              ctx.disconnect_failure = true;
+              ctx.disconnect_failure_error =
                   "device disconnect detected but reconnect budget is exhausted";
               break;
             }
 
-            error.clear();
+            ctx.error.clear();
             std::string reconnect_error;
-            if (TryReconnectAfterDisconnect(*backend, reconnect_attempts_remaining,
-                                            reconnect_attempts_used, logger, reconnect_error)) {
+            if (TryReconnectAfterDisconnect(*ctx.backend, reconnect_attempts_remaining,
+                                            ctx.reconnect_attempts_used, ctx.logger,
+                                            reconnect_error)) {
               continue;
             }
 
-            disconnect_failure = true;
-            disconnect_failure_error = reconnect_error.empty() ? disconnect_error : reconnect_error;
-            logger.Error(
+            ctx.disconnect_failure = true;
+            ctx.disconnect_failure_error =
+                reconnect_error.empty() ? disconnect_error : reconnect_error;
+            ctx.logger.Error(
                 "reconnect attempts exhausted after disconnect",
                 {{"disconnect_error", disconnect_error},
-                 {"reconnect_error", disconnect_failure_error},
-                 {"reconnect_attempts_used_total", std::to_string(reconnect_attempts_used)},
+                 {"reconnect_error", ctx.disconnect_failure_error},
+                 {"reconnect_attempts_used_total", std::to_string(ctx.reconnect_attempts_used)},
                  {"reconnect_retry_limit", std::to_string(kReconnectRetryLimit)}});
             break;
           }
 
-          const RealFailureDetails mapped_pull_error = MapRealFailure("pull_frames", error);
-          logger.Error("backend pull_frames failed",
-                       {{"error_code", mapped_pull_error.code},
-                        {"error_action", mapped_pull_error.actionable_message},
-                        {"error", error}});
-          stop_if_started();
+          const RealFailureDetails mapped_pull_error = MapRealFailure("pull_frames", ctx.error);
+          ctx.logger.Error("backend pull_frames failed",
+                           {{"error_code", mapped_pull_error.code},
+                            {"error_action", mapped_pull_error.actionable_message},
+                            {"error", ctx.error}});
+          StopBackendIfStreamStarted(ctx);
           std::cerr << "error: backend pull_frames failed: " << mapped_pull_error.formatted_message
                     << '\n';
           return kExitFailure;
@@ -2621,57 +2666,60 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
 
         for (const auto& frame : pulled_frames) {
           if (!append_frame_event(frame)) {
-            logger.Error("failed to append frame event", {{"error", error}});
-            stop_if_started();
-            std::cerr << "error: failed to append frame event: " << error << '\n';
+            ctx.logger.Error("failed to append frame event", {{"error", ctx.error}});
+            StopBackendIfStreamStarted(ctx);
+            std::cerr << "error: failed to append frame event: " << ctx.error << '\n';
             return kExitFailure;
           }
-          frames.push_back(frame);
+          ctx.frames.push_back(frame);
         }
 
-        non_soak_completed_duration += chunk_duration;
-        if (non_soak_completed_duration > run_plan.duration) {
-          non_soak_completed_duration = run_plan.duration;
+        ctx.non_soak_completed_duration += chunk_duration;
+        if (ctx.non_soak_completed_duration > ctx.run_plan.duration) {
+          ctx.non_soak_completed_duration = ctx.run_plan.duration;
         }
-        remaining_duration = run_plan.duration - non_soak_completed_duration;
+        remaining_duration = ctx.run_plan.duration - ctx.non_soak_completed_duration;
       }
 
-      if (interrupted_by_signal) {
-        logger.Warn("interrupt received; finalizing run with partial duration",
-                    {{"completed_duration_ms", std::to_string(non_soak_completed_duration.count())},
-                     {"requested_duration_ms", std::to_string(run_plan.duration.count())}});
-      } else if (disconnect_failure) {
-        logger.Warn("device disconnect handling exhausted retries; finalizing partial run",
-                    {{"completed_duration_ms", std::to_string(non_soak_completed_duration.count())},
-                     {"requested_duration_ms", std::to_string(run_plan.duration.count())},
-                     {"reconnect_attempts_used_total", std::to_string(reconnect_attempts_used)},
-                     {"reconnect_retry_limit", std::to_string(kReconnectRetryLimit)}});
+      if (ctx.interrupted_by_signal) {
+        ctx.logger.Warn(
+            "interrupt received; finalizing run with partial duration",
+            {{"completed_duration_ms", std::to_string(ctx.non_soak_completed_duration.count())},
+             {"requested_duration_ms", std::to_string(ctx.run_plan.duration.count())}});
+      } else if (ctx.disconnect_failure) {
+        ctx.logger.Warn(
+            "device disconnect handling exhausted retries; finalizing partial run",
+            {{"completed_duration_ms", std::to_string(ctx.non_soak_completed_duration.count())},
+             {"requested_duration_ms", std::to_string(ctx.run_plan.duration.count())},
+             {"reconnect_attempts_used_total", std::to_string(ctx.reconnect_attempts_used)},
+             {"reconnect_retry_limit", std::to_string(kReconnectRetryLimit)}});
       }
     }
   } else {
-    if (soak_frame_cache_path.empty()) {
-      soak_frame_cache_path = bundle_dir / "soak_frames.jsonl";
+    if (ctx.soak_frame_cache_path.empty()) {
+      ctx.soak_frame_cache_path = ctx.bundle_dir / "soak_frames.jsonl";
     }
-    if (completed_duration > run_plan.duration) {
-      logger.Error("resume checkpoint has invalid completed duration");
-      stop_if_started();
+    if (ctx.completed_duration > ctx.run_plan.duration) {
+      ctx.logger.Error("resume checkpoint has invalid completed duration");
+      StopBackendIfStreamStarted(ctx);
       std::cerr << "error: checkpoint completed duration exceeds total run duration\n";
       return kExitFailure;
     }
 
-    std::chrono::milliseconds remaining_duration = run_plan.duration - completed_duration;
+    std::chrono::milliseconds remaining_duration = ctx.run_plan.duration - ctx.completed_duration;
     soak::CheckpointState checkpoint_state;
-    checkpoint_state.run_id = run_info.run_id;
+    checkpoint_state.run_id = ctx.run_info.run_id;
     checkpoint_state.scenario_path = fs::path(options.scenario_path);
-    checkpoint_state.bundle_dir = bundle_dir;
-    checkpoint_state.frame_cache_path = soak_frame_cache_path;
-    checkpoint_state.total_duration = run_plan.duration;
-    checkpoint_state.completed_duration = completed_duration;
-    checkpoint_state.checkpoints_written = is_resume ? resume_checkpoint.checkpoints_written : 0U;
-    checkpoint_state.frames_total = static_cast<std::uint64_t>(frames.size());
-    checkpoint_state.frames_received = received_count;
-    checkpoint_state.frames_dropped = dropped_count;
-    checkpoint_state.timestamps = run_info.timestamps;
+    checkpoint_state.bundle_dir = ctx.bundle_dir;
+    checkpoint_state.frame_cache_path = ctx.soak_frame_cache_path;
+    checkpoint_state.total_duration = ctx.run_plan.duration;
+    checkpoint_state.completed_duration = ctx.completed_duration;
+    checkpoint_state.checkpoints_written =
+        ctx.is_resume ? ctx.resume_checkpoint.checkpoints_written : 0U;
+    checkpoint_state.frames_total = static_cast<std::uint64_t>(ctx.frames.size());
+    checkpoint_state.frames_received = ctx.received_count;
+    checkpoint_state.frames_dropped = ctx.dropped_count;
+    checkpoint_state.timestamps = ctx.run_info.timestamps;
     checkpoint_state.updated_at = std::chrono::system_clock::now();
     checkpoint_state.status = soak::CheckpointStatus::kRunning;
     checkpoint_state.stop_reason.clear();
@@ -2679,88 +2727,90 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     while (remaining_duration > std::chrono::milliseconds::zero()) {
       const std::chrono::milliseconds chunk_duration =
           std::min(options.checkpoint_interval, remaining_duration);
-      std::vector<backends::FrameSample> chunk_frames = backend->PullFrames(chunk_duration, error);
-      if (!error.empty()) {
-        if (run_plan.backend == kBackendRealStub) {
-          const RealFailureDetails mapped_pull_error = MapRealFailure("pull_frames", error);
-          logger.Error("backend pull_frames failed",
-                       {{"error_code", mapped_pull_error.code},
-                        {"error_action", mapped_pull_error.actionable_message},
-                        {"error", error}});
-          stop_if_started();
+      std::vector<backends::FrameSample> chunk_frames =
+          ctx.backend->PullFrames(chunk_duration, ctx.error);
+      if (!ctx.error.empty()) {
+        if (ctx.run_plan.backend == kBackendRealStub) {
+          const RealFailureDetails mapped_pull_error = MapRealFailure("pull_frames", ctx.error);
+          ctx.logger.Error("backend pull_frames failed",
+                           {{"error_code", mapped_pull_error.code},
+                            {"error_action", mapped_pull_error.actionable_message},
+                            {"error", ctx.error}});
+          StopBackendIfStreamStarted(ctx);
           std::cerr << "error: backend pull_frames failed: " << mapped_pull_error.formatted_message
                     << '\n';
           return kExitFailure;
         }
-        logger.Error("backend pull_frames failed", {{"error", error}});
-        stop_if_started();
-        std::cerr << "error: backend pull_frames failed: " << error << '\n';
+        ctx.logger.Error("backend pull_frames failed", {{"error", ctx.error}});
+        StopBackendIfStreamStarted(ctx);
+        std::cerr << "error: backend pull_frames failed: " << ctx.error << '\n';
         return kExitFailure;
       }
 
-      const std::uint64_t frame_id_offset = frames.empty() ? 0U : (frames.back().frame_id + 1U);
+      const std::uint64_t frame_id_offset =
+          ctx.frames.empty() ? 0U : (ctx.frames.back().frame_id + 1U);
       std::vector<backends::FrameSample> normalized_chunk;
       normalized_chunk.reserve(chunk_frames.size());
       for (auto frame : chunk_frames) {
         frame.frame_id += frame_id_offset;
-        if (latest_frame_ts.has_value() && frame.timestamp <= latest_frame_ts.value()) {
-          frame.timestamp = latest_frame_ts.value() + std::chrono::microseconds(1);
+        if (ctx.latest_frame_ts.has_value() && frame.timestamp <= ctx.latest_frame_ts.value()) {
+          frame.timestamp = ctx.latest_frame_ts.value() + std::chrono::microseconds(1);
         }
 
         if (!append_frame_event(frame)) {
-          logger.Error("failed to append frame event", {{"error", error}});
-          stop_if_started();
-          std::cerr << "error: failed to append frame event: " << error << '\n';
+          ctx.logger.Error("failed to append frame event", {{"error", ctx.error}});
+          StopBackendIfStreamStarted(ctx);
+          std::cerr << "error: failed to append frame event: " << ctx.error << '\n';
           return kExitFailure;
         }
 
-        frames.push_back(frame);
+        ctx.frames.push_back(frame);
         normalized_chunk.push_back(frame);
       }
 
       if (!normalized_chunk.empty() &&
-          !soak::AppendFrameCache(normalized_chunk, soak_frame_cache_path, error)) {
-        logger.Error("failed to append soak frame cache", {{"error", error}});
-        stop_if_started();
-        std::cerr << "error: failed to append soak frame cache: " << error << '\n';
+          !soak::AppendFrameCache(normalized_chunk, ctx.soak_frame_cache_path, ctx.error)) {
+        ctx.logger.Error("failed to append soak frame cache", {{"error", ctx.error}});
+        StopBackendIfStreamStarted(ctx);
+        std::cerr << "error: failed to append soak frame cache: " << ctx.error << '\n';
         return kExitFailure;
       }
 
-      completed_duration += chunk_duration;
-      if (completed_duration > run_plan.duration) {
-        completed_duration = run_plan.duration;
+      ctx.completed_duration += chunk_duration;
+      if (ctx.completed_duration > ctx.run_plan.duration) {
+        ctx.completed_duration = ctx.run_plan.duration;
       }
-      remaining_duration = run_plan.duration - completed_duration;
+      remaining_duration = ctx.run_plan.duration - ctx.completed_duration;
 
-      checkpoint_state.completed_duration = completed_duration;
-      checkpoint_state.frames_total = static_cast<std::uint64_t>(frames.size());
-      checkpoint_state.frames_received = received_count;
-      checkpoint_state.frames_dropped = dropped_count;
+      checkpoint_state.completed_duration = ctx.completed_duration;
+      checkpoint_state.frames_total = static_cast<std::uint64_t>(ctx.frames.size());
+      checkpoint_state.frames_received = ctx.received_count;
+      checkpoint_state.frames_dropped = ctx.dropped_count;
       checkpoint_state.updated_at = std::chrono::system_clock::now();
       checkpoint_state.status = soak::CheckpointStatus::kRunning;
       checkpoint_state.stop_reason.clear();
       ++checkpoint_state.checkpoints_written;
-      if (!soak::WriteCheckpointArtifacts(checkpoint_state, soak_checkpoint_latest_path,
-                                          soak_checkpoint_history_path, error)) {
-        logger.Error("failed to write soak checkpoint", {{"error", error}});
-        stop_if_started();
-        std::cerr << "error: failed to write soak checkpoint: " << error << '\n';
+      if (!soak::WriteCheckpointArtifacts(checkpoint_state, ctx.soak_checkpoint_latest_path,
+                                          ctx.soak_checkpoint_history_path, ctx.error)) {
+        ctx.logger.Error("failed to write soak checkpoint", {{"error", ctx.error}});
+        StopBackendIfStreamStarted(ctx);
+        std::cerr << "error: failed to write soak checkpoint: " << ctx.error << '\n';
         return kExitFailure;
       }
 
       if (!AppendTraceEvent(
               events::EventType::kInfo, checkpoint_state.updated_at,
               {
-                  {"run_id", run_info.run_id},
+                  {"run_id", ctx.run_info.run_id},
                   {"kind", "SOAK_CHECKPOINT"},
                   {"checkpoint_index", std::to_string(checkpoint_state.checkpoints_written)},
-                  {"completed_duration_ms", std::to_string(completed_duration.count())},
+                  {"completed_duration_ms", std::to_string(ctx.completed_duration.count())},
                   {"remaining_duration_ms", std::to_string(remaining_duration.count())},
               },
-              bundle_dir, events_path, error)) {
-        logger.Error("failed to append SOAK_CHECKPOINT event", {{"error", error}});
-        stop_if_started();
-        std::cerr << "error: failed to append SOAK_CHECKPOINT event: " << error << '\n';
+              ctx.bundle_dir, ctx.events_path, ctx.error)) {
+        ctx.logger.Error("failed to append SOAK_CHECKPOINT event", {{"error", ctx.error}});
+        StopBackendIfStreamStarted(ctx);
+        std::cerr << "error: failed to append SOAK_CHECKPOINT event: " << ctx.error << '\n';
         return kExitFailure;
       }
 
@@ -2770,380 +2820,390 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
         checkpoint_state.stop_reason = stop_reason;
         checkpoint_state.timestamps.finished_at = std::chrono::system_clock::now();
         checkpoint_state.updated_at = checkpoint_state.timestamps.finished_at;
-        run_info.timestamps.finished_at = checkpoint_state.timestamps.finished_at;
-        if (latest_frame_ts.has_value() &&
-            run_info.timestamps.finished_at < latest_frame_ts.value()) {
-          run_info.timestamps.finished_at = latest_frame_ts.value();
-          checkpoint_state.timestamps.finished_at = latest_frame_ts.value();
-          checkpoint_state.updated_at = latest_frame_ts.value();
+        ctx.run_info.timestamps.finished_at = checkpoint_state.timestamps.finished_at;
+        if (ctx.latest_frame_ts.has_value() &&
+            ctx.run_info.timestamps.finished_at < ctx.latest_frame_ts.value()) {
+          ctx.run_info.timestamps.finished_at = ctx.latest_frame_ts.value();
+          checkpoint_state.timestamps.finished_at = ctx.latest_frame_ts.value();
+          checkpoint_state.updated_at = ctx.latest_frame_ts.value();
         }
-        if (!soak::WriteCheckpointArtifacts(checkpoint_state, soak_checkpoint_latest_path,
-                                            soak_checkpoint_history_path, error)) {
-          logger.Error("failed to persist paused soak checkpoint", {{"error", error}});
-          stop_if_started();
-          std::cerr << "error: failed to persist paused soak checkpoint: " << error << '\n';
+        if (!soak::WriteCheckpointArtifacts(checkpoint_state, ctx.soak_checkpoint_latest_path,
+                                            ctx.soak_checkpoint_history_path, ctx.error)) {
+          ctx.logger.Error("failed to persist paused soak checkpoint", {{"error", ctx.error}});
+          StopBackendIfStreamStarted(ctx);
+          std::cerr << "error: failed to persist paused soak checkpoint: " << ctx.error << '\n';
           return kExitFailure;
         }
 
-        stop_if_started();
+        StopBackendIfStreamStarted(ctx);
         if (!AppendTraceEvent(
-                events::EventType::kStreamStopped, run_info.timestamps.finished_at,
+                events::EventType::kStreamStopped, ctx.run_info.timestamps.finished_at,
                 {
-                    {"run_id", run_info.run_id},
-                    {"frames_total", std::to_string(frames.size())},
-                    {"frames_received", std::to_string(received_count)},
-                    {"frames_dropped", std::to_string(dropped_count)},
+                    {"run_id", ctx.run_info.run_id},
+                    {"frames_total", std::to_string(ctx.frames.size())},
+                    {"frames_received", std::to_string(ctx.received_count)},
+                    {"frames_dropped", std::to_string(ctx.dropped_count)},
                     {"reason", "soak_paused"},
-                    {"completed_duration_ms", std::to_string(completed_duration.count())},
+                    {"completed_duration_ms", std::to_string(ctx.completed_duration.count())},
                     {"remaining_duration_ms", std::to_string(remaining_duration.count())},
                 },
-                bundle_dir, events_path, error)) {
-          logger.Error("failed to append STREAM_STOPPED pause event", {{"error", error}});
-          std::cerr << "error: failed to append STREAM_STOPPED pause event: " << error << '\n';
+                ctx.bundle_dir, ctx.events_path, ctx.error)) {
+          ctx.logger.Error("failed to append STREAM_STOPPED pause event", {{"error", ctx.error}});
+          std::cerr << "error: failed to append STREAM_STOPPED pause event: " << ctx.error << '\n';
           return kExitFailure;
         }
 
-        fs::path run_artifact_path;
-        if (run_plan.backend == kBackendRealStub) {
-          AttachTransportCountersToRunInfo(backend->DumpConfig(), run_info);
+        if (ctx.run_plan.backend == kBackendRealStub) {
+          AttachTransportCountersToRunInfo(ctx.backend->DumpConfig(), ctx.run_info);
         }
-        if (!artifacts::WriteRunJson(run_info, bundle_dir, run_artifact_path, error)) {
-          logger.Error("failed to write run.json during soak pause", {{"error", error}});
-          std::cerr << "error: failed to write run.json during soak pause: " << error << '\n';
+        if (!artifacts::WriteRunJson(ctx.run_info, ctx.bundle_dir, ctx.run_artifact_path,
+                                     ctx.error)) {
+          ctx.logger.Error("failed to write run.json during soak pause", {{"error", ctx.error}});
+          std::cerr << "error: failed to write run.json during soak pause: " << ctx.error << '\n';
           return kExitFailure;
         }
         if (run_result != nullptr) {
-          run_result->run_json_path = run_artifact_path;
-          run_result->events_jsonl_path = events_path;
+          run_result->run_json_path = ctx.run_artifact_path;
+          run_result->events_jsonl_path = ctx.events_path;
         }
 
-        fs::path bundle_manifest_path;
         artifacts::BundleArtifactRegistry bundle_registry;
         bundle_registry.RegisterMany({
-            scenario_artifact_path,
-            hostprobe_artifact_path,
-            run_artifact_path,
-            events_path,
-            soak_checkpoint_latest_path,
-            soak_checkpoint_history_path,
-            soak_frame_cache_path,
+            ctx.scenario_artifact_path,
+            ctx.hostprobe_artifact_path,
+            ctx.run_artifact_path,
+            ctx.events_path,
+            ctx.soak_checkpoint_latest_path,
+            ctx.soak_checkpoint_history_path,
+            ctx.soak_frame_cache_path,
         });
-        bundle_registry.RegisterMany(hostprobe_raw_artifact_paths);
-        bundle_registry.RegisterOptional(sdk_log_artifact_path);
-        bundle_registry.RegisterOptional(config_verify_artifact_path);
-        bundle_registry.RegisterOptional(camera_config_artifact_path);
-        bundle_registry.RegisterOptional(config_report_artifact_path);
+        bundle_registry.RegisterMany(ctx.hostprobe_raw_artifact_paths);
+        bundle_registry.RegisterOptional(ctx.sdk_log_artifact_path);
+        bundle_registry.RegisterOptional(ctx.config_verify_artifact_path);
+        bundle_registry.RegisterOptional(ctx.camera_config_artifact_path);
+        bundle_registry.RegisterOptional(ctx.config_report_artifact_path);
         const std::vector<fs::path> bundle_artifact_paths = bundle_registry.BuildManifestInput();
-        if (!artifacts::WriteBundleManifestJson(bundle_dir, bundle_artifact_paths,
-                                                bundle_manifest_path, error)) {
-          logger.Error("failed to write bundle manifest during soak pause", {{"error", error}});
-          std::cerr << "error: failed to write bundle manifest during soak pause: " << error
+        if (!artifacts::WriteBundleManifestJson(ctx.bundle_dir, bundle_artifact_paths,
+                                                ctx.bundle_manifest_path, ctx.error)) {
+          ctx.logger.Error("failed to write bundle manifest during soak pause",
+                           {{"error", ctx.error}});
+          std::cerr << "error: failed to write bundle manifest during soak pause: " << ctx.error
                     << '\n';
           return kExitFailure;
         }
 
-        logger.Info("soak run paused safely", {{"run_id", run_info.run_id},
-                                               {"bundle_dir", bundle_dir.string()},
-                                               {"checkpoint", soak_checkpoint_latest_path.string()},
-                                               {"reason", stop_reason}});
+        ctx.logger.Info("soak run paused safely",
+                        {{"run_id", ctx.run_info.run_id},
+                         {"bundle_dir", ctx.bundle_dir.string()},
+                         {"checkpoint", ctx.soak_checkpoint_latest_path.string()},
+                         {"reason", stop_reason}});
 
         std::cout << success_prefix << options.scenario_path << '\n';
-        std::cout << "run_id: " << run_info.run_id << '\n';
-        std::cout << "bundle: " << bundle_dir.string() << '\n';
-        std::cout << "events: " << events_path.string() << '\n';
-        if (!config_verify_artifact_path.empty()) {
-          std::cout << "config_verify: " << config_verify_artifact_path.string() << '\n';
+        std::cout << "run_id: " << ctx.run_info.run_id << '\n';
+        std::cout << "bundle: " << ctx.bundle_dir.string() << '\n';
+        std::cout << "events: " << ctx.events_path.string() << '\n';
+        if (!ctx.config_verify_artifact_path.empty()) {
+          std::cout << "config_verify: " << ctx.config_verify_artifact_path.string() << '\n';
         }
-        if (!camera_config_artifact_path.empty()) {
-          std::cout << "camera_config: " << camera_config_artifact_path.string() << '\n';
+        if (!ctx.camera_config_artifact_path.empty()) {
+          std::cout << "camera_config: " << ctx.camera_config_artifact_path.string() << '\n';
         }
-        if (!config_report_artifact_path.empty()) {
-          std::cout << "config_report: " << config_report_artifact_path.string() << '\n';
+        if (!ctx.config_report_artifact_path.empty()) {
+          std::cout << "config_report: " << ctx.config_report_artifact_path.string() << '\n';
         }
-        if (!sdk_log_artifact_path.empty() && fs::exists(sdk_log_artifact_path)) {
-          std::cout << "sdk_log: " << sdk_log_artifact_path.string() << '\n';
+        if (!ctx.sdk_log_artifact_path.empty() && fs::exists(ctx.sdk_log_artifact_path)) {
+          std::cout << "sdk_log: " << ctx.sdk_log_artifact_path.string() << '\n';
         }
-        std::cout << "artifact: " << run_artifact_path.string() << '\n';
-        std::cout << "manifest: " << bundle_manifest_path.string() << '\n';
+        std::cout << "artifact: " << ctx.run_artifact_path.string() << '\n';
+        std::cout << "manifest: " << ctx.bundle_manifest_path.string() << '\n';
         std::cout << "soak_mode: enabled\n";
         std::cout << "soak_status: paused\n";
-        std::cout << "soak_checkpoint: " << soak_checkpoint_latest_path.string() << '\n';
-        std::cout << "soak_frame_cache: " << soak_frame_cache_path.string() << '\n';
-        std::cout << "soak_completed_duration_ms: " << completed_duration.count() << '\n';
+        std::cout << "soak_checkpoint: " << ctx.soak_checkpoint_latest_path.string() << '\n';
+        std::cout << "soak_frame_cache: " << ctx.soak_frame_cache_path.string() << '\n';
+        std::cout << "soak_completed_duration_ms: " << ctx.completed_duration.count() << '\n';
         std::cout << "soak_remaining_duration_ms: " << remaining_duration.count() << '\n';
+        ctx.soak_paused = true;
         return kExitSuccess;
       }
     }
 
     checkpoint_state.status = soak::CheckpointStatus::kCompleted;
     checkpoint_state.stop_reason = "completed";
-    checkpoint_state.completed_duration = run_plan.duration;
-    checkpoint_state.frames_total = static_cast<std::uint64_t>(frames.size());
-    checkpoint_state.frames_received = received_count;
-    checkpoint_state.frames_dropped = dropped_count;
+    checkpoint_state.completed_duration = ctx.run_plan.duration;
+    checkpoint_state.frames_total = static_cast<std::uint64_t>(ctx.frames.size());
+    checkpoint_state.frames_received = ctx.received_count;
+    checkpoint_state.frames_dropped = ctx.dropped_count;
     checkpoint_state.timestamps.finished_at = std::chrono::system_clock::now();
     checkpoint_state.updated_at = checkpoint_state.timestamps.finished_at;
-    run_info.timestamps.finished_at = checkpoint_state.timestamps.finished_at;
-    if (latest_frame_ts.has_value() && run_info.timestamps.finished_at < latest_frame_ts.value()) {
-      run_info.timestamps.finished_at = latest_frame_ts.value();
-      checkpoint_state.timestamps.finished_at = latest_frame_ts.value();
-      checkpoint_state.updated_at = latest_frame_ts.value();
+    ctx.run_info.timestamps.finished_at = checkpoint_state.timestamps.finished_at;
+    if (ctx.latest_frame_ts.has_value() &&
+        ctx.run_info.timestamps.finished_at < ctx.latest_frame_ts.value()) {
+      ctx.run_info.timestamps.finished_at = ctx.latest_frame_ts.value();
+      checkpoint_state.timestamps.finished_at = ctx.latest_frame_ts.value();
+      checkpoint_state.updated_at = ctx.latest_frame_ts.value();
     }
     ++checkpoint_state.checkpoints_written;
-    if (!soak::WriteCheckpointArtifacts(checkpoint_state, soak_checkpoint_latest_path,
-                                        soak_checkpoint_history_path, error)) {
-      logger.Error("failed to write final soak checkpoint", {{"error", error}});
-      stop_if_started();
-      std::cerr << "error: failed to write final soak checkpoint: " << error << '\n';
+    if (!soak::WriteCheckpointArtifacts(checkpoint_state, ctx.soak_checkpoint_latest_path,
+                                        ctx.soak_checkpoint_history_path, ctx.error)) {
+      ctx.logger.Error("failed to write final soak checkpoint", {{"error", ctx.error}});
+      StopBackendIfStreamStarted(ctx);
+      std::cerr << "error: failed to write final soak checkpoint: " << ctx.error << '\n';
       return kExitFailure;
     }
   }
 
-  if (!backend->Stop(error)) {
-    if (run_plan.backend == kBackendRealStub) {
-      const RealFailureDetails mapped_stop_error = MapRealFailure("stop", error);
-      logger.Error("backend stop failed", {{"error_code", mapped_stop_error.code},
-                                           {"error_action", mapped_stop_error.actionable_message},
-                                           {"error", error}});
+  if (!ctx.backend->Stop(ctx.error)) {
+    if (ctx.run_plan.backend == kBackendRealStub) {
+      const RealFailureDetails mapped_stop_error = MapRealFailure("stop", ctx.error);
+      ctx.logger.Error("backend stop failed",
+                       {{"error_code", mapped_stop_error.code},
+                        {"error_action", mapped_stop_error.actionable_message},
+                        {"error", ctx.error}});
       std::cerr << "error: backend stop failed: " << mapped_stop_error.formatted_message << '\n';
     } else {
-      logger.Error("backend stop failed", {{"error", error}});
-      std::cerr << "error: backend stop failed: " << error << '\n';
+      ctx.logger.Error("backend stop failed", {{"error", ctx.error}});
+      std::cerr << "error: backend stop failed: " << ctx.error << '\n';
     }
     return kExitFailure;
   }
-  stream_started = false;
+  ctx.stream_started = false;
 
   if (!options.soak_mode) {
     auto finished_at = std::chrono::system_clock::now();
-    if (latest_frame_ts.has_value() && finished_at < latest_frame_ts.value()) {
-      finished_at = latest_frame_ts.value();
+    if (ctx.latest_frame_ts.has_value() && finished_at < ctx.latest_frame_ts.value()) {
+      finished_at = ctx.latest_frame_ts.value();
     }
-    run_info.timestamps.finished_at = finished_at;
+    ctx.run_info.timestamps.finished_at = finished_at;
   }
 
   std::string stream_stop_reason = options.soak_mode ? "soak_completed" : "completed";
-  if (!options.soak_mode && disconnect_failure) {
+  if (!options.soak_mode && ctx.disconnect_failure) {
     stream_stop_reason = "device_disconnect";
-  } else if (!options.soak_mode && interrupted_by_signal) {
+  } else if (!options.soak_mode && ctx.interrupted_by_signal) {
     stream_stop_reason = "signal_interrupt";
   }
   std::map<std::string, std::string> stream_stopped_payload = {
-      {"run_id", run_info.run_id},
-      {"frames_total", std::to_string(frames.size())},
-      {"frames_received", std::to_string(received_count)},
-      {"frames_dropped", std::to_string(dropped_count)},
+      {"run_id", ctx.run_info.run_id},
+      {"frames_total", std::to_string(ctx.frames.size())},
+      {"frames_received", std::to_string(ctx.received_count)},
+      {"frames_dropped", std::to_string(ctx.dropped_count)},
       {"reason", stream_stop_reason},
   };
-  if (!options.soak_mode && (interrupted_by_signal || disconnect_failure)) {
-    stream_stopped_payload["requested_duration_ms"] = std::to_string(run_plan.duration.count());
+  if (!options.soak_mode && (ctx.interrupted_by_signal || ctx.disconnect_failure)) {
+    stream_stopped_payload["requested_duration_ms"] = std::to_string(ctx.run_plan.duration.count());
     stream_stopped_payload["completed_duration_ms"] =
-        std::to_string(non_soak_completed_duration.count());
+        std::to_string(ctx.non_soak_completed_duration.count());
   }
-  if (!options.soak_mode && disconnect_failure) {
+  if (!options.soak_mode && ctx.disconnect_failure) {
     stream_stopped_payload["reconnect_attempts_used_total"] =
-        std::to_string(reconnect_attempts_used);
+        std::to_string(ctx.reconnect_attempts_used);
     stream_stopped_payload["reconnect_retry_limit"] = std::to_string(kReconnectRetryLimit);
-    if (!disconnect_failure_error.empty()) {
-      stream_stopped_payload["disconnect_error"] = disconnect_failure_error;
+    if (!ctx.disconnect_failure_error.empty()) {
+      stream_stopped_payload["disconnect_error"] = ctx.disconnect_failure_error;
     }
   }
 
-  if (!AppendTraceEvent(events::EventType::kStreamStopped, run_info.timestamps.finished_at,
-                        std::move(stream_stopped_payload), bundle_dir, events_path, error)) {
-    logger.Error("failed to append STREAM_STOPPED event", {{"error", error}});
-    std::cerr << "error: failed to append STREAM_STOPPED event: " << error << '\n';
+  if (!AppendTraceEvent(events::EventType::kStreamStopped, ctx.run_info.timestamps.finished_at,
+                        std::move(stream_stopped_payload), ctx.bundle_dir, ctx.events_path,
+                        ctx.error)) {
+    ctx.logger.Error("failed to append STREAM_STOPPED event", {{"error", ctx.error}});
+    std::cerr << "error: failed to append STREAM_STOPPED event: " << ctx.error << '\n';
     return kExitFailure;
   }
 
-  fs::path run_artifact_path;
-  if (run_plan.backend == kBackendRealStub) {
-    AttachTransportCountersToRunInfo(backend->DumpConfig(), run_info);
+  return kExitSuccess;
+}
+
+int FinalizeMetricsAndReports(const RunOptions& options, ScenarioRunResult* run_result,
+                              RunExecutionContext& ctx) {
+  if (ctx.run_plan.backend == kBackendRealStub) {
+    AttachTransportCountersToRunInfo(ctx.backend->DumpConfig(), ctx.run_info);
   }
-  if (!artifacts::WriteRunJson(run_info, bundle_dir, run_artifact_path, error)) {
-    logger.Error("failed to write run.json", {{"error", error}});
-    std::cerr << "error: " << error << '\n';
+  if (!artifacts::WriteRunJson(ctx.run_info, ctx.bundle_dir, ctx.run_artifact_path, ctx.error)) {
+    ctx.logger.Error("failed to write run.json", {{"error", ctx.error}});
+    std::cerr << "error: " << ctx.error << '\n';
     return kExitFailure;
   }
   if (run_result != nullptr) {
-    run_result->run_json_path = run_artifact_path;
-    run_result->events_jsonl_path = events_path;
+    run_result->run_json_path = ctx.run_artifact_path;
+    run_result->events_jsonl_path = ctx.events_path;
   }
 
-  std::chrono::milliseconds metrics_duration = run_plan.duration;
-  if (!options.soak_mode && (interrupted_by_signal || disconnect_failure)) {
-    metrics_duration = non_soak_completed_duration;
+  std::chrono::milliseconds metrics_duration = ctx.run_plan.duration;
+  if (!options.soak_mode && (ctx.interrupted_by_signal || ctx.disconnect_failure)) {
+    metrics_duration = ctx.non_soak_completed_duration;
     if (metrics_duration <= std::chrono::milliseconds::zero()) {
       metrics_duration = std::chrono::milliseconds(1);
     }
   }
 
-  metrics::FpsReport fps_report;
-  if (!metrics::ComputeFpsReport(frames, metrics_duration, std::chrono::milliseconds(1'000),
-                                 fps_report, error)) {
-    logger.Error("failed to compute metrics", {{"error", error}});
-    std::cerr << "error: failed to compute fps metrics: " << error << '\n';
+  if (!metrics::ComputeFpsReport(ctx.frames, metrics_duration, std::chrono::milliseconds(1'000),
+                                 ctx.fps_report, ctx.error)) {
+    ctx.logger.Error("failed to compute metrics", {{"error", ctx.error}});
+    std::cerr << "error: failed to compute fps metrics: " << ctx.error << '\n';
     return kExitFailure;
   }
 
-  fs::path metrics_csv_path;
-  if (!artifacts::WriteMetricsCsv(fps_report, bundle_dir, metrics_csv_path, error)) {
-    logger.Error("failed to write metrics.csv", {{"error", error}});
-    std::cerr << "error: failed to write metrics.csv: " << error << '\n';
+  if (!artifacts::WriteMetricsCsv(ctx.fps_report, ctx.bundle_dir, ctx.metrics_csv_path,
+                                  ctx.error)) {
+    ctx.logger.Error("failed to write metrics.csv", {{"error", ctx.error}});
+    std::cerr << "error: failed to write metrics.csv: " << ctx.error << '\n';
     return kExitFailure;
   }
 
-  fs::path metrics_json_path;
-  if (!artifacts::WriteMetricsJson(fps_report, bundle_dir, metrics_json_path, error)) {
-    logger.Error("failed to write metrics.json", {{"error", error}});
-    std::cerr << "error: failed to write metrics.json: " << error << '\n';
+  if (!artifacts::WriteMetricsJson(ctx.fps_report, ctx.bundle_dir, ctx.metrics_json_path,
+                                   ctx.error)) {
+    ctx.logger.Error("failed to write metrics.json", {{"error", ctx.error}});
+    std::cerr << "error: failed to write metrics.json: " << ctx.error << '\n';
     return kExitFailure;
   }
   if (run_result != nullptr) {
-    run_result->metrics_json_path = metrics_json_path;
+    run_result->metrics_json_path = ctx.metrics_json_path;
   }
 
-  std::vector<std::string> threshold_failures;
-  bool thresholds_passed = true;
-  if (interrupted_by_signal) {
-    thresholds_passed = false;
-    threshold_failures.push_back("run interrupted by signal before requested duration completed");
-  } else if (disconnect_failure) {
-    thresholds_passed = false;
+  ctx.thresholds_passed = true;
+  if (ctx.interrupted_by_signal) {
+    ctx.thresholds_passed = false;
+    ctx.threshold_failures.push_back(
+        "run interrupted by signal before requested duration completed");
+  } else if (ctx.disconnect_failure) {
+    ctx.thresholds_passed = false;
     std::string disconnect_failure_text =
         "device disconnected mid-run and reconnect attempts were exhausted";
-    if (!disconnect_failure_error.empty()) {
-      disconnect_failure_text += ": " + disconnect_failure_error;
+    if (!ctx.disconnect_failure_error.empty()) {
+      disconnect_failure_text += ": " + ctx.disconnect_failure_error;
     }
-    threshold_failures.push_back(disconnect_failure_text);
+    ctx.threshold_failures.push_back(disconnect_failure_text);
   } else {
-    thresholds_passed = EvaluateRunThresholds(run_plan.thresholds, fps_report, threshold_failures);
+    ctx.thresholds_passed =
+        EvaluateRunThresholds(ctx.run_plan.thresholds, ctx.fps_report, ctx.threshold_failures);
   }
   if (run_result != nullptr) {
-    run_result->thresholds_passed = thresholds_passed;
+    run_result->thresholds_passed = ctx.thresholds_passed;
   }
-  std::vector<std::string> top_anomalies =
-      metrics::BuildAnomalyHighlights(fps_report, run_plan.sim_config.fps, threshold_failures);
+  ctx.top_anomalies = metrics::BuildAnomalyHighlights(ctx.fps_report, ctx.run_plan.sim_config.fps,
+                                                      ctx.threshold_failures);
 
-  // Optional real-transport heuristics: emit machine-readable timeline events
-  // and also surface the same findings in the run summary.
   const std::vector<events::TransportAnomalyFinding> transport_anomalies =
-      events::DetectTransportAnomalies(run_info);
+      events::DetectTransportAnomalies(ctx.run_info);
   if (!transport_anomalies.empty()) {
-    auto it = std::find(top_anomalies.begin(), top_anomalies.end(),
+    auto it = std::find(ctx.top_anomalies.begin(), ctx.top_anomalies.end(),
                         "No notable anomalies detected by current heuristics.");
-    if (it != top_anomalies.end()) {
-      top_anomalies.erase(it);
+    if (it != ctx.top_anomalies.end()) {
+      ctx.top_anomalies.erase(it);
     }
   }
   for (const auto& anomaly : transport_anomalies) {
-    top_anomalies.push_back(anomaly.summary);
-    if (!AppendTraceEvent(events::EventType::kTransportAnomaly, run_info.timestamps.finished_at,
-                          {{"run_id", run_info.run_id},
-                           {"scenario_id", run_info.config.scenario_id},
+    ctx.top_anomalies.push_back(anomaly.summary);
+    if (!AppendTraceEvent(events::EventType::kTransportAnomaly, ctx.run_info.timestamps.finished_at,
+                          {{"run_id", ctx.run_info.run_id},
+                           {"scenario_id", ctx.run_info.config.scenario_id},
                            {"heuristic_id", anomaly.heuristic_id},
                            {"counter", anomaly.counter_name},
                            {"observed_value", std::to_string(anomaly.observed_value)},
                            {"threshold", std::to_string(anomaly.threshold)},
                            {"summary", anomaly.summary}},
-                          bundle_dir, events_path, error)) {
-      logger.Error("failed to append TRANSPORT_ANOMALY event", {{"error", error}});
-      std::cerr << "error: failed to append TRANSPORT_ANOMALY event: " << error << '\n';
+                          ctx.bundle_dir, ctx.events_path, ctx.error)) {
+      ctx.logger.Error("failed to append TRANSPORT_ANOMALY event", {{"error", ctx.error}});
+      std::cerr << "error: failed to append TRANSPORT_ANOMALY event: " << ctx.error << '\n';
       return kExitFailure;
     }
   }
 
-  fs::path summary_markdown_path;
-  if (!artifacts::WriteRunSummaryMarkdown(
-          run_info, fps_report, run_plan.sim_config.fps, thresholds_passed, threshold_failures,
-          top_anomalies, netem_suggestions, bundle_dir, summary_markdown_path, error)) {
-    logger.Error("failed to write summary.md", {{"error", error}});
-    std::cerr << "error: failed to write summary.md: " << error << '\n';
+  if (!artifacts::WriteRunSummaryMarkdown(ctx.run_info, ctx.fps_report, ctx.run_plan.sim_config.fps,
+                                          ctx.thresholds_passed, ctx.threshold_failures,
+                                          ctx.top_anomalies, ctx.netem_suggestions, ctx.bundle_dir,
+                                          ctx.summary_markdown_path, ctx.error)) {
+    ctx.logger.Error("failed to write summary.md", {{"error", ctx.error}});
+    std::cerr << "error: failed to write summary.md: " << ctx.error << '\n';
     return kExitFailure;
   }
 
-  fs::path report_html_path;
-  if (!artifacts::WriteRunSummaryHtml(run_info, fps_report, run_plan.sim_config.fps,
-                                      thresholds_passed, threshold_failures, top_anomalies,
-                                      bundle_dir, report_html_path, error)) {
-    logger.Error("failed to write report.html", {{"error", error}});
-    std::cerr << "error: failed to write report.html: " << error << '\n';
+  if (!artifacts::WriteRunSummaryHtml(ctx.run_info, ctx.fps_report, ctx.run_plan.sim_config.fps,
+                                      ctx.thresholds_passed, ctx.threshold_failures,
+                                      ctx.top_anomalies, ctx.bundle_dir, ctx.report_html_path,
+                                      ctx.error)) {
+    ctx.logger.Error("failed to write report.html", {{"error", ctx.error}});
+    std::cerr << "error: failed to write report.html: " << ctx.error << '\n';
     return kExitFailure;
   }
 
-  fs::path bundle_manifest_path;
   artifacts::BundleArtifactRegistry bundle_registry;
   bundle_registry.RegisterMany({
-      scenario_artifact_path,
-      hostprobe_artifact_path,
-      run_artifact_path,
-      events_path,
-      metrics_csv_path,
-      metrics_json_path,
-      summary_markdown_path,
-      report_html_path,
+      ctx.scenario_artifact_path,
+      ctx.hostprobe_artifact_path,
+      ctx.run_artifact_path,
+      ctx.events_path,
+      ctx.metrics_csv_path,
+      ctx.metrics_json_path,
+      ctx.summary_markdown_path,
+      ctx.report_html_path,
   });
-  bundle_registry.RegisterMany(hostprobe_raw_artifact_paths);
-  bundle_registry.RegisterOptional(sdk_log_artifact_path);
-  bundle_registry.RegisterOptional(config_verify_artifact_path);
-  bundle_registry.RegisterOptional(camera_config_artifact_path);
-  bundle_registry.RegisterOptional(config_report_artifact_path);
+  bundle_registry.RegisterMany(ctx.hostprobe_raw_artifact_paths);
+  bundle_registry.RegisterOptional(ctx.sdk_log_artifact_path);
+  bundle_registry.RegisterOptional(ctx.config_verify_artifact_path);
+  bundle_registry.RegisterOptional(ctx.camera_config_artifact_path);
+  bundle_registry.RegisterOptional(ctx.config_report_artifact_path);
   if (options.soak_mode) {
-    bundle_registry.RegisterOptional(soak_frame_cache_path);
-    bundle_registry.RegisterOptional(soak_checkpoint_latest_path);
-    bundle_registry.RegisterOptional(soak_checkpoint_history_path);
+    bundle_registry.RegisterOptional(ctx.soak_frame_cache_path);
+    bundle_registry.RegisterOptional(ctx.soak_checkpoint_latest_path);
+    bundle_registry.RegisterOptional(ctx.soak_checkpoint_history_path);
   }
   const std::vector<fs::path> bundle_artifact_paths = bundle_registry.BuildManifestInput();
-  if (!artifacts::WriteBundleManifestJson(bundle_dir, bundle_artifact_paths, bundle_manifest_path,
-                                          error)) {
-    logger.Error("failed to write bundle manifest", {{"error", error}});
-    std::cerr << "error: failed to write bundle manifest: " << error << '\n';
+  if (!artifacts::WriteBundleManifestJson(ctx.bundle_dir, bundle_artifact_paths,
+                                          ctx.bundle_manifest_path, ctx.error)) {
+    ctx.logger.Error("failed to write bundle manifest", {{"error", ctx.error}});
+    std::cerr << "error: failed to write bundle manifest: " << ctx.error << '\n';
     return kExitFailure;
   }
 
-  fs::path bundle_zip_path;
   if (options.zip_bundle) {
-    if (!artifacts::WriteBundleZip(bundle_dir, bundle_zip_path, error)) {
-      logger.Error("failed to write support bundle zip", {{"error", error}});
-      std::cerr << "error: failed to write support bundle zip: " << error << '\n';
+    if (!artifacts::WriteBundleZip(ctx.bundle_dir, ctx.bundle_zip_path, ctx.error)) {
+      ctx.logger.Error("failed to write support bundle zip", {{"error", ctx.error}});
+      std::cerr << "error: failed to write support bundle zip: " << ctx.error << '\n';
       return kExitFailure;
     }
   }
 
-  logger.Info("run artifacts written",
-              {{"bundle_dir", bundle_dir.string()},
-               {"events", events_path.string()},
-               {"config_verify",
-                config_verify_artifact_path.empty() ? "-" : config_verify_artifact_path.string()},
-               {"camera_config",
-                camera_config_artifact_path.empty() ? "-" : camera_config_artifact_path.string()},
-               {"config_report",
-                config_report_artifact_path.empty() ? "-" : config_report_artifact_path.string()},
-               {"sdk_log", sdk_log_artifact_path.empty() ? "-" : sdk_log_artifact_path.string()},
-               {"metrics_json", metrics_json_path.string()},
-               {"summary", summary_markdown_path.string()},
-               {"report_html", report_html_path.string()}});
+  ctx.logger.Info(
+      "run artifacts written",
+      {{"bundle_dir", ctx.bundle_dir.string()},
+       {"events", ctx.events_path.string()},
+       {"config_verify",
+        ctx.config_verify_artifact_path.empty() ? "-" : ctx.config_verify_artifact_path.string()},
+       {"camera_config",
+        ctx.camera_config_artifact_path.empty() ? "-" : ctx.camera_config_artifact_path.string()},
+       {"config_report",
+        ctx.config_report_artifact_path.empty() ? "-" : ctx.config_report_artifact_path.string()},
+       {"sdk_log", ctx.sdk_log_artifact_path.empty() ? "-" : ctx.sdk_log_artifact_path.string()},
+       {"metrics_json", ctx.metrics_json_path.string()},
+       {"summary", ctx.summary_markdown_path.string()},
+       {"report_html", ctx.report_html_path.string()}});
+  return kExitSuccess;
+}
 
+int EmitFinalConsoleSummary(const RunOptions& options, std::string_view success_prefix,
+                            RunExecutionContext& ctx) {
   std::cout << success_prefix << options.scenario_path << '\n';
-  std::cout << "run_id: " << run_info.run_id << '\n';
-  std::cout << "bundle: " << bundle_dir.string() << '\n';
-  std::cout << "scenario: " << scenario_artifact_path.string() << '\n';
-  std::cout << "hostprobe: " << hostprobe_artifact_path.string() << '\n';
-  std::cout << "hostprobe_raw_count: " << hostprobe_raw_artifact_paths.size() << '\n';
+  std::cout << "run_id: " << ctx.run_info.run_id << '\n';
+  std::cout << "bundle: " << ctx.bundle_dir.string() << '\n';
+  std::cout << "scenario: " << ctx.scenario_artifact_path.string() << '\n';
+  std::cout << "hostprobe: " << ctx.hostprobe_artifact_path.string() << '\n';
+  std::cout << "hostprobe_raw_count: " << ctx.hostprobe_raw_artifact_paths.size() << '\n';
   std::cout << "redaction: " << (options.redact_identifiers ? "enabled" : "disabled") << '\n';
   std::string sdk_log_capture_status = "disabled";
   if (options.capture_sdk_log) {
-    sdk_log_capture_status = sdk_log_artifact_path.empty() ? "ignored" : "enabled";
+    sdk_log_capture_status = ctx.sdk_log_artifact_path.empty() ? "ignored" : "enabled";
   }
   std::cout << "sdk_log_capture: " << sdk_log_capture_status << '\n';
   std::cout << "soak_mode: " << (options.soak_mode ? "enabled" : "disabled") << '\n';
   if (options.soak_mode) {
     std::cout << "soak_checkpoint_interval_ms: " << options.checkpoint_interval.count() << '\n';
-    if (!soak_checkpoint_latest_path.empty()) {
-      std::cout << "soak_checkpoint: " << soak_checkpoint_latest_path.string() << '\n';
+    if (!ctx.soak_checkpoint_latest_path.empty()) {
+      std::cout << "soak_checkpoint: " << ctx.soak_checkpoint_latest_path.string() << '\n';
     }
-    if (!soak_frame_cache_path.empty()) {
-      std::cout << "soak_frame_cache: " << soak_frame_cache_path.string() << '\n';
+    if (!ctx.soak_frame_cache_path.empty()) {
+      std::cout << "soak_frame_cache: " << ctx.soak_frame_cache_path.string() << '\n';
     }
   }
   std::cout << "netem_apply: " << (options.apply_netem ? "enabled" : "disabled");
@@ -3154,106 +3214,158 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
     }
   }
   std::cout << '\n';
-  std::cout << "artifact: " << run_artifact_path.string() << '\n';
-  std::cout << "events: " << events_path.string() << '\n';
-  if (!config_verify_artifact_path.empty()) {
-    std::cout << "config_verify: " << config_verify_artifact_path.string() << '\n';
+  std::cout << "artifact: " << ctx.run_artifact_path.string() << '\n';
+  std::cout << "events: " << ctx.events_path.string() << '\n';
+  if (!ctx.config_verify_artifact_path.empty()) {
+    std::cout << "config_verify: " << ctx.config_verify_artifact_path.string() << '\n';
   }
-  if (!camera_config_artifact_path.empty()) {
-    std::cout << "camera_config: " << camera_config_artifact_path.string() << '\n';
+  if (!ctx.camera_config_artifact_path.empty()) {
+    std::cout << "camera_config: " << ctx.camera_config_artifact_path.string() << '\n';
   }
-  if (!config_report_artifact_path.empty()) {
-    std::cout << "config_report: " << config_report_artifact_path.string() << '\n';
+  if (!ctx.config_report_artifact_path.empty()) {
+    std::cout << "config_report: " << ctx.config_report_artifact_path.string() << '\n';
   }
-  if (!sdk_log_artifact_path.empty() && fs::exists(sdk_log_artifact_path)) {
-    std::cout << "sdk_log: " << sdk_log_artifact_path.string() << '\n';
+  if (!ctx.sdk_log_artifact_path.empty() && fs::exists(ctx.sdk_log_artifact_path)) {
+    std::cout << "sdk_log: " << ctx.sdk_log_artifact_path.string() << '\n';
   }
-  std::cout << "metrics_csv: " << metrics_csv_path.string() << '\n';
-  std::cout << "metrics_json: " << metrics_json_path.string() << '\n';
-  std::cout << "summary: " << summary_markdown_path.string() << '\n';
-  std::cout << "report_html: " << report_html_path.string() << '\n';
-  std::cout << "manifest: " << bundle_manifest_path.string() << '\n';
+  std::cout << "metrics_csv: " << ctx.metrics_csv_path.string() << '\n';
+  std::cout << "metrics_json: " << ctx.metrics_json_path.string() << '\n';
+  std::cout << "summary: " << ctx.summary_markdown_path.string() << '\n';
+  std::cout << "report_html: " << ctx.report_html_path.string() << '\n';
+  std::cout << "manifest: " << ctx.bundle_manifest_path.string() << '\n';
   if (options.zip_bundle) {
-    std::cout << "bundle_zip: " << bundle_zip_path.string() << '\n';
+    std::cout << "bundle_zip: " << ctx.bundle_zip_path.string() << '\n';
   }
-  std::cout << "fps: avg=" << fps_report.avg_fps
-            << " rolling_samples=" << fps_report.rolling_samples.size() << '\n';
-  std::cout << "drops: total=" << fps_report.dropped_frames_total
-            << " generic=" << fps_report.dropped_generic_frames_total
-            << " timeout=" << fps_report.timeout_frames_total
-            << " incomplete=" << fps_report.incomplete_frames_total
-            << " rate_percent=" << fps_report.drop_rate_percent << '\n';
-  std::cout << "timing_us: interval_avg=" << fps_report.inter_frame_interval_us.avg_us
-            << " interval_p95=" << fps_report.inter_frame_interval_us.p95_us
-            << " jitter_avg=" << fps_report.inter_frame_jitter_us.avg_us
-            << " jitter_p95=" << fps_report.inter_frame_jitter_us.p95_us << '\n';
-  std::cout << "frames: total=" << frames.size() << " received=" << received_count
-            << " dropped=" << dropped_count << '\n';
+  std::cout << "fps: avg=" << ctx.fps_report.avg_fps
+            << " rolling_samples=" << ctx.fps_report.rolling_samples.size() << '\n';
+  std::cout << "drops: total=" << ctx.fps_report.dropped_frames_total
+            << " generic=" << ctx.fps_report.dropped_generic_frames_total
+            << " timeout=" << ctx.fps_report.timeout_frames_total
+            << " incomplete=" << ctx.fps_report.incomplete_frames_total
+            << " rate_percent=" << ctx.fps_report.drop_rate_percent << '\n';
+  std::cout << "timing_us: interval_avg=" << ctx.fps_report.inter_frame_interval_us.avg_us
+            << " interval_p95=" << ctx.fps_report.inter_frame_interval_us.p95_us
+            << " jitter_avg=" << ctx.fps_report.inter_frame_jitter_us.avg_us
+            << " jitter_p95=" << ctx.fps_report.inter_frame_jitter_us.p95_us << '\n';
+  std::cout << "frames: total=" << ctx.frames.size() << " received=" << ctx.received_count
+            << " dropped=" << ctx.dropped_count << '\n';
+
   std::string run_status = "completed";
-  if (disconnect_failure) {
+  if (ctx.disconnect_failure) {
     run_status = "failed_device_disconnect";
-  } else if (interrupted_by_signal) {
+  } else if (ctx.interrupted_by_signal) {
     run_status = "interrupted";
   }
   std::cout << "run_status: " << run_status << '\n';
-  if (!options.soak_mode && interrupted_by_signal) {
-    std::cout << "completed_duration_ms: " << non_soak_completed_duration.count() << '\n';
-    std::cout << "requested_duration_ms: " << run_plan.duration.count() << '\n';
-  } else if (!options.soak_mode && disconnect_failure) {
-    std::cout << "completed_duration_ms: " << non_soak_completed_duration.count() << '\n';
-    std::cout << "requested_duration_ms: " << run_plan.duration.count() << '\n';
-    std::cout << "reconnect_attempts_used_total: " << reconnect_attempts_used << '\n';
+  if (!options.soak_mode && ctx.interrupted_by_signal) {
+    std::cout << "completed_duration_ms: " << ctx.non_soak_completed_duration.count() << '\n';
+    std::cout << "requested_duration_ms: " << ctx.run_plan.duration.count() << '\n';
+  } else if (!options.soak_mode && ctx.disconnect_failure) {
+    std::cout << "completed_duration_ms: " << ctx.non_soak_completed_duration.count() << '\n';
+    std::cout << "requested_duration_ms: " << ctx.run_plan.duration.count() << '\n';
+    std::cout << "reconnect_attempts_used_total: " << ctx.reconnect_attempts_used << '\n';
     std::cout << "reconnect_retry_limit: " << kReconnectRetryLimit << '\n';
   }
 
-  if (interrupted_by_signal) {
-    logger.Warn("run interrupted by signal",
-                {{"frames_total", std::to_string(frames.size())},
-                 {"frames_received", std::to_string(received_count)},
-                 {"frames_dropped", std::to_string(dropped_count)},
-                 {"completed_duration_ms", std::to_string(non_soak_completed_duration.count())},
-                 {"requested_duration_ms", std::to_string(run_plan.duration.count())}});
+  if (ctx.interrupted_by_signal) {
+    ctx.logger.Warn(
+        "run interrupted by signal",
+        {{"frames_total", std::to_string(ctx.frames.size())},
+         {"frames_received", std::to_string(ctx.received_count)},
+         {"frames_dropped", std::to_string(ctx.dropped_count)},
+         {"completed_duration_ms", std::to_string(ctx.non_soak_completed_duration.count())},
+         {"requested_duration_ms", std::to_string(ctx.run_plan.duration.count())}});
     std::cerr << "warning: run interrupted by Ctrl+C; finalized partial artifact bundle\n";
     return kExitFailure;
   }
-  if (disconnect_failure) {
-    logger.Error("run failed after device disconnect and reconnect exhaustion",
-                 {{"frames_total", std::to_string(frames.size())},
-                  {"frames_received", std::to_string(received_count)},
-                  {"frames_dropped", std::to_string(dropped_count)},
-                  {"completed_duration_ms", std::to_string(non_soak_completed_duration.count())},
-                  {"requested_duration_ms", std::to_string(run_plan.duration.count())},
-                  {"reconnect_attempts_used_total", std::to_string(reconnect_attempts_used)},
-                  {"reconnect_retry_limit", std::to_string(kReconnectRetryLimit)},
-                  {"error", disconnect_failure_error.empty() ? "-" : disconnect_failure_error}});
+  if (ctx.disconnect_failure) {
+    ctx.logger.Error(
+        "run failed after device disconnect and reconnect exhaustion",
+        {{"frames_total", std::to_string(ctx.frames.size())},
+         {"frames_received", std::to_string(ctx.received_count)},
+         {"frames_dropped", std::to_string(ctx.dropped_count)},
+         {"completed_duration_ms", std::to_string(ctx.non_soak_completed_duration.count())},
+         {"requested_duration_ms", std::to_string(ctx.run_plan.duration.count())},
+         {"reconnect_attempts_used_total", std::to_string(ctx.reconnect_attempts_used)},
+         {"reconnect_retry_limit", std::to_string(kReconnectRetryLimit)},
+         {"error", ctx.disconnect_failure_error.empty() ? "-" : ctx.disconnect_failure_error}});
     std::cerr << "error: run failed after device disconnect; reconnect attempts exhausted\n";
-    if (!disconnect_failure_error.empty()) {
-      std::cerr << "error: disconnect detail: " << disconnect_failure_error << '\n';
+    if (!ctx.disconnect_failure_error.empty()) {
+      std::cerr << "error: disconnect detail: " << ctx.disconnect_failure_error << '\n';
     }
     return kExitFailure;
   }
 
-  if (thresholds_passed) {
-    logger.Info("run completed", {{"thresholds", "pass"},
-                                  {"frames_total", std::to_string(frames.size())},
-                                  {"frames_received", std::to_string(received_count)},
-                                  {"frames_dropped", std::to_string(dropped_count)}});
+  if (ctx.thresholds_passed) {
+    ctx.logger.Info("run completed", {{"thresholds", "pass"},
+                                      {"frames_total", std::to_string(ctx.frames.size())},
+                                      {"frames_received", std::to_string(ctx.received_count)},
+                                      {"frames_dropped", std::to_string(ctx.dropped_count)}});
     std::cout << "thresholds: pass\n";
     return kExitSuccess;
   }
 
-  logger.Warn("run completed with threshold failures",
-              {{"thresholds", "fail"},
-               {"failure_count", std::to_string(threshold_failures.size())},
-               {"frames_total", std::to_string(frames.size())},
-               {"frames_received", std::to_string(received_count)},
-               {"frames_dropped", std::to_string(dropped_count)}});
-  std::cout << "thresholds: fail count=" << threshold_failures.size() << '\n';
-  for (const auto& failure : threshold_failures) {
-    logger.Warn("threshold failure", {{"detail", failure}});
+  ctx.logger.Warn("run completed with threshold failures",
+                  {{"thresholds", "fail"},
+                   {"failure_count", std::to_string(ctx.threshold_failures.size())},
+                   {"frames_total", std::to_string(ctx.frames.size())},
+                   {"frames_received", std::to_string(ctx.received_count)},
+                   {"frames_dropped", std::to_string(ctx.dropped_count)}});
+  std::cout << "thresholds: fail count=" << ctx.threshold_failures.size() << '\n';
+  for (const auto& failure : ctx.threshold_failures) {
+    ctx.logger.Warn("threshold failure", {{"detail", failure}});
     std::cerr << "threshold failed: " << failure << '\n';
   }
   return kExitThresholdsFailed;
+}
+
+// Centralized run execution keeps `run` and `baseline capture` behavior aligned
+// so artifact contracts and metrics math never diverge between modes.
+int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundle_dir,
+                               bool allow_zip_bundle, std::string_view success_prefix,
+                               ScenarioRunResult* run_result) {
+  if (run_result != nullptr) {
+    *run_result = ScenarioRunResult{};
+  }
+
+  RunExecutionContext ctx(options.log_level);
+
+  // Stage 1: parse/validate run context and resolve scenario execution mode.
+  int stage_exit_code =
+      PrepareRunContext(options, use_per_run_bundle_dir, allow_zip_bundle, run_result, ctx);
+  if (stage_exit_code != kExitSuccess) {
+    return stage_exit_code;
+  }
+
+  // Stage 2: materialize early artifacts (scenario snapshot + host evidence).
+  stage_exit_code = InitializeArtifacts(options, ctx);
+  if (stage_exit_code != kExitSuccess) {
+    return stage_exit_code;
+  }
+
+  // Stage 3: create/configure/connect backend and emit STREAM_STARTED.
+  stage_exit_code = ConfigureBackend(options, run_result, ctx);
+  if (stage_exit_code != kExitSuccess) {
+    return stage_exit_code;
+  }
+
+  // Stage 4: run streaming loops (normal/soak/resume) and append STREAM_STOPPED.
+  stage_exit_code = ExecuteStreaming(options, success_prefix, run_result, ctx);
+  if (stage_exit_code != kExitSuccess) {
+    return stage_exit_code;
+  }
+  if (ctx.soak_paused) {
+    return kExitSuccess;
+  }
+
+  // Stage 5: compute metrics and write summary/report/bundle artifacts.
+  stage_exit_code = FinalizeMetricsAndReports(options, run_result, ctx);
+  if (stage_exit_code != kExitSuccess) {
+    return stage_exit_code;
+  }
+
+  // Stage 6: print user-facing summary and resolve final exit code.
+  return EmitFinalConsoleSummary(options, success_prefix, ctx);
 }
 
 int CommandRun(const std::vector<std::string_view>& args) {

@@ -14,6 +14,25 @@ The CLI is the primary user interface for lab engineers and CI pipelines. Keepin
 - CLI-owned support modules for run-specific workflows (for example soak
   checkpoint/frame-cache persistence under `soak/`).
 
+## Run Pipeline Internals
+
+The core run path in `cli/router.cpp` keeps the external command contract the
+same, but is now split into explicit internal stages with shared
+`RunExecutionContext` state:
+
+- `PrepareRunContext`
+- `InitializeArtifacts`
+- `ConfigureBackend`
+- `ExecuteStreaming`
+- `FinalizeMetricsAndReports`
+- `EmitFinalConsoleSummary`
+
+Why this structure exists:
+- keeps `labops run` / `baseline capture` behavior identical while reducing
+  monolithic control flow.
+- makes changes easier to review stage-by-stage (validation, artifacts,
+  backend wiring, streaming, finalization, summary output).
+
 ## Current command contract
 
 - `labops version`: prints tool version.
