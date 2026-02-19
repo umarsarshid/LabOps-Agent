@@ -104,6 +104,7 @@ endif()
 
 # Scenario loader/validation module.
 add_library(labops_scenarios
+  src/scenarios/model.cpp
   src/scenarios/netem_profile_support.cpp
   src/scenarios/validator.cpp
 )
@@ -875,6 +876,16 @@ add_labops_smoke_test(
   NAME scenario_validation_smoke
   SOURCES
     tests/scenarios/scenario_validation_smoke.cpp
+  LIBRARIES
+    labops_scenarios
+)
+
+# Scenario runtime-model parser smoke tests, including canonical/legacy-key
+# equivalence for run-planning inputs.
+add_labops_smoke_test(
+  NAME scenario_model_equivalence_smoke
+  SOURCES
+    tests/scenarios/scenario_model_equivalence_smoke.cpp
   LIBRARIES
     labops_scenarios
 )

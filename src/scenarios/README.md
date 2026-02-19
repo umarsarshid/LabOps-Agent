@@ -14,6 +14,9 @@ A repeatable lab depends on declarative scenario files. This module ensures scen
 
 ## Current contents
 
+- `model.hpp/.cpp`: typed runtime parse model (`ScenarioModel`) used by
+  run planning. This parser supports canonical schema paths plus legacy
+  flat keys in one place so runtime behavior stays backward compatible.
 - `validator.hpp/.cpp`: scenario JSON loader + schema validation with
   actionable error messages keyed by field path (used by `labops validate`),
   including `netem_profile` reference checks against

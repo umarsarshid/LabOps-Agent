@@ -31,6 +31,7 @@
 #include "labops/soak/checkpoint_store.hpp"
 #include "metrics/anomalies.hpp"
 #include "metrics/fps.hpp"
+#include "scenarios/model.hpp"
 #include "scenarios/netem_profile_support.hpp"
 #include "scenarios/validator.hpp"
 
@@ -753,8 +754,8 @@ const JsonValue* FindJsonPath(const JsonValue& root, std::initializer_list<std::
   return cursor;
 }
 
-// Run parsing keeps support for both canonical schema paths and historical
-// flat fixture keys so old smoke tests and internal scripts continue to work.
+// Scenario field lookup with canonical+legacy fallback.
+// Used where runtime parsing still supports historical flat fixture keys.
 const JsonValue* FindScenarioField(const JsonValue& root,
                                    std::initializer_list<std::string_view> canonical_path,
                                    std::initializer_list<std::string_view> legacy_path = {}) {
@@ -767,61 +768,11 @@ const JsonValue* FindScenarioField(const JsonValue& root,
   return FindJsonPath(root, legacy_path);
 }
 
-bool TryGetNonNegativeInteger(const JsonValue& value, std::uint64_t& out) {
-  if (value.type != JsonValue::Type::kNumber) {
-    return false;
-  }
-  if (!std::isfinite(value.number_value) || value.number_value < 0.0) {
-    return false;
-  }
-  const double floored = std::floor(value.number_value);
-  if (floored != value.number_value ||
-      floored > static_cast<double>(std::numeric_limits<std::uint64_t>::max())) {
-    return false;
-  }
-  out = static_cast<std::uint64_t>(floored);
-  return true;
-}
-
 bool TryGetFiniteNumber(const JsonValue& value, double& out) {
   if (value.type != JsonValue::Type::kNumber || !std::isfinite(value.number_value)) {
     return false;
   }
   out = value.number_value;
-  return true;
-}
-
-struct RoiValues {
-  std::uint64_t x = 0;
-  std::uint64_t y = 0;
-  std::uint64_t width = 0;
-  std::uint64_t height = 0;
-};
-
-bool ParseRoiValues(const JsonValue& roi, RoiValues& roi_values, std::string& error) {
-  roi_values = RoiValues{};
-  error.clear();
-  if (roi.type != JsonValue::Type::kObject) {
-    error = "scenario camera.roi must include x, y, width, and height";
-    return false;
-  }
-
-  auto read_required_non_negative_integer = [&](std::string_view key, std::uint64_t& parsed_value) {
-    const JsonValue* value = FindObjectMember(roi, key);
-    if (value == nullptr) {
-      return false;
-    }
-    return TryGetNonNegativeInteger(*value, parsed_value);
-  };
-
-  if (!read_required_non_negative_integer("x", roi_values.x) ||
-      !read_required_non_negative_integer("y", roi_values.y) ||
-      !read_required_non_negative_integer("width", roi_values.width) ||
-      !read_required_non_negative_integer("height", roi_values.height)) {
-    error = "scenario camera.roi must include x, y, width, and height";
-    return false;
-  }
-
   return true;
 }
 
@@ -1103,69 +1054,14 @@ bool ApplyNetemIfRequested(const RunOptions& options,
 
 bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, std::string& error) {
   plan = RunPlan{};
-  std::string scenario_text;
-  if (!ReadTextFile(scenario_path, scenario_text, error)) {
+  scenarios::ScenarioModel scenario_model;
+  if (!scenarios::LoadScenarioModelFile(scenario_path, scenario_model, error)) {
     return false;
   }
 
-  JsonValue scenario_root;
-  JsonParser parser(scenario_text);
-  std::string parse_error;
-  if (!parser.Parse(scenario_root, parse_error)) {
-    error = "invalid scenario JSON: " + parse_error;
-    return false;
-  }
-  if (scenario_root.type != JsonValue::Type::kObject) {
-    error = "scenario root must be a JSON object";
-    return false;
-  }
-
-  // Keep run-path behavior backwards compatible with old fixtures:
-  // if a field is present but has an unexpected type, we treat it as unset.
-  // `labops validate` remains the authoritative strict schema gate.
-  auto read_u64 =
-      [&](std::initializer_list<std::string_view> canonical_path,
-          std::initializer_list<std::string_view> legacy_path) -> std::optional<std::uint64_t> {
-    const JsonValue* value = FindScenarioField(scenario_root, canonical_path, legacy_path);
-    if (value == nullptr) {
-      return std::nullopt;
-    }
-    std::uint64_t parsed = 0;
-    if (!TryGetNonNegativeInteger(*value, parsed)) {
-      return std::nullopt;
-    }
-    return parsed;
-  };
-
-  auto read_number =
-      [&](std::initializer_list<std::string_view> canonical_path,
-          std::initializer_list<std::string_view> legacy_path) -> std::optional<double> {
-    const JsonValue* value = FindScenarioField(scenario_root, canonical_path, legacy_path);
-    if (value == nullptr) {
-      return std::nullopt;
-    }
-    double parsed = 0.0;
-    if (!TryGetFiniteNumber(*value, parsed)) {
-      return std::nullopt;
-    }
-    return parsed;
-  };
-
-  auto read_string =
-      [&](std::initializer_list<std::string_view> canonical_path,
-          std::initializer_list<std::string_view> legacy_path) -> std::optional<std::string> {
-    const JsonValue* value = FindScenarioField(scenario_root, canonical_path, legacy_path);
-    if (value == nullptr || value->type != JsonValue::Type::kString) {
-      return std::nullopt;
-    }
-    return value->string_value;
-  };
-
-  auto assign_u32 = [&](std::string_view key,
-                        std::initializer_list<std::string_view> canonical_path,
-                        std::initializer_list<std::string_view> legacy_path, std::uint32_t& target,
+  auto assign_u32 = [&](std::string_view key, const std::optional<std::uint64_t>& value,
+                        std::uint32_t& target,
                         std::uint32_t max_value = std::numeric_limits<std::uint32_t>::max()) {
-    const auto value = read_u64(canonical_path, legacy_path);
     if (!value.has_value()) {
       return true;
     }
@@ -1177,10 +1073,7 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
     return true;
   };
 
-  auto assign_u64 = [&](std::initializer_list<std::string_view> canonical_path,
-                        std::initializer_list<std::string_view> legacy_path,
-                        std::uint64_t& target) {
-    const auto value = read_u64(canonical_path, legacy_path);
+  auto assign_u64 = [&](const std::optional<std::uint64_t>& value, std::uint64_t& target) {
     if (!value.has_value()) {
       return true;
     }
@@ -1188,218 +1081,204 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
     return true;
   };
 
-  auto assign_non_negative_double =
-      [&](std::string_view key, std::initializer_list<std::string_view> canonical_path,
-          std::initializer_list<std::string_view> legacy_path, std::optional<double>& target,
-          bool percent_0_to_100 = false) {
-        const auto value = read_number(canonical_path, legacy_path);
-        if (!value.has_value()) {
-          return true;
-        }
+  auto assign_non_negative_double = [&](std::string_view key, const std::optional<double>& value,
+                                        std::optional<double>& target,
+                                        bool percent_0_to_100 = false) {
+    if (!value.has_value()) {
+      return true;
+    }
 
-        const double parsed = value.value();
-        if (!std::isfinite(parsed) || parsed < 0.0) {
-          error = "scenario threshold must be a non-negative number for key: " + std::string(key);
-          return false;
-        }
-        if (percent_0_to_100 && parsed > 100.0) {
-          error = "scenario threshold must be in range [0,100] for key: " + std::string(key);
-          return false;
-        }
-        target = parsed;
-        return true;
-      };
+    const double parsed = value.value();
+    if (!std::isfinite(parsed) || parsed < 0.0) {
+      error = "scenario threshold must be a non-negative number for key: " + std::string(key);
+      return false;
+    }
+    if (percent_0_to_100 && parsed > 100.0) {
+      error = "scenario threshold must be in range [0,100] for key: " + std::string(key);
+      return false;
+    }
+    target = parsed;
+    return true;
+  };
 
-  auto assign_non_negative_integer_threshold =
-      [&](std::string_view key, std::initializer_list<std::string_view> canonical_path,
-          std::initializer_list<std::string_view> legacy_path,
-          std::optional<std::uint64_t>& target) {
-        const auto value = read_number(canonical_path, legacy_path);
-        if (!value.has_value()) {
-          return true;
-        }
+  auto assign_non_negative_integer_threshold = [&](std::string_view key,
+                                                   const std::optional<double>& value,
+                                                   std::optional<std::uint64_t>& target) {
+    if (!value.has_value()) {
+      return true;
+    }
 
-        const double parsed = value.value();
-        if (!std::isfinite(parsed) || parsed < 0.0) {
-          error = "scenario threshold must be a non-negative integer for key: " + std::string(key);
-          return false;
-        }
-        const double floored = std::floor(parsed);
-        if (floored != parsed ||
-            floored > static_cast<double>(std::numeric_limits<std::uint64_t>::max())) {
-          error = "scenario threshold must be a non-negative integer for key: " + std::string(key);
-          return false;
-        }
-        target = static_cast<std::uint64_t>(floored);
-        return true;
-      };
+    const double parsed = value.value();
+    if (!std::isfinite(parsed) || parsed < 0.0) {
+      error = "scenario threshold must be a non-negative integer for key: " + std::string(key);
+      return false;
+    }
+    const double floored = std::floor(parsed);
+    if (floored != parsed ||
+        floored > static_cast<double>(std::numeric_limits<std::uint64_t>::max())) {
+      error = "scenario threshold must be a non-negative integer for key: " + std::string(key);
+      return false;
+    }
+    target = static_cast<std::uint64_t>(floored);
+    return true;
+  };
 
-  if (const auto duration_ms = read_u64({"duration", "duration_ms"}, {"duration_ms"});
-      duration_ms.has_value()) {
-    if (duration_ms.value() == 0U) {
+  if (scenario_model.duration.duration_ms.has_value()) {
+    if (scenario_model.duration.duration_ms.value() == 0U) {
       error = "scenario duration_ms must be greater than 0";
       return false;
     }
-    plan.duration = std::chrono::milliseconds(static_cast<std::int64_t>(duration_ms.value()));
-  } else if (const auto duration_s = read_u64({"duration", "duration_s"}, {"duration_s"});
-             duration_s.has_value()) {
-    if (duration_s.value() == 0U) {
+    plan.duration = std::chrono::milliseconds(
+        static_cast<std::int64_t>(scenario_model.duration.duration_ms.value()));
+  } else if (scenario_model.duration.duration_s.has_value()) {
+    if (scenario_model.duration.duration_s.value() == 0U) {
       error = "scenario duration_s must be greater than 0";
       return false;
     }
-    plan.duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::seconds(static_cast<std::int64_t>(duration_s.value())));
+    plan.duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::seconds(
+        static_cast<std::int64_t>(scenario_model.duration.duration_s.value())));
   }
 
-  if (const auto backend = read_string({"backend"}, {}); backend.has_value()) {
-    if (*backend != kBackendSim && *backend != kBackendRealStub) {
+  if (scenario_model.backend.has_value()) {
+    if (scenario_model.backend.value() != kBackendSim &&
+        scenario_model.backend.value() != kBackendRealStub) {
       error = "scenario backend must be one of: sim, real_stub";
       return false;
     }
-    plan.backend = *backend;
+    plan.backend = scenario_model.backend.value();
   }
 
-  if (const auto apply_mode = read_string({"apply_mode"}, {}); apply_mode.has_value()) {
-    if (!backends::real_sdk::ParseParamApplyMode(apply_mode.value(), plan.real_apply_mode, error)) {
+  if (scenario_model.apply_mode.has_value()) {
+    if (!backends::real_sdk::ParseParamApplyMode(scenario_model.apply_mode.value(),
+                                                 plan.real_apply_mode, error)) {
       return false;
     }
   }
 
-  const auto requested_fps = read_u64({"camera", "fps"}, {"fps"});
-  const auto pixel_format = read_string({"camera", "pixel_format"}, {"pixel_format"});
-  const auto exposure_us = read_u64({"camera", "exposure_us"}, {"exposure_us"});
-  const auto gain_db = read_number({"camera", "gain_db"}, {"gain_db"});
-  const auto packet_size_bytes =
-      read_u64({"camera", "network", "packet_size_bytes"}, {"packet_size_bytes"});
-  const auto inter_packet_delay_us =
-      read_u64({"camera", "network", "inter_packet_delay_us"}, {"inter_packet_delay_us"});
-  const auto trigger_mode = read_string({"camera", "trigger_mode"}, {"trigger_mode"});
-  const auto trigger_source = read_string({"camera", "trigger_source"}, {"trigger_source"});
-  const auto trigger_activation =
-      read_string({"camera", "trigger_activation"}, {"trigger_activation"});
-  RoiValues roi_values;
-  const JsonValue* roi_object = FindScenarioField(scenario_root, {"camera", "roi"}, {"roi"});
-  const bool has_roi = roi_object != nullptr;
-  if (has_roi && !ParseRoiValues(*roi_object, roi_values, error)) {
+  if (!assign_u32("fps", scenario_model.camera.fps, plan.sim_config.fps)) {
     return false;
   }
-
-  if (!assign_u32("fps", {"camera", "fps"}, {"fps"}, plan.sim_config.fps)) {
+  if (!assign_u32("jitter_us", scenario_model.sim_faults.jitter_us, plan.sim_config.jitter_us)) {
     return false;
   }
-  if (!assign_u32("jitter_us", {"sim_faults", "jitter_us"}, {"jitter_us"},
-                  plan.sim_config.jitter_us)) {
+  if (!assign_u64(scenario_model.sim_faults.seed, plan.sim_config.seed)) {
     return false;
   }
-  if (!assign_u64({"sim_faults", "seed"}, {"seed"}, plan.sim_config.seed)) {
-    return false;
-  }
-  if (!assign_u32("frame_size_bytes", {"camera", "frame_size_bytes"}, {"frame_size_bytes"},
+  if (!assign_u32("frame_size_bytes", scenario_model.camera.frame_size_bytes,
                   plan.sim_config.frame_size_bytes)) {
     return false;
   }
-  if (!assign_u32("drop_every_n", {"sim_faults", "drop_every_n"}, {"drop_every_n"},
+  if (!assign_u32("drop_every_n", scenario_model.sim_faults.drop_every_n,
                   plan.sim_config.drop_every_n)) {
     return false;
   }
-  if (!assign_u32("drop_percent", {"sim_faults", "drop_percent"}, {"drop_percent"},
+  if (!assign_u32("drop_percent", scenario_model.sim_faults.drop_percent,
                   plan.sim_config.faults.drop_percent, 100U)) {
     return false;
   }
-  if (!assign_u32("burst_drop", {"sim_faults", "burst_drop"}, {"burst_drop"},
+  if (!assign_u32("burst_drop", scenario_model.sim_faults.burst_drop,
                   plan.sim_config.faults.burst_drop)) {
     return false;
   }
-  if (!assign_u32("reorder", {"sim_faults", "reorder"}, {"reorder"},
-                  plan.sim_config.faults.reorder)) {
+  if (!assign_u32("reorder", scenario_model.sim_faults.reorder, plan.sim_config.faults.reorder)) {
     return false;
   }
 
-  if (requested_fps.has_value()) {
+  if (scenario_model.camera.fps.has_value()) {
     UpsertRealParam(plan.real_params, "frame_rate", std::to_string(plan.sim_config.fps));
   }
-  if (pixel_format.has_value() && !pixel_format->empty()) {
-    UpsertRealParam(plan.real_params, "pixel_format", pixel_format.value());
+  if (scenario_model.camera.pixel_format.has_value() &&
+      !scenario_model.camera.pixel_format->empty()) {
+    UpsertRealParam(plan.real_params, "pixel_format", scenario_model.camera.pixel_format.value());
   }
-  if (exposure_us.has_value()) {
-    UpsertRealParam(plan.real_params, "exposure", std::to_string(exposure_us.value()));
+  if (scenario_model.camera.exposure_us.has_value()) {
+    UpsertRealParam(plan.real_params, "exposure",
+                    std::to_string(scenario_model.camera.exposure_us.value()));
   }
-  if (gain_db.has_value()) {
-    UpsertRealParam(plan.real_params, "gain", FormatCompactDouble(gain_db.value()));
+  if (scenario_model.camera.gain_db.has_value()) {
+    UpsertRealParam(plan.real_params, "gain",
+                    FormatCompactDouble(scenario_model.camera.gain_db.value()));
   }
-  if (packet_size_bytes.has_value()) {
+  if (scenario_model.camera.packet_size_bytes.has_value()) {
     UpsertRealParam(plan.real_params, "packet_size_bytes",
-                    std::to_string(packet_size_bytes.value()));
+                    std::to_string(scenario_model.camera.packet_size_bytes.value()));
   }
-  if (inter_packet_delay_us.has_value()) {
+  if (scenario_model.camera.inter_packet_delay_us.has_value()) {
     UpsertRealParam(plan.real_params, "inter_packet_delay_us",
-                    std::to_string(inter_packet_delay_us.value()));
+                    std::to_string(scenario_model.camera.inter_packet_delay_us.value()));
   }
-  if (trigger_mode.has_value() && !trigger_mode->empty()) {
-    UpsertRealParam(plan.real_params, "trigger_mode", trigger_mode.value());
+  if (scenario_model.camera.trigger_mode.has_value() &&
+      !scenario_model.camera.trigger_mode->empty()) {
+    UpsertRealParam(plan.real_params, "trigger_mode", scenario_model.camera.trigger_mode.value());
   }
-  if (trigger_source.has_value() && !trigger_source->empty()) {
-    UpsertRealParam(plan.real_params, "trigger_source", trigger_source.value());
+  if (scenario_model.camera.trigger_source.has_value() &&
+      !scenario_model.camera.trigger_source->empty()) {
+    UpsertRealParam(plan.real_params, "trigger_source",
+                    scenario_model.camera.trigger_source.value());
   }
-  if (trigger_activation.has_value() && !trigger_activation->empty()) {
-    UpsertRealParam(plan.real_params, "trigger_activation", trigger_activation.value());
+  if (scenario_model.camera.trigger_activation.has_value() &&
+      !scenario_model.camera.trigger_activation->empty()) {
+    UpsertRealParam(plan.real_params, "trigger_activation",
+                    scenario_model.camera.trigger_activation.value());
   }
-  if (has_roi) {
+  if (scenario_model.camera.roi.has_value()) {
     // Keep ROI ordering deterministic for cameras that require Width/Height
     // to be committed before OffsetX/OffsetY.
-    UpsertRealParam(plan.real_params, "roi_width", std::to_string(roi_values.width));
-    UpsertRealParam(plan.real_params, "roi_height", std::to_string(roi_values.height));
-    UpsertRealParam(plan.real_params, "roi_offset_x", std::to_string(roi_values.x));
-    UpsertRealParam(plan.real_params, "roi_offset_y", std::to_string(roi_values.y));
+    UpsertRealParam(plan.real_params, "roi_width",
+                    std::to_string(scenario_model.camera.roi->width));
+    UpsertRealParam(plan.real_params, "roi_height",
+                    std::to_string(scenario_model.camera.roi->height));
+    UpsertRealParam(plan.real_params, "roi_offset_x", std::to_string(scenario_model.camera.roi->x));
+    UpsertRealParam(plan.real_params, "roi_offset_y", std::to_string(scenario_model.camera.roi->y));
   }
 
-  if (!assign_non_negative_double("min_avg_fps", {"thresholds", "min_avg_fps"}, {"min_avg_fps"},
+  if (!assign_non_negative_double("min_avg_fps", scenario_model.thresholds.min_avg_fps,
                                   plan.thresholds.min_avg_fps)) {
     return false;
   }
-  if (!assign_non_negative_double("max_drop_rate_percent", {"thresholds", "max_drop_rate_percent"},
-                                  {"max_drop_rate_percent"}, plan.thresholds.max_drop_rate_percent,
+  if (!assign_non_negative_double("max_drop_rate_percent",
+                                  scenario_model.thresholds.max_drop_rate_percent,
+                                  plan.thresholds.max_drop_rate_percent,
                                   /*percent_0_to_100=*/true)) {
     return false;
   }
-  if (!assign_non_negative_double(
-          "max_inter_frame_interval_p95_us", {"thresholds", "max_inter_frame_interval_p95_us"},
-          {"max_inter_frame_interval_p95_us"}, plan.thresholds.max_inter_frame_interval_p95_us)) {
+  if (!assign_non_negative_double("max_inter_frame_interval_p95_us",
+                                  scenario_model.thresholds.max_inter_frame_interval_p95_us,
+                                  plan.thresholds.max_inter_frame_interval_p95_us)) {
     return false;
   }
-  if (!assign_non_negative_double(
-          "max_inter_frame_jitter_p95_us", {"thresholds", "max_inter_frame_jitter_p95_us"},
-          {"max_inter_frame_jitter_p95_us"}, plan.thresholds.max_inter_frame_jitter_p95_us)) {
+  if (!assign_non_negative_double("max_inter_frame_jitter_p95_us",
+                                  scenario_model.thresholds.max_inter_frame_jitter_p95_us,
+                                  plan.thresholds.max_inter_frame_jitter_p95_us)) {
     return false;
   }
-  if (!assign_non_negative_integer_threshold(
-          "max_disconnect_count", {"thresholds", "max_disconnect_count"}, {"max_disconnect_count"},
-          plan.thresholds.max_disconnect_count)) {
+  if (!assign_non_negative_integer_threshold("max_disconnect_count",
+                                             scenario_model.thresholds.max_disconnect_count,
+                                             plan.thresholds.max_disconnect_count)) {
     return false;
   }
 
-  if (const auto netem_profile = read_string({"netem_profile"}, {}); netem_profile.has_value()) {
-    if (netem_profile->empty()) {
+  if (scenario_model.netem_profile.has_value()) {
+    if (scenario_model.netem_profile->empty()) {
       error = "scenario netem_profile must not be empty";
       return false;
     }
-    if (!scenarios::IsLowercaseSlug(netem_profile.value())) {
+    if (!scenarios::IsLowercaseSlug(scenario_model.netem_profile.value())) {
       error = "scenario netem_profile must use lowercase slug format [a-z0-9_-]+";
       return false;
     }
-    plan.netem_profile = netem_profile.value();
+    plan.netem_profile = scenario_model.netem_profile.value();
   }
 
-  if (const auto device_selector = read_string({"device_selector"}, {});
-      device_selector.has_value()) {
-    if (device_selector->empty()) {
+  if (scenario_model.device_selector.has_value()) {
+    if (scenario_model.device_selector->empty()) {
       error = "scenario device_selector must not be empty";
       return false;
     }
-    if (!ValidateDeviceSelectorText(device_selector.value(), error)) {
+    if (!ValidateDeviceSelectorText(scenario_model.device_selector.value(), error)) {
       return false;
     }
-    plan.device_selector = device_selector.value();
+    plan.device_selector = scenario_model.device_selector.value();
   }
 
   if (plan.device_selector.has_value() && plan.backend != kBackendRealStub) {
