@@ -75,8 +75,7 @@ bool WebcamBackend::Stop(std::string& error) {
   return true;
 }
 
-bool WebcamBackend::SetParam(const std::string& key, const std::string& value,
-                             std::string& error) {
+bool WebcamBackend::SetParam(const std::string& key, const std::string& value, std::string& error) {
   if (key.empty()) {
     error = "parameter key cannot be empty";
     return false;

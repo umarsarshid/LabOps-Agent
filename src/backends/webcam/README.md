@@ -13,6 +13,13 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
     `BACKEND_NOT_AVAILABLE` failures until platform capture loops are added.
   - preserves requested params in `dump_config()` so early wiring can still be
     inspected in artifacts/tests.
+- `webcam_factory.hpp/.cpp`:
+  - centralizes backend registration hooks used by CLI backend routing.
+  - reports availability (`compiled`, `available`, `reason`) for
+    `labops list-backends` so operators can see why webcam is unavailable on a
+    given platform/build.
+  - returns a backend instance only when webcam path is compiled for the
+    current target.
 - `capabilities.hpp/.cpp`:
   - defines a small capability model (`unsupported`, `best_effort`,
     `supported`) for key control families (exposure/gain/pixel-format/ROI/

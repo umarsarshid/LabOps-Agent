@@ -23,7 +23,7 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Parse compare command contracts (`compare --baseline ... --run ... [--out ...]`).
 - Parse KB drafting contracts (`kb draft --run <run_folder> [--out <kb_draft.md>]`).
 - Surface backend availability contracts (`list-backends`) with human-readable
-  status reasons.
+  status reasons for `sim`, `webcam`, and `real`.
 - Surface backend device-discovery contract (`list-devices --backend real`)
   including friendly `BACKEND_NOT_AVAILABLE` messaging when real backend is not
   active.

@@ -1,3 +1,4 @@
+#include "backends/webcam/webcam_factory.hpp"
 #include "labops/cli/router.hpp"
 
 #include <cstdlib>
@@ -48,7 +49,17 @@ int main() {
   }
 
   AssertContains(stdout_text, "sim ");
+  AssertContains(stdout_text, "webcam ");
   AssertContains(stdout_text, "real ");
+
+  const labops::backends::webcam::WebcamBackendAvailability webcam_availability =
+      labops::backends::webcam::GetWebcamBackendAvailability();
+  if (webcam_availability.available) {
+    AssertContains(stdout_text, "webcam ✅ enabled");
+  } else {
+    AssertContains(stdout_text, "webcam ⚠️ disabled (");
+    AssertContains(stdout_text, webcam_availability.reason);
+  }
 
   const bool has_real_enabled = stdout_text.find("real ✅ enabled") != std::string::npos;
   const bool has_real_sdk_missing =

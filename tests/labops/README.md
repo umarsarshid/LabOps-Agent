@@ -76,7 +76,8 @@ This keeps each test focused on contract verification instead of setup code.
   `--log-level` and include the same `run_id` written to `run.json` so logs
   correlate directly with bundle artifacts.
 - `list_backends_smoke.cpp`: verifies `labops list-backends` prints deterministic
-  availability output for `sim` plus `real` (enabled or disabled with reason).
+  availability output for `sim`, `webcam`, and `real` (each with enabled or
+  disabled status plus reason when unavailable).
 - `list_devices_real_backend_smoke.cpp`: verifies
   `labops list-devices --backend real` returns device-list output when real
   backend is enabled (including normalized model/serial/user_id/transport and

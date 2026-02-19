@@ -58,6 +58,8 @@ The project needs one consistent workflow that can run on different camera stack
   - controlled by `LABOPS_ENABLE_REAL_BACKEND` build flag (default `OFF`).
 - `webcam/`: cross-platform webcam backend scaffold.
   - adds a standalone `WebcamBackend` implementing `ICameraBackend`.
+  - adds `webcam_factory` for backend registry/status wiring so CLI can report
+    webcam availability + reason.
   - introduces a capability model (`unsupported`, `best_effort`, `supported`)
     for key webcam controls (`exposure`, `gain`, `pixel_format`, `roi`,
     `trigger`, `frame_rate`).

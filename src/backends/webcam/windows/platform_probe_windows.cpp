@@ -5,8 +5,7 @@ namespace labops::backends::webcam {
 PlatformAvailability ProbePlatformAvailabilityWindows() {
   PlatformAvailability probe;
   probe.platform_name = "windows";
-  probe.unavailability_reason =
-      "Media Foundation webcam capture path is not implemented yet";
+  probe.unavailability_reason = "Media Foundation webcam capture path is not implemented yet";
   return probe;
 }
 

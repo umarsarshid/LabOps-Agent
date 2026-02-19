@@ -90,6 +90,7 @@ add_library(labops_backends
   src/backends/sim/sim_camera_backend.cpp
   src/backends/webcam/capabilities.cpp
   src/backends/webcam/platform_probe.cpp
+  src/backends/webcam/webcam_factory.cpp
   src/backends/webcam/linux/platform_probe_linux.cpp
   src/backends/webcam/macos/platform_probe_macos.cpp
   src/backends/webcam/windows/platform_probe_windows.cpp

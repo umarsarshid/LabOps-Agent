@@ -528,8 +528,9 @@ void ValidateBackend(const JsonValue& root, ValidationReport& report) {
     AddIssue(report, "backend", "must not be empty when provided");
     return;
   }
-  if (backend->string_value != "sim" && backend->string_value != "real_stub") {
-    AddIssue(report, "backend", "must be one of: sim, real_stub");
+  if (backend->string_value != "sim" && backend->string_value != "webcam" &&
+      backend->string_value != "real_stub") {
+    AddIssue(report, "backend", "must be one of: sim, webcam, real_stub");
   }
 }
 

@@ -22,6 +22,7 @@
 #include "backends/real_sdk/transport_counters.hpp"
 #include "backends/sim/scenario_config.hpp"
 #include "backends/sim/sim_camera_backend.hpp"
+#include "backends/webcam/webcam_factory.hpp"
 #include "core/errors/exit_codes.hpp"
 #include "core/json_dom.hpp"
 #include "core/schema/run_contract.hpp"
@@ -73,6 +74,7 @@ namespace labops::cli {
 namespace {
 
 constexpr std::string_view kBackendSim = "sim";
+constexpr std::string_view kBackendWebcam = "webcam";
 constexpr std::string_view kBackendRealStub = "real_stub";
 
 using JsonValue = core::json::Value;
@@ -209,6 +211,13 @@ int CommandListBackends(const std::vector<std::string_view>& args) {
   }
 
   std::cout << "sim ✅ enabled\n";
+  const backends::webcam::WebcamBackendAvailability webcam_availability =
+      backends::webcam::GetWebcamBackendAvailability();
+  if (webcam_availability.available) {
+    std::cout << "webcam ✅ enabled\n";
+  } else {
+    std::cout << "webcam ⚠️ disabled (" << webcam_availability.reason << ")\n";
+  }
   if (backends::real_sdk::IsRealBackendEnabledAtBuild()) {
     std::cout << "real ✅ enabled\n";
   } else {
@@ -1142,8 +1151,9 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
 
   if (scenario_model.backend.has_value()) {
     if (scenario_model.backend.value() != kBackendSim &&
+        scenario_model.backend.value() != kBackendWebcam &&
         scenario_model.backend.value() != kBackendRealStub) {
-      error = "scenario backend must be one of: sim, real_stub";
+      error = "scenario backend must be one of: sim, webcam, real_stub";
       return false;
     }
     plan.backend = scenario_model.backend.value();
@@ -1319,6 +1329,14 @@ bool BuildBackendFromRunPlan(const RunPlan& run_plan,
   error.clear();
   if (run_plan.backend == kBackendSim) {
     backend = std::make_unique<backends::sim::SimCameraBackend>();
+    return true;
+  }
+  if (run_plan.backend == kBackendWebcam) {
+    backend = backends::webcam::CreateWebcamBackend();
+    if (!backend) {
+      error = "webcam backend not compiled on this platform";
+      return false;
+    }
     return true;
   }
   if (run_plan.backend == kBackendRealStub) {
