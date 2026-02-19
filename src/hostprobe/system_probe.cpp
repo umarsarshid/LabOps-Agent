@@ -1,5 +1,8 @@
 #include "hostprobe/system_probe.hpp"
 
+#include "core/json_utils.hpp"
+#include "core/time_utils.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -41,77 +44,6 @@
 namespace labops::hostprobe {
 
 namespace {
-
-std::string EscapeJson(std::string_view input) {
-  std::ostringstream out;
-  for (const char ch : input) {
-    switch (ch) {
-    case '"':
-      out << "\\\"";
-      break;
-    case '\\':
-      out << "\\\\";
-      break;
-    case '\b':
-      out << "\\b";
-      break;
-    case '\f':
-      out << "\\f";
-      break;
-    case '\n':
-      out << "\\n";
-      break;
-    case '\r':
-      out << "\\r";
-      break;
-    case '\t':
-      out << "\\t";
-      break;
-    default: {
-      const auto as_unsigned = static_cast<unsigned char>(ch);
-      if (as_unsigned < 0x20U) {
-        out << "\\u" << std::hex << std::setw(4) << std::setfill('0')
-            << static_cast<int>(as_unsigned) << std::dec << std::setfill(' ');
-      } else {
-        out << ch;
-      }
-      break;
-    }
-    }
-  }
-  return out.str();
-}
-
-std::string FormatUtcTimestamp(std::chrono::system_clock::time_point timestamp) {
-  const auto millis_since_epoch =
-      std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()).count();
-  const auto millis_component = static_cast<int>((millis_since_epoch % 1000 + 1000) % 1000);
-
-  const std::time_t epoch_seconds = std::chrono::system_clock::to_time_t(timestamp);
-  std::tm utc_time{};
-#if defined(_WIN32)
-  const errno_t result = gmtime_s(&utc_time, &epoch_seconds);
-  if (result != 0) {
-    return "";
-  }
-#else
-  const std::tm* result = gmtime_r(&epoch_seconds, &utc_time);
-  if (result == nullptr) {
-    return "";
-  }
-#endif
-
-  std::ostringstream out;
-  out << std::put_time(&utc_time, "%Y-%m-%dT%H:%M:%S") << '.' << std::setw(3) << std::setfill('0')
-      << millis_component << 'Z';
-  return out.str();
-}
-
-std::string FormatDouble(double value) {
-  std::ostringstream out;
-  out << std::fixed << std::setprecision(6) << value;
-  return out.str();
-}
 
 std::string ToLower(std::string_view value) {
   std::string out;
@@ -1095,7 +1027,7 @@ void WriteJsonStringArray(std::ostringstream& out, const std::vector<std::string
     if (i != 0U) {
       out << ",";
     }
-    out << "\"" << EscapeJson(values[i]) << "\"";
+    out << "\"" << core::EscapeJson(values[i]) << "\"";
   }
   out << "]";
 }
@@ -1104,7 +1036,7 @@ void WriteNicHighlightsJson(std::ostringstream& out, const NicHighlights& highli
   out << "\"nic_highlights\":{";
   out << "\"default_route_interface\":";
   if (highlights.default_route_interface.has_value()) {
-    out << "\"" << EscapeJson(highlights.default_route_interface.value()) << "\"";
+    out << "\"" << core::EscapeJson(highlights.default_route_interface.value()) << "\"";
   } else {
     out << "null";
   }
@@ -1117,10 +1049,10 @@ void WriteNicHighlightsJson(std::ostringstream& out, const NicHighlights& highli
     }
 
     out << "{";
-    out << "\"name\":\"" << EscapeJson(iface.name) << "\",";
+    out << "\"name\":\"" << core::EscapeJson(iface.name) << "\",";
     out << "\"mac_address\":";
     if (iface.mac_address.has_value()) {
-      out << "\"" << EscapeJson(iface.mac_address.value()) << "\"";
+      out << "\"" << core::EscapeJson(iface.mac_address.value()) << "\"";
     } else {
       out << "null";
     }
@@ -1136,7 +1068,7 @@ void WriteNicHighlightsJson(std::ostringstream& out, const NicHighlights& highli
     }
     out << ",\"link_speed_hint\":";
     if (iface.link_speed_hint.has_value()) {
-      out << "\"" << EscapeJson(iface.link_speed_hint.value()) << "\"";
+      out << "\"" << core::EscapeJson(iface.link_speed_hint.value()) << "\"";
     } else {
       out << "null";
     }
@@ -1227,32 +1159,32 @@ void RedactNicProbeSnapshot(NicProbeSnapshot& snapshot, const IdentifierRedactio
 std::string ToJson(const HostProbeSnapshot& snapshot) {
   std::ostringstream out;
   out << "{"
-      << "\"captured_at_utc\":\"" << FormatUtcTimestamp(snapshot.captured_at) << "\","
+      << "\"captured_at_utc\":\"" << core::FormatUtcTimestamp(snapshot.captured_at) << "\","
       << "\"os\":{"
-      << "\"name\":\"" << EscapeJson(snapshot.os_name) << "\","
-      << "\"version\":\"" << EscapeJson(snapshot.os_version) << "\""
+      << "\"name\":\"" << core::EscapeJson(snapshot.os_name) << "\","
+      << "\"version\":\"" << core::EscapeJson(snapshot.os_version) << "\""
       << "},"
       << "\"cpu\":{"
-      << "\"model\":\"" << EscapeJson(snapshot.cpu_model) << "\","
+      << "\"model\":\"" << core::EscapeJson(snapshot.cpu_model) << "\","
       << "\"logical_cores\":" << snapshot.cpu_logical_cores << "},"
       << "\"ram_total_bytes\":" << snapshot.ram_total_bytes << ","
       << "\"uptime_seconds\":" << snapshot.uptime_seconds << ","
       << "\"load_avg\":{"
       << "\"one_min\":";
   if (snapshot.load_avg_1m.has_value()) {
-    out << FormatDouble(snapshot.load_avg_1m.value());
+    out << core::FormatFixedDouble(snapshot.load_avg_1m.value(), 6);
   } else {
     out << "null";
   }
   out << ",\"five_min\":";
   if (snapshot.load_avg_5m.has_value()) {
-    out << FormatDouble(snapshot.load_avg_5m.value());
+    out << core::FormatFixedDouble(snapshot.load_avg_5m.value(), 6);
   } else {
     out << "null";
   }
   out << ",\"fifteen_min\":";
   if (snapshot.load_avg_15m.has_value()) {
-    out << FormatDouble(snapshot.load_avg_15m.value());
+    out << core::FormatFixedDouble(snapshot.load_avg_15m.value(), 6);
   } else {
     out << "null";
   }

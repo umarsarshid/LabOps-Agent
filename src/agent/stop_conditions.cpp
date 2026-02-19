@@ -1,11 +1,11 @@
 #include "agent/stop_conditions.hpp"
 
+#include "core/time_utils.hpp"
+
 #include <algorithm>
 #include <cmath>
-#include <iomanip>
 #include <map>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -20,12 +20,6 @@ bool IsDecisive(ResultStatus status) {
 
 bool IsRepro(ResultStatus status) {
   return status == ResultStatus::kFail;
-}
-
-std::string FormatDouble(double value, int precision = 3) {
-  std::ostringstream out;
-  out << std::fixed << std::setprecision(precision) << value;
-  return out.str();
 }
 
 struct ValueOutcomeStats {
@@ -199,8 +193,9 @@ bool EvaluateStopConditions(const StopConfig& config, const StopInput& input,
   if (input.confidence_score >= config.confidence_threshold) {
     decision.should_stop = true;
     decision.reason = StopReason::kConfidenceThreshold;
-    decision.explanation = "stop: confidence score " + FormatDouble(input.confidence_score) +
-                           " reached threshold " + FormatDouble(config.confidence_threshold);
+    decision.explanation =
+        "stop: confidence score " + core::FormatFixedDouble(input.confidence_score, 3) +
+        " reached threshold " + core::FormatFixedDouble(config.confidence_threshold, 3);
     return true;
   }
 
@@ -209,10 +204,11 @@ bool EvaluateStopConditions(const StopConfig& config, const StopInput& input,
       decision.observed_repro_rate >= config.stable_repro_rate_min) {
     decision.should_stop = true;
     decision.reason = StopReason::kStableReproRate;
-    decision.explanation = "stop: stable repro rate " + FormatDouble(decision.observed_repro_rate) +
+    decision.explanation = "stop: stable repro rate " +
+                           core::FormatFixedDouble(decision.observed_repro_rate, 3) +
                            " over last " + std::to_string(decision.repro_window_count) +
                            " decisive runs reached threshold " +
-                           FormatDouble(config.stable_repro_rate_min);
+                           core::FormatFixedDouble(config.stable_repro_rate_min, 3);
     return true;
   }
 
@@ -220,8 +216,8 @@ bool EvaluateStopConditions(const StopConfig& config, const StopInput& input,
   decision.reason = StopReason::kContinue;
   decision.explanation =
       "continue: no stop condition met (run_count=" + std::to_string(decision.run_count) +
-      ", confidence=" + FormatDouble(input.confidence_score) +
-      ", recent_repro_rate=" + FormatDouble(decision.observed_repro_rate) +
+      ", confidence=" + core::FormatFixedDouble(input.confidence_score, 3) +
+      ", recent_repro_rate=" + core::FormatFixedDouble(decision.observed_repro_rate, 3) +
       ", repro_window=" + std::to_string(decision.repro_window_count) + ")";
   return true;
 }

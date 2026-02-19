@@ -1,5 +1,7 @@
 #include "artifacts/scenario_writer.hpp"
 
+#include "core/fs_utils.hpp"
+
 #include <fstream>
 #include <system_error>
 
@@ -28,12 +30,6 @@ bool WriteScenarioJson(const fs::path& source_scenario_path, const fs::path& out
     return false;
   }
 
-  fs::create_directories(output_dir, ec);
-  if (ec) {
-    error = "failed to create output directory '" + output_dir.string() + "': " + ec.message();
-    return false;
-  }
-
   std::ifstream in_file(source_scenario_path, std::ios::binary);
   if (!in_file) {
     error = "failed to open source scenario file '" + source_scenario_path.string() + "'";
@@ -41,15 +37,10 @@ bool WriteScenarioJson(const fs::path& source_scenario_path, const fs::path& out
   }
 
   written_path = output_dir / "scenario.json";
-  std::ofstream out_file(written_path, std::ios::binary | std::ios::trunc);
-  if (!out_file) {
-    error = "failed to open output scenario file '" + written_path.string() + "'";
-    return false;
-  }
-
-  out_file << in_file.rdbuf();
-  if (!out_file) {
-    error = "failed while writing scenario file '" + written_path.string() + "'";
+  const std::string scenario_text((std::istreambuf_iterator<char>(in_file)),
+                                  std::istreambuf_iterator<char>());
+  if (!core::WriteTextFileAtomic(written_path, scenario_text, error)) {
+    error = "failed while writing scenario file '" + written_path.string() + "' (" + error + ")";
     return false;
   }
 

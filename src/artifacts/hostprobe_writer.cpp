@@ -1,6 +1,7 @@
 #include "artifacts/hostprobe_writer.hpp"
 
-#include <fstream>
+#include "core/fs_utils.hpp"
+
 #include <system_error>
 #include <utility>
 
@@ -45,15 +46,8 @@ std::string BuildRawCommandText(const hostprobe::NicCommandCapture& capture) {
 }
 
 bool WriteTextFile(const fs::path& path, const std::string& text, std::string& error) {
-  std::ofstream out_file(path, std::ios::binary | std::ios::trunc);
-  if (!out_file) {
-    error = "failed to open output file '" + path.string() + "' for writing";
-    return false;
-  }
-
-  out_file << text;
-  if (!out_file) {
-    error = "failed while writing output file '" + path.string() + "'";
+  if (!core::WriteTextFileAtomic(path, text, error)) {
+    error = "failed while writing output file '" + path.string() + "' (" + error + ")";
     return false;
   }
   return true;
@@ -68,16 +62,10 @@ bool WriteHostProbeJson(const hostprobe::HostProbeSnapshot& snapshot, const fs::
   }
 
   written_path = output_dir / "hostprobe.json";
-  std::ofstream out_file(written_path, std::ios::binary | std::ios::trunc);
-  if (!out_file) {
-    error = "failed to open output file '" + written_path.string() + "' for writing";
-    return false;
-  }
-
-  // Keep this in the same newline-terminated style as other JSON artifacts.
-  out_file << hostprobe::ToJson(snapshot) << '\n';
-  if (!out_file) {
-    error = "failed while writing output file '" + written_path.string() + "'";
+  std::string json = hostprobe::ToJson(snapshot);
+  json.push_back('\n');
+  if (!core::WriteTextFileAtomic(written_path, json, error)) {
+    error = "failed while writing output file '" + written_path.string() + "' (" + error + ")";
     return false;
   }
 

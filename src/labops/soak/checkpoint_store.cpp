@@ -1,5 +1,6 @@
 #include "labops/soak/checkpoint_store.hpp"
 
+#include "core/fs_utils.hpp"
 #include "core/json_utils.hpp"
 
 #include <algorithm>
@@ -213,57 +214,43 @@ bool WriteCheckpointJson(const CheckpointState& state, const fs::path& output_pa
     return false;
   }
 
-  std::error_code ec;
-  fs::create_directories(output_path.parent_path(), ec);
-  if (ec) {
-    error = "failed to create soak checkpoint directory '" + output_path.parent_path().string() +
-            "': " + ec.message();
-    return false;
-  }
-
   const std::uint64_t total_ms =
       static_cast<std::uint64_t>(std::max<std::int64_t>(state.total_duration.count(), 0));
   const std::uint64_t completed_ms =
       static_cast<std::uint64_t>(std::max<std::int64_t>(state.completed_duration.count(), 0));
   const std::uint64_t remaining_ms = completed_ms >= total_ms ? 0U : (total_ms - completed_ms);
 
-  std::ofstream out_file(output_path, std::ios::binary | std::ios::trunc);
-  if (!out_file) {
-    error = "failed to open soak checkpoint output '" + output_path.string() + "'";
-    return false;
-  }
+  std::ostringstream out;
+  out << "{\n"
+      << "  \"schema_version\": \"1.0\",\n"
+      << "  \"mode\": \"soak\",\n"
+      << "  \"status\": \"" << ToString(state.status) << "\",\n"
+      << "  \"stop_reason\": \"" << core::EscapeJson(state.stop_reason) << "\",\n"
+      << "  \"run_id\": \"" << core::EscapeJson(state.run_id) << "\",\n"
+      << "  \"scenario_path\": \"" << core::EscapeJson(state.scenario_path.string()) << "\",\n"
+      << "  \"bundle_dir\": \"" << core::EscapeJson(state.bundle_dir.string()) << "\",\n"
+      << "  \"frame_cache_path\": \"" << core::EscapeJson(state.frame_cache_path.string())
+      << "\",\n"
+      << "  \"total_duration_ms\": " << total_ms << ",\n"
+      << "  \"completed_duration_ms\": " << completed_ms << ",\n"
+      << "  \"remaining_duration_ms\": " << remaining_ms << ",\n"
+      << "  \"checkpoints_written\": " << state.checkpoints_written << ",\n"
+      << "  \"frames_total\": " << state.frames_total << ",\n"
+      << "  \"frames_received\": " << state.frames_received << ",\n"
+      << "  \"frames_dropped\": " << state.frames_dropped << ",\n"
+      << "  \"created_at_epoch_ms\": " << ToEpochMilliseconds(state.timestamps.created_at) << ",\n"
+      << "  \"started_at_epoch_ms\": " << ToEpochMilliseconds(state.timestamps.started_at) << ",\n"
+      << "  \"finished_at_epoch_ms\": " << ToEpochMilliseconds(state.timestamps.finished_at)
+      << ",\n"
+      << "  \"updated_at_epoch_ms\": " << ToEpochMilliseconds(state.updated_at) << ",\n"
+      << "  \"resume_hint\": \"labops run " << core::EscapeJson(state.scenario_path.string())
+      << " --soak --resume "
+      << core::EscapeJson((state.bundle_dir / "soak_checkpoint.json").string()) << "\"\n"
+      << "}\n";
 
-  out_file << "{\n"
-           << "  \"schema_version\": \"1.0\",\n"
-           << "  \"mode\": \"soak\",\n"
-           << "  \"status\": \"" << ToString(state.status) << "\",\n"
-           << "  \"stop_reason\": \"" << core::EscapeJson(state.stop_reason) << "\",\n"
-           << "  \"run_id\": \"" << core::EscapeJson(state.run_id) << "\",\n"
-           << "  \"scenario_path\": \"" << core::EscapeJson(state.scenario_path.string()) << "\",\n"
-           << "  \"bundle_dir\": \"" << core::EscapeJson(state.bundle_dir.string()) << "\",\n"
-           << "  \"frame_cache_path\": \"" << core::EscapeJson(state.frame_cache_path.string())
-           << "\",\n"
-           << "  \"total_duration_ms\": " << total_ms << ",\n"
-           << "  \"completed_duration_ms\": " << completed_ms << ",\n"
-           << "  \"remaining_duration_ms\": " << remaining_ms << ",\n"
-           << "  \"checkpoints_written\": " << state.checkpoints_written << ",\n"
-           << "  \"frames_total\": " << state.frames_total << ",\n"
-           << "  \"frames_received\": " << state.frames_received << ",\n"
-           << "  \"frames_dropped\": " << state.frames_dropped << ",\n"
-           << "  \"created_at_epoch_ms\": " << ToEpochMilliseconds(state.timestamps.created_at)
-           << ",\n"
-           << "  \"started_at_epoch_ms\": " << ToEpochMilliseconds(state.timestamps.started_at)
-           << ",\n"
-           << "  \"finished_at_epoch_ms\": " << ToEpochMilliseconds(state.timestamps.finished_at)
-           << ",\n"
-           << "  \"updated_at_epoch_ms\": " << ToEpochMilliseconds(state.updated_at) << ",\n"
-           << "  \"resume_hint\": \"labops run " << core::EscapeJson(state.scenario_path.string())
-           << " --soak --resume "
-           << core::EscapeJson((state.bundle_dir / "soak_checkpoint.json").string()) << "\"\n"
-           << "}\n";
-
-  if (!out_file) {
-    error = "failed while writing soak checkpoint output '" + output_path.string() + "'";
+  if (!core::WriteTextFileAtomic(output_path, out.str(), error)) {
+    error = "failed while writing soak checkpoint output '" + output_path.string() + "' (" + error +
+            ")";
     return false;
   }
 

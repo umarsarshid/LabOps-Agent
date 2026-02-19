@@ -1,13 +1,12 @@
 #pragma once
 
+#include "core/time_utils.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <chrono>
-#include <ctime>
 #include <initializer_list>
-#include <iomanip>
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <string_view>
 
@@ -109,7 +108,7 @@ public:
       return;
     }
 
-    (*out_) << "ts_utc=" << FormatUtcTimestamp(std::chrono::system_clock::now())
+    (*out_) << "ts_utc=" << core::FormatUtcTimestamp(std::chrono::system_clock::now())
             << " level=" << ToString(level) << " run_id=" << Quote(run_id_)
             << " msg=" << Quote(message);
 
@@ -138,31 +137,6 @@ public:
   }
 
 private:
-  static std::string FormatUtcTimestamp(std::chrono::system_clock::time_point ts) {
-    const auto millis_since_epoch =
-        std::chrono::duration_cast<std::chrono::milliseconds>(ts.time_since_epoch()).count();
-    const auto millis_component = static_cast<int>((millis_since_epoch % 1000 + 1000) % 1000);
-
-    const std::time_t epoch_seconds = std::chrono::system_clock::to_time_t(ts);
-    std::tm utc_time{};
-#if defined(_WIN32)
-    const errno_t result = gmtime_s(&utc_time, &epoch_seconds);
-    if (result != 0) {
-      return "";
-    }
-#else
-    const std::tm* result = gmtime_r(&epoch_seconds, &utc_time);
-    if (result == nullptr) {
-      return "";
-    }
-#endif
-
-    std::ostringstream out;
-    out << std::put_time(&utc_time, "%Y-%m-%dT%H:%M:%S") << '.' << std::setw(3) << std::setfill('0')
-        << millis_component << 'Z';
-    return out.str();
-  }
-
   static std::string EscapeForQuoted(std::string_view raw) {
     std::string escaped;
     escaped.reserve(raw.size());

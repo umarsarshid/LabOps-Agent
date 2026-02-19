@@ -1,9 +1,8 @@
 #include "artifacts/run_summary_writer.hpp"
 
-#include <ctime>
+#include "core/time_utils.hpp"
+
 #include <fstream>
-#include <iomanip>
-#include <sstream>
 #include <system_error>
 
 namespace fs = std::filesystem;
@@ -11,37 +10,6 @@ namespace fs = std::filesystem;
 namespace labops::artifacts {
 
 namespace {
-
-std::string FormatDouble(double value, int precision) {
-  std::ostringstream out;
-  out << std::fixed << std::setprecision(precision) << value;
-  return out.str();
-}
-
-std::string FormatUtcTimestamp(std::chrono::system_clock::time_point timestamp) {
-  const auto millis_since_epoch =
-      std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()).count();
-  const auto millis_component = static_cast<int>((millis_since_epoch % 1000 + 1000) % 1000);
-
-  const std::time_t epoch_seconds = std::chrono::system_clock::to_time_t(timestamp);
-  std::tm utc_time{};
-#if defined(_WIN32)
-  const errno_t result = gmtime_s(&utc_time, &epoch_seconds);
-  if (result != 0) {
-    return "";
-  }
-#else
-  const std::tm* result = gmtime_r(&epoch_seconds, &utc_time);
-  if (result == nullptr) {
-    return "";
-  }
-#endif
-
-  std::ostringstream out;
-  out << std::put_time(&utc_time, "%Y-%m-%dT%H:%M:%S") << '.' << std::setw(3) << std::setfill('0')
-      << millis_component << 'Z';
-  return out.str();
-}
 
 bool EnsureOutputDir(const fs::path& output_dir, std::string& error) {
   if (output_dir.empty()) {
@@ -139,31 +107,34 @@ bool WriteRunSummaryMarkdown(const core::schema::RunInfo& run_info,
   out_file << "- backend: `" << run_info.config.backend << "`\n";
   out_file << "- seed: `" << run_info.config.seed << "`\n";
   out_file << "- duration_ms: `" << run_info.config.duration.count() << "`\n";
-  out_file << "- started_at_utc: `" << FormatUtcTimestamp(run_info.timestamps.started_at) << "`\n";
-  out_file << "- finished_at_utc: `" << FormatUtcTimestamp(run_info.timestamps.finished_at)
+  out_file << "- started_at_utc: `" << core::FormatUtcTimestamp(run_info.timestamps.started_at)
+           << "`\n";
+  out_file << "- finished_at_utc: `" << core::FormatUtcTimestamp(run_info.timestamps.finished_at)
            << "`\n\n";
 
   out_file << "## Key Metrics\n\n";
   out_file << "| Metric | Value |\n";
   out_file << "| --- | --- |\n";
   out_file << "| configured_fps | " << configured_fps << " |\n";
-  out_file << "| avg_fps | " << FormatDouble(report.avg_fps, 3) << " |\n";
+  out_file << "| avg_fps | " << core::FormatFixedDouble(report.avg_fps, 3) << " |\n";
   out_file << "| frames_total | " << report.frames_total << " |\n";
   out_file << "| received_frames_total | " << report.received_frames_total << " |\n";
   out_file << "| dropped_frames_total | " << report.dropped_frames_total << " |\n";
   out_file << "| dropped_generic_frames_total | " << report.dropped_generic_frames_total << " |\n";
   out_file << "| timeout_frames_total | " << report.timeout_frames_total << " |\n";
   out_file << "| incomplete_frames_total | " << report.incomplete_frames_total << " |\n";
-  out_file << "| drop_rate_percent | " << FormatDouble(report.drop_rate_percent, 3) << " |\n";
-  out_file << "| generic_drop_rate_percent | " << FormatDouble(report.generic_drop_rate_percent, 3)
+  out_file << "| drop_rate_percent | " << core::FormatFixedDouble(report.drop_rate_percent, 3)
            << " |\n";
-  out_file << "| timeout_rate_percent | " << FormatDouble(report.timeout_rate_percent, 3) << " |\n";
-  out_file << "| incomplete_rate_percent | " << FormatDouble(report.incomplete_rate_percent, 3)
+  out_file << "| generic_drop_rate_percent | "
+           << core::FormatFixedDouble(report.generic_drop_rate_percent, 3) << " |\n";
+  out_file << "| timeout_rate_percent | " << core::FormatFixedDouble(report.timeout_rate_percent, 3)
            << " |\n";
+  out_file << "| incomplete_rate_percent | "
+           << core::FormatFixedDouble(report.incomplete_rate_percent, 3) << " |\n";
   out_file << "| inter_frame_interval_p95_us | "
-           << FormatDouble(report.inter_frame_interval_us.p95_us, 3) << " |\n";
+           << core::FormatFixedDouble(report.inter_frame_interval_us.p95_us, 3) << " |\n";
   out_file << "| inter_frame_jitter_p95_us | "
-           << FormatDouble(report.inter_frame_jitter_us.p95_us, 3) << " |\n\n";
+           << core::FormatFixedDouble(report.inter_frame_jitter_us.p95_us, 3) << " |\n\n";
 
   WriteThresholdSection(out_file, thresholds_passed, threshold_failures);
   WriteAnomaliesSection(out_file, top_anomalies);

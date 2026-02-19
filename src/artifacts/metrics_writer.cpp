@@ -1,5 +1,7 @@
 #include "artifacts/metrics_writer.hpp"
 
+#include "core/time_utils.hpp"
+
 #include <cstdint>
 #include <fstream>
 #include <iomanip>
@@ -14,12 +16,6 @@ namespace {
 
 std::int64_t ToEpochMillis(std::chrono::system_clock::time_point ts) {
   return std::chrono::duration_cast<std::chrono::milliseconds>(ts.time_since_epoch()).count();
-}
-
-std::string FormatDouble(double value) {
-  std::ostringstream out;
-  out << std::fixed << std::setprecision(6) << value;
-  return out.str();
 }
 
 bool EnsureOutputDir(const fs::path& output_dir, std::string& error) {
@@ -42,9 +38,9 @@ void WriteTimingStatsJsonObject(std::ofstream& out_file, const std::string& key,
                                 const metrics::TimingStatsUs& stats) {
   out_file << "  \"" << key << "\":{"
            << "\"sample_count\":" << stats.sample_count << ","
-           << "\"min_us\":" << FormatDouble(stats.min_us) << ","
-           << "\"avg_us\":" << FormatDouble(stats.avg_us) << ","
-           << "\"p95_us\":" << FormatDouble(stats.p95_us) << "}";
+           << "\"min_us\":" << core::FormatFixedDouble(stats.min_us, 6) << ","
+           << "\"avg_us\":" << core::FormatFixedDouble(stats.avg_us, 6) << ","
+           << "\"p95_us\":" << core::FormatFixedDouble(stats.p95_us, 6) << "}";
 }
 
 } // namespace
@@ -133,13 +129,15 @@ bool WriteMetricsJson(const metrics::FpsReport& report, const fs::path& output_d
            << "  \"dropped_generic_frames_total\":" << report.dropped_generic_frames_total << ",\n"
            << "  \"timeout_frames_total\":" << report.timeout_frames_total << ",\n"
            << "  \"incomplete_frames_total\":" << report.incomplete_frames_total << ",\n"
-           << "  \"drop_rate_percent\":" << FormatDouble(report.drop_rate_percent) << ",\n"
-           << "  \"generic_drop_rate_percent\":" << FormatDouble(report.generic_drop_rate_percent)
+           << "  \"drop_rate_percent\":" << core::FormatFixedDouble(report.drop_rate_percent, 6)
            << ",\n"
-           << "  \"timeout_rate_percent\":" << FormatDouble(report.timeout_rate_percent) << ",\n"
-           << "  \"incomplete_rate_percent\":" << FormatDouble(report.incomplete_rate_percent)
-           << ",\n"
-           << "  \"avg_fps\":" << FormatDouble(report.avg_fps) << ",\n";
+           << "  \"generic_drop_rate_percent\":"
+           << core::FormatFixedDouble(report.generic_drop_rate_percent, 6) << ",\n"
+           << "  \"timeout_rate_percent\":"
+           << core::FormatFixedDouble(report.timeout_rate_percent, 6) << ",\n"
+           << "  \"incomplete_rate_percent\":"
+           << core::FormatFixedDouble(report.incomplete_rate_percent, 6) << ",\n"
+           << "  \"avg_fps\":" << core::FormatFixedDouble(report.avg_fps, 6) << ",\n";
 
   WriteTimingStatsJsonObject(out_file, "inter_frame_interval_us", report.inter_frame_interval_us);
   out_file << ",\n";
@@ -154,7 +152,7 @@ bool WriteMetricsJson(const metrics::FpsReport& report, const fs::path& output_d
     }
     out_file << "{\"window_end_ms\":" << ToEpochMillis(sample.window_end)
              << ",\"frames_in_window\":" << sample.frames_in_window
-             << ",\"fps\":" << FormatDouble(sample.fps) << "}";
+             << ",\"fps\":" << core::FormatFixedDouble(sample.fps, 6) << "}";
   }
   out_file << "]\n"
            << "}\n";

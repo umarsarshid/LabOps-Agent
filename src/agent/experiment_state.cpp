@@ -1,8 +1,9 @@
 #include "agent/experiment_state.hpp"
 
+#include "core/json_utils.hpp"
+#include "core/time_utils.hpp"
 #include <cmath>
-#include <ctime>
-#include <iomanip>
+
 #include <sstream>
 #include <string_view>
 
@@ -10,79 +11,11 @@ namespace labops::agent {
 
 namespace {
 
-std::string EscapeJson(std::string_view input) {
-  std::ostringstream out;
-  for (const char ch : input) {
-    switch (ch) {
-    case '"':
-      out << "\\\"";
-      break;
-    case '\\':
-      out << "\\\\";
-      break;
-    case '\b':
-      out << "\\b";
-      break;
-    case '\f':
-      out << "\\f";
-      break;
-    case '\n':
-      out << "\\n";
-      break;
-    case '\r':
-      out << "\\r";
-      break;
-    case '\t':
-      out << "\\t";
-      break;
-    default: {
-      const auto as_unsigned = static_cast<unsigned char>(ch);
-      if (as_unsigned < 0x20U) {
-        out << "\\u" << std::hex << std::setw(4) << std::setfill('0')
-            << static_cast<int>(as_unsigned) << std::dec << std::setfill(' ');
-      } else {
-        out << ch;
-      }
-      break;
-    }
-    }
-  }
-  return out.str();
-}
-
-std::string FormatUtcTimestamp(std::chrono::system_clock::time_point timestamp) {
-  const auto millis_since_epoch =
-      std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()).count();
-  const auto millis_component = static_cast<int>((millis_since_epoch % 1000 + 1000) % 1000);
-
-  const std::time_t epoch_seconds = std::chrono::system_clock::to_time_t(timestamp);
-  std::tm utc_time{};
-#if defined(_WIN32)
-  const errno_t result = gmtime_s(&utc_time, &epoch_seconds);
-  if (result != 0) {
-    return "";
-  }
-#else
-  const std::tm* result = gmtime_r(&epoch_seconds, &utc_time);
-  if (result == nullptr) {
-    return "";
-  }
-#endif
-
-  std::ostringstream out;
-  out << std::put_time(&utc_time, "%Y-%m-%dT%H:%M:%S") << '.' << std::setw(3) << std::setfill('0')
-      << millis_component << 'Z';
-  return out.str();
-}
-
 std::string FormatJsonDouble(double value) {
   if (!std::isfinite(value)) {
     return "0.0";
   }
-
-  std::ostringstream out;
-  out << std::fixed << std::setprecision(3) << value;
-  return out.str();
+  return core::FormatFixedDouble(value, 3);
 }
 
 void WriteFieldDelimiter(std::ostringstream& out, bool& first_field) {
@@ -95,7 +28,7 @@ void WriteFieldDelimiter(std::ostringstream& out, bool& first_field) {
 void WriteJsonStringField(std::ostringstream& out, std::string_view key, std::string_view value,
                           bool& first_field) {
   WriteFieldDelimiter(out, first_field);
-  out << "\"" << key << "\":\"" << EscapeJson(value) << "\"";
+  out << "\"" << key << "\":\"" << core::EscapeJson(value) << "\"";
 }
 
 void WriteJsonRawField(std::ostringstream& out, std::string_view key, std::string_view raw_value,
@@ -195,8 +128,10 @@ std::string ToJson(const ExperimentState& state) {
   WriteJsonStringField(out, "scenario_id", state.scenario_id, first_field);
   WriteJsonStringField(out, "baseline_id", state.baseline_id, first_field);
   WriteJsonRawField(out, "seed", std::to_string(state.seed), first_field);
-  WriteJsonStringField(out, "created_at_utc", FormatUtcTimestamp(state.created_at), first_field);
-  WriteJsonStringField(out, "updated_at_utc", FormatUtcTimestamp(state.updated_at), first_field);
+  WriteJsonStringField(out, "created_at_utc", core::FormatUtcTimestamp(state.created_at),
+                       first_field);
+  WriteJsonStringField(out, "updated_at_utc", core::FormatUtcTimestamp(state.updated_at),
+                       first_field);
   WriteJsonStringField(out, "next_action", state.next_action, first_field);
   WriteJsonRawField(out, "hypotheses", SerializeArray<Hypothesis>(state.hypotheses, &ToJson),
                     first_field);

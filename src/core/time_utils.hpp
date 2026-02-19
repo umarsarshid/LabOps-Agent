@@ -36,6 +36,14 @@ inline std::string FormatUtcTimestamp(std::chrono::system_clock::time_point time
   return out.str();
 }
 
+// Shared fixed-precision floating-point formatter used by metrics/report
+// writers to keep numeric rendering consistent across artifacts.
+inline std::string FormatFixedDouble(double value, int precision) {
+  std::ostringstream out;
+  out << std::fixed << std::setprecision(precision) << value;
+  return out.str();
+}
+
 } // namespace labops::core
 
 #endif // LABOPS_CORE_TIME_UTILS_HPP_

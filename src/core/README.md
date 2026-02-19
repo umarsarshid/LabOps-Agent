@@ -23,6 +23,8 @@ As the system grows, many modules need common utilities (errors, clocks, structu
 - `json_dom.hpp`: shared lightweight JSON DOM + parser used by scenario and
   agent modules to avoid duplicated parser logic.
 - `time_utils.hpp`: shared UTC timestamp formatter with millisecond precision.
+- `fs_utils.hpp`: shared filesystem helpers including best-effort atomic text
+  writes (`temp + rename`) for artifact reliability.
 
 ## Guardrails
 

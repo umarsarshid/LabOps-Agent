@@ -1,11 +1,11 @@
 #include "agent/engineer_packet_writer.hpp"
 
+#include "core/time_utils.hpp"
+
 #include <algorithm>
 #include <fstream>
-#include <iomanip>
 #include <map>
 #include <set>
-#include <sstream>
 #include <system_error>
 #include <utility>
 
@@ -111,12 +111,6 @@ BuildCitationMap(const std::vector<HypothesisEvidenceCitation>& citations) {
   return by_key;
 }
 
-std::string FormatDouble(const double value, const int precision) {
-  std::ostringstream out;
-  out << std::fixed << std::setprecision(precision) << value;
-  return out.str();
-}
-
 const char* CitationStrength(ResultStatus result) {
   switch (result) {
   case ResultStatus::kFail:
@@ -142,13 +136,13 @@ std::string BuildMetricLabel(const MetricCitation& metric) {
 
 std::string BuildMetricFallbackLabel(const ResultRow& row) {
   if (row.drop_rate_percent > 0.0) {
-    return "drop_rate_percent=" + FormatDouble(row.drop_rate_percent, 3) + "%";
+    return "drop_rate_percent=" + core::FormatFixedDouble(row.drop_rate_percent, 3) + "%";
   }
   if (row.avg_fps > 0.0) {
-    return "avg_fps=" + FormatDouble(row.avg_fps, 3);
+    return "avg_fps=" + core::FormatFixedDouble(row.avg_fps, 3);
   }
   if (row.jitter_p95_us > 0.0) {
-    return "jitter_p95_us=" + FormatDouble(row.jitter_p95_us, 3) + "us";
+    return "jitter_p95_us=" + core::FormatFixedDouble(row.jitter_p95_us, 3) + "us";
   }
   switch (row.result) {
   case ResultStatus::kFail:

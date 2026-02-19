@@ -1,5 +1,7 @@
 #include "artifacts/camera_config_writer.hpp"
 
+#include "core/json_utils.hpp"
+
 #include <algorithm>
 #include <fstream>
 #include <iomanip>
@@ -26,46 +28,6 @@ struct CuratedNodeRow {
   bool missing = false;
   std::optional<std::string> reason;
 };
-
-std::string EscapeJson(std::string_view input) {
-  std::ostringstream out;
-  for (const char ch : input) {
-    switch (ch) {
-    case '"':
-      out << "\\\"";
-      break;
-    case '\\':
-      out << "\\\\";
-      break;
-    case '\b':
-      out << "\\b";
-      break;
-    case '\f':
-      out << "\\f";
-      break;
-    case '\n':
-      out << "\\n";
-      break;
-    case '\r':
-      out << "\\r";
-      break;
-    case '\t':
-      out << "\\t";
-      break;
-    default: {
-      const auto as_unsigned = static_cast<unsigned char>(ch);
-      if (as_unsigned < 0x20U) {
-        out << "\\u" << std::hex << std::setw(4) << std::setfill('0')
-            << static_cast<int>(as_unsigned) << std::dec << std::setfill(' ');
-      } else {
-        out << ch;
-      }
-      break;
-    }
-    }
-  }
-  return out.str();
-}
 
 bool EnsureOutputDir(const fs::path& output_dir, std::string& error) {
   if (output_dir.empty()) {
@@ -240,7 +202,7 @@ void WriteOptionalString(std::ofstream& out_file, const std::optional<std::strin
     out_file << "null";
     return;
   }
-  out_file << "\"" << EscapeJson(value.value()) << "\"";
+  out_file << "\"" << core::EscapeJson(value.value()) << "\"";
 }
 
 void WriteStringArray(std::ofstream& out_file, const std::vector<std::string>& values) {
@@ -249,7 +211,7 @@ void WriteStringArray(std::ofstream& out_file, const std::vector<std::string>& v
     if (i != 0U) {
       out_file << ",";
     }
-    out_file << "\"" << EscapeJson(values[i]) << "\"";
+    out_file << "\"" << core::EscapeJson(values[i]) << "\"";
   }
   out_file << "]";
 }
@@ -341,15 +303,15 @@ bool WriteCameraConfigJson(const core::schema::RunInfo& run_info,
 
   out_file << "{\n"
            << "  \"schema_version\":\"1.0\",\n"
-           << "  \"run_id\":\"" << EscapeJson(run_info.run_id) << "\",\n"
-           << "  \"scenario_id\":\"" << EscapeJson(run_info.config.scenario_id) << "\",\n"
-           << "  \"backend\":\"" << EscapeJson(run_info.config.backend) << "\",\n"
+           << "  \"run_id\":\"" << core::EscapeJson(run_info.run_id) << "\",\n"
+           << "  \"scenario_id\":\"" << core::EscapeJson(run_info.config.scenario_id) << "\",\n"
+           << "  \"backend\":\"" << core::EscapeJson(run_info.config.backend) << "\",\n"
            << "  \"apply_mode\":\"" << ModeToString(mode) << "\",\n"
            << "  \"collection_error\":";
   if (collection_error.empty()) {
     out_file << "null,\n";
   } else {
-    out_file << "\"" << EscapeJson(collection_error) << "\",\n";
+    out_file << "\"" << core::EscapeJson(collection_error) << "\",\n";
   }
 
   out_file << "  \"identity\":{\n"
@@ -392,7 +354,7 @@ bool WriteCameraConfigJson(const core::schema::RunInfo& run_info,
       out_file << ",";
     }
     out_file << "\n    {"
-             << "\"generic_key\":\"" << EscapeJson(row.generic_key) << "\","
+             << "\"generic_key\":\"" << core::EscapeJson(row.generic_key) << "\","
              << "\"node_name\":";
     WriteOptionalString(out_file, row.node_name);
     out_file << ",\"requested\":";
@@ -423,7 +385,7 @@ bool WriteCameraConfigJson(const core::schema::RunInfo& run_info,
     if (emitted_count != 0U) {
       out_file << ",";
     }
-    out_file << "\n    \"" << EscapeJson(key) << "\":\"" << EscapeJson(value) << "\"";
+    out_file << "\n    \"" << core::EscapeJson(key) << "\":\"" << core::EscapeJson(value) << "\"";
     ++emitted_count;
   }
   if (emitted_count != 0U) {

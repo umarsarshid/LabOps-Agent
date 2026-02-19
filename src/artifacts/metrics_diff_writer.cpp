@@ -1,10 +1,12 @@
 #include "artifacts/metrics_diff_writer.hpp"
 
+#include "core/json_utils.hpp"
+#include "core/time_utils.hpp"
+
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
 #include <fstream>
-#include <iomanip>
 #include <map>
 #include <set>
 #include <sstream>
@@ -18,52 +20,6 @@ namespace labops::artifacts {
 namespace {
 
 constexpr std::string_view kMetricsCsvHeader = "metric,window_end_ms,window_ms,frames,fps";
-
-std::string EscapeJson(std::string_view input) {
-  std::ostringstream out;
-  for (const char ch : input) {
-    switch (ch) {
-    case '"':
-      out << "\\\"";
-      break;
-    case '\\':
-      out << "\\\\";
-      break;
-    case '\b':
-      out << "\\b";
-      break;
-    case '\f':
-      out << "\\f";
-      break;
-    case '\n':
-      out << "\\n";
-      break;
-    case '\r':
-      out << "\\r";
-      break;
-    case '\t':
-      out << "\\t";
-      break;
-    default: {
-      const auto as_unsigned = static_cast<unsigned char>(ch);
-      if (as_unsigned < 0x20U) {
-        out << "\\u" << std::hex << std::setw(4) << std::setfill('0')
-            << static_cast<int>(as_unsigned) << std::dec << std::setfill(' ');
-      } else {
-        out << ch;
-      }
-      break;
-    }
-    }
-  }
-  return out.str();
-}
-
-std::string FormatDouble(double value) {
-  std::ostringstream out;
-  out << std::fixed << std::setprecision(6) << value;
-  return out.str();
-}
 
 bool EnsureOutputDir(const fs::path& output_dir, std::string& error) {
   if (output_dir.empty()) {
@@ -320,9 +276,9 @@ bool WriteMetricsDiffJson(const MetricsDiffReport& report, const fs::path& outpu
   out_file << "{\n"
            << "  \"schema_version\":\"1.0\",\n"
            << "  \"baseline_metrics_csv\":\""
-           << EscapeJson(report.baseline_metrics_csv_path.generic_string()) << "\",\n"
-           << "  \"run_metrics_csv\":\"" << EscapeJson(report.run_metrics_csv_path.generic_string())
-           << "\",\n"
+           << core::EscapeJson(report.baseline_metrics_csv_path.generic_string()) << "\",\n"
+           << "  \"run_metrics_csv\":\""
+           << core::EscapeJson(report.run_metrics_csv_path.generic_string()) << "\",\n"
            << "  \"compared_metrics\":[";
 
   for (std::size_t i = 0; i < report.deltas.size(); ++i) {
@@ -331,14 +287,14 @@ bool WriteMetricsDiffJson(const MetricsDiffReport& report, const fs::path& outpu
       out_file << ",";
     }
     out_file << "\n    {"
-             << "\"metric\":\"" << EscapeJson(delta.metric) << "\","
-             << "\"baseline\":" << FormatDouble(delta.baseline) << ","
-             << "\"run\":" << FormatDouble(delta.run) << ","
-             << "\"delta\":" << FormatDouble(delta.delta) << ","
+             << "\"metric\":\"" << core::EscapeJson(delta.metric) << "\","
+             << "\"baseline\":" << core::FormatFixedDouble(delta.baseline, 6) << ","
+             << "\"run\":" << core::FormatFixedDouble(delta.run, 6) << ","
+             << "\"delta\":" << core::FormatFixedDouble(delta.delta, 6) << ","
              << "\"delta_percent\":";
 
     if (delta.delta_percent.has_value()) {
-      out_file << FormatDouble(delta.delta_percent.value());
+      out_file << core::FormatFixedDouble(delta.delta_percent.value(), 6);
     } else {
       out_file << "null";
     }
@@ -386,13 +342,14 @@ bool WriteMetricsDiffMarkdown(const MetricsDiffReport& report, const fs::path& o
            << "| --- | ---: | ---: | ---: | ---: |\n";
 
   for (const auto& delta : report.deltas) {
-    out_file << "| " << delta.metric << " | " << FormatDouble(delta.baseline) << " | "
-             << FormatDouble(delta.run) << " | " << (delta.delta >= 0.0 ? "+" : "")
-             << FormatDouble(delta.delta) << " | ";
+    out_file << "| " << delta.metric << " | " << core::FormatFixedDouble(delta.baseline, 6) << " | "
+             << core::FormatFixedDouble(delta.run, 6) << " | " << (delta.delta >= 0.0 ? "+" : "")
+             << core::FormatFixedDouble(delta.delta, 6) << " | ";
 
     if (delta.delta_percent.has_value()) {
       const double delta_percent = delta.delta_percent.value();
-      out_file << (delta_percent >= 0.0 ? "+" : "") << FormatDouble(delta_percent) << "%";
+      out_file << (delta_percent >= 0.0 ? "+" : "") << core::FormatFixedDouble(delta_percent, 6)
+               << "%";
     } else {
       out_file << "n/a";
     }

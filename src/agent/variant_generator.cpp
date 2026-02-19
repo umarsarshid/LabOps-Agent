@@ -1,7 +1,9 @@
 #include "agent/variant_generator.hpp"
 
 #include "agent/playbook.hpp"
+#include "core/fs_utils.hpp"
 #include "core/json_dom.hpp"
+#include "core/json_utils.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -27,46 +29,6 @@ namespace {
 using JsonValue = core::json::Value;
 using JsonParser = core::json::Parser;
 
-std::string EscapeJson(std::string_view input) {
-  std::ostringstream out;
-  for (const char c : input) {
-    switch (c) {
-    case '"':
-      out << "\\\"";
-      break;
-    case '\\':
-      out << "\\\\";
-      break;
-    case '\b':
-      out << "\\b";
-      break;
-    case '\f':
-      out << "\\f";
-      break;
-    case '\n':
-      out << "\\n";
-      break;
-    case '\r':
-      out << "\\r";
-      break;
-    case '\t':
-      out << "\\t";
-      break;
-    default: {
-      const auto as_unsigned = static_cast<unsigned char>(c);
-      if (as_unsigned < 0x20U) {
-        out << "\\u" << std::hex << std::setw(4) << std::setfill('0')
-            << static_cast<int>(as_unsigned) << std::dec << std::setfill(' ');
-      } else {
-        out << c;
-      }
-      break;
-    }
-    }
-  }
-  return out.str();
-}
-
 void SerializeJson(const JsonValue& value, std::ostringstream& out);
 
 void SerializeObject(const JsonValue::Object& object_value, std::ostringstream& out) {
@@ -77,7 +39,7 @@ void SerializeObject(const JsonValue::Object& object_value, std::ostringstream& 
       out << ",";
     }
     first = false;
-    out << '"' << EscapeJson(key) << "\":";
+    out << '"' << core::EscapeJson(key) << "\":";
     SerializeJson(value, out);
   }
   out << "}";
@@ -103,7 +65,7 @@ void SerializeJson(const JsonValue& value, std::ostringstream& out) {
     SerializeArray(value.array_value, out);
     return;
   case JsonValue::Type::kString:
-    out << '"' << EscapeJson(value.string_value) << '"';
+    out << '"' << core::EscapeJson(value.string_value) << '"';
     return;
   case JsonValue::Type::kNumber: {
     const double rounded = std::round(value.number_value);
@@ -140,14 +102,10 @@ bool ReadFile(const fs::path& path, std::string& contents, std::string& error) {
 }
 
 bool WriteFile(const fs::path& path, std::string_view contents, std::string& error) {
-  std::ofstream file(path, std::ios::binary | std::ios::trunc);
-  if (!file) {
-    error = "failed to open output file: " + path.string();
-    return false;
-  }
-  file << contents << '\n';
-  if (!file) {
-    error = "failed while writing output file: " + path.string();
+  std::string text(contents);
+  text.push_back('\n');
+  if (!core::WriteTextFileAtomic(path, text, error)) {
+    error = "failed while writing output file: " + path.string() + " (" + error + ")";
     return false;
   }
   return true;

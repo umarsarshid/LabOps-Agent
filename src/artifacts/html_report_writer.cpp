@@ -1,9 +1,9 @@
 #include "artifacts/html_report_writer.hpp"
 
+#include "core/time_utils.hpp"
+
 #include <chrono>
-#include <ctime>
 #include <fstream>
-#include <iomanip>
 #include <sstream>
 #include <string_view>
 #include <system_error>
@@ -49,42 +49,11 @@ std::string EscapeHtml(std::string_view input) {
   return out.str();
 }
 
-std::string FormatDouble(const double value, const int precision) {
-  std::ostringstream out;
-  out << std::fixed << std::setprecision(precision) << value;
-  return out.str();
-}
-
 std::string FormatSignedDouble(const double value, const int precision) {
   if (value >= 0.0) {
-    return "+" + FormatDouble(value, precision);
+    return "+" + core::FormatFixedDouble(value, precision);
   }
-  return FormatDouble(value, precision);
-}
-
-std::string FormatUtcTimestamp(const std::chrono::system_clock::time_point timestamp) {
-  const auto millis_since_epoch =
-      std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()).count();
-  const auto millis_component = static_cast<int>((millis_since_epoch % 1000 + 1000) % 1000);
-
-  const std::time_t epoch_seconds = std::chrono::system_clock::to_time_t(timestamp);
-  std::tm utc_time{};
-#if defined(_WIN32)
-  const errno_t result = gmtime_s(&utc_time, &epoch_seconds);
-  if (result != 0) {
-    return "";
-  }
-#else
-  const std::tm* result = gmtime_r(&epoch_seconds, &utc_time);
-  if (result == nullptr) {
-    return "";
-  }
-#endif
-
-  std::ostringstream out;
-  out << std::put_time(&utc_time, "%Y-%m-%dT%H:%M:%S") << '.' << std::setw(3) << std::setfill('0')
-      << millis_component << 'Z';
-  return out.str();
+  return core::FormatFixedDouble(value, precision);
 }
 
 std::string StatusCssClass(const bool thresholds_passed) {
@@ -237,10 +206,10 @@ bool WriteRunSummaryHtml(const core::schema::RunInfo& run_info, const metrics::F
            << "      <tr><td>duration_ms</td><td class=\"numeric\">"
            << run_info.config.duration.count() << "</td></tr>\n"
            << "      <tr><td>started_at_utc</td><td><code>"
-           << EscapeHtml(FormatUtcTimestamp(run_info.timestamps.started_at))
+           << EscapeHtml(core::FormatUtcTimestamp(run_info.timestamps.started_at))
            << "</code></td></tr>\n"
            << "      <tr><td>finished_at_utc</td><td><code>"
-           << EscapeHtml(FormatUtcTimestamp(run_info.timestamps.finished_at))
+           << EscapeHtml(core::FormatUtcTimestamp(run_info.timestamps.finished_at))
            << "</code></td></tr>\n"
            << "    </tbody>\n"
            << "  </table>\n"
@@ -251,8 +220,8 @@ bool WriteRunSummaryHtml(const core::schema::RunInfo& run_info, const metrics::F
            << "    <tbody>\n"
            << "      <tr><td>configured_fps</td><td class=\"numeric\">" << configured_fps
            << "</td><td>fps</td></tr>\n"
-           << "      <tr><td>avg_fps</td><td class=\"numeric\">" << FormatDouble(report.avg_fps, 3)
-           << "</td><td>fps</td></tr>\n"
+           << "      <tr><td>avg_fps</td><td class=\"numeric\">"
+           << core::FormatFixedDouble(report.avg_fps, 3) << "</td><td>fps</td></tr>\n"
            << "      <tr><td>frames_total</td><td class=\"numeric\">" << report.frames_total
            << "</td><td>count</td></tr>\n"
            << "      <tr><td>received_frames_total</td><td class=\"numeric\">"
@@ -266,17 +235,20 @@ bool WriteRunSummaryHtml(const core::schema::RunInfo& run_info, const metrics::F
            << "      <tr><td>incomplete_frames_total</td><td class=\"numeric\">"
            << report.incomplete_frames_total << "</td><td>count</td></tr>\n"
            << "      <tr><td>drop_rate_percent</td><td class=\"numeric\">"
-           << FormatDouble(report.drop_rate_percent, 3) << "</td><td>%</td></tr>\n"
+           << core::FormatFixedDouble(report.drop_rate_percent, 3) << "</td><td>%</td></tr>\n"
            << "      <tr><td>generic_drop_rate_percent</td><td class=\"numeric\">"
-           << FormatDouble(report.generic_drop_rate_percent, 3) << "</td><td>%</td></tr>\n"
+           << core::FormatFixedDouble(report.generic_drop_rate_percent, 3)
+           << "</td><td>%</td></tr>\n"
            << "      <tr><td>timeout_rate_percent</td><td class=\"numeric\">"
-           << FormatDouble(report.timeout_rate_percent, 3) << "</td><td>%</td></tr>\n"
+           << core::FormatFixedDouble(report.timeout_rate_percent, 3) << "</td><td>%</td></tr>\n"
            << "      <tr><td>incomplete_rate_percent</td><td class=\"numeric\">"
-           << FormatDouble(report.incomplete_rate_percent, 3) << "</td><td>%</td></tr>\n"
+           << core::FormatFixedDouble(report.incomplete_rate_percent, 3) << "</td><td>%</td></tr>\n"
            << "      <tr><td>inter_frame_interval_p95_us</td><td class=\"numeric\">"
-           << FormatDouble(report.inter_frame_interval_us.p95_us, 3) << "</td><td>us</td></tr>\n"
+           << core::FormatFixedDouble(report.inter_frame_interval_us.p95_us, 3)
+           << "</td><td>us</td></tr>\n"
            << "      <tr><td>inter_frame_jitter_p95_us</td><td class=\"numeric\">"
-           << FormatDouble(report.inter_frame_jitter_us.p95_us, 3) << "</td><td>us</td></tr>\n"
+           << core::FormatFixedDouble(report.inter_frame_jitter_us.p95_us, 3)
+           << "</td><td>us</td></tr>\n"
            << "    </tbody>\n"
            << "  </table>\n"
            << "\n"
@@ -289,8 +261,8 @@ bool WriteRunSummaryHtml(const core::schema::RunInfo& run_info, const metrics::F
 
   for (const auto& row : delta_rows) {
     out_file << "      <tr><td>" << EscapeHtml(row.metric) << "</td><td class=\"numeric\">"
-             << FormatDouble(row.actual, 3) << "</td><td class=\"numeric\">"
-             << FormatDouble(row.expected, 3) << "</td><td class=\"numeric\">"
+             << core::FormatFixedDouble(row.actual, 3) << "</td><td class=\"numeric\">"
+             << core::FormatFixedDouble(row.expected, 3) << "</td><td class=\"numeric\">"
              << FormatSignedDouble(row.delta, 3) << "</td><td>" << EscapeHtml(row.unit)
              << "</td></tr>\n";
   }
@@ -311,7 +283,7 @@ bool WriteRunSummaryHtml(const core::schema::RunInfo& run_info, const metrics::F
             .count();
     out_file << "      <tr><td class=\"numeric\">" << window_end_ms << "</td><td class=\"numeric\">"
              << sample.frames_in_window << "</td><td class=\"numeric\">"
-             << FormatDouble(sample.fps, 6) << "</td></tr>\n";
+             << core::FormatFixedDouble(sample.fps, 6) << "</td></tr>\n";
   }
 
   out_file << "    </tbody>\n"

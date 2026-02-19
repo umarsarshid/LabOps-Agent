@@ -1,5 +1,7 @@
 #include "artifacts/bundle_manifest_writer.hpp"
 
+#include "core/json_utils.hpp"
+
 #include <algorithm>
 #include <cstdint>
 #include <fstream>
@@ -22,46 +24,6 @@ struct ManifestEntry {
   std::uintmax_t size_bytes = 0;
   std::string hash_hex;
 };
-
-std::string EscapeJson(std::string_view input) {
-  std::ostringstream out;
-  for (const char ch : input) {
-    switch (ch) {
-    case '"':
-      out << "\\\"";
-      break;
-    case '\\':
-      out << "\\\\";
-      break;
-    case '\b':
-      out << "\\b";
-      break;
-    case '\f':
-      out << "\\f";
-      break;
-    case '\n':
-      out << "\\n";
-      break;
-    case '\r':
-      out << "\\r";
-      break;
-    case '\t':
-      out << "\\t";
-      break;
-    default: {
-      const auto as_unsigned = static_cast<unsigned char>(ch);
-      if (as_unsigned < 0x20U) {
-        out << "\\u" << std::hex << std::setw(4) << std::setfill('0')
-            << static_cast<int>(as_unsigned) << std::dec << std::setfill(' ');
-      } else {
-        out << ch;
-      }
-      break;
-    }
-    }
-  }
-  return out.str();
-}
 
 bool ComputeFileFnv1a64(const fs::path& file_path, std::string& hash_hex, std::string& error) {
   std::ifstream in_file(file_path, std::ios::binary);
@@ -178,7 +140,7 @@ bool WriteBundleManifestJson(const fs::path& bundle_dir,
     if (i != 0U) {
       out_file << ",";
     }
-    out_file << "\n    {\"path\":\"" << EscapeJson(entry.relative_path) << "\","
+    out_file << "\n    {\"path\":\"" << core::EscapeJson(entry.relative_path) << "\","
              << "\"size_bytes\":" << entry.size_bytes << ","
              << "\"hash\":\"" << entry.hash_hex << "\"}";
   }
