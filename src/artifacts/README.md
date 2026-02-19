@@ -61,6 +61,9 @@ The project promise is a clean, reproducible evidence packet. This module ensure
   (`nic_*.txt`).
 - `bundle_manifest_writer.hpp/.cpp`: writes `bundle_manifest.json` with
   per-file `size_bytes` and `fnv1a_64` hash values.
+- `bundle_registry.hpp/.cpp`: shared registry for building manifest artifact
+  path inputs (required vs optional) so pause/final bundle assembly stays
+  consistent.
 - `bundle_zip_writer.hpp/.cpp`: writes optional support zip archives
   (`<out>/<run_id>.zip`) for bundle handoff.
 - `metrics_diff_writer.hpp/.cpp`: compares baseline/run `metrics.csv` summary

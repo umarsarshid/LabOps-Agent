@@ -1,6 +1,7 @@
 #include "labops/cli/router.hpp"
 
 #include "artifacts/bundle_manifest_writer.hpp"
+#include "artifacts/bundle_registry.hpp"
 #include "artifacts/bundle_zip_writer.hpp"
 #include "artifacts/camera_config_writer.hpp"
 #include "artifacts/config_report_writer.hpp"
@@ -2035,26 +2036,6 @@ std::vector<fs::path> CollectNicRawArtifactPaths(const fs::path& bundle_dir) {
   return paths;
 }
 
-void AppendArtifactIfPresent(std::vector<fs::path>& artifact_paths, const fs::path& path) {
-  if (!path.empty() && fs::exists(path)) {
-    artifact_paths.push_back(path);
-  }
-}
-
-// Both pause and completion paths publish the same manifest contract; keep this
-// assembly centralized so optional artifact behavior stays aligned.
-std::vector<fs::path>
-BuildBundleManifestArtifactPaths(std::vector<fs::path> required_artifacts,
-                                 const std::vector<fs::path>& optional_artifacts,
-                                 const std::vector<fs::path>& hostprobe_raw_artifact_paths) {
-  for (const fs::path& path : optional_artifacts) {
-    AppendArtifactIfPresent(required_artifacts, path);
-  }
-  required_artifacts.insert(required_artifacts.end(), hostprobe_raw_artifact_paths.begin(),
-                            hostprobe_raw_artifact_paths.end());
-  return required_artifacts;
-}
-
 // Centralized run execution keeps `run` and `baseline capture` behavior aligned
 // so artifact contracts and metrics math never diverge between modes.
 int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundle_dir,
@@ -2837,23 +2818,22 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
         }
 
         fs::path bundle_manifest_path;
-        const std::vector<fs::path> pause_optional_artifacts = {
-            sdk_log_artifact_path,
-            config_verify_artifact_path,
-            camera_config_artifact_path,
-            config_report_artifact_path,
-        };
-        std::vector<fs::path> bundle_artifact_paths = BuildBundleManifestArtifactPaths(
-            {
-                scenario_artifact_path,
-                hostprobe_artifact_path,
-                run_artifact_path,
-                events_path,
-                soak_checkpoint_latest_path,
-                soak_checkpoint_history_path,
-                soak_frame_cache_path,
-            },
-            pause_optional_artifacts, hostprobe_raw_artifact_paths);
+        artifacts::BundleArtifactRegistry bundle_registry;
+        bundle_registry.RegisterMany({
+            scenario_artifact_path,
+            hostprobe_artifact_path,
+            run_artifact_path,
+            events_path,
+            soak_checkpoint_latest_path,
+            soak_checkpoint_history_path,
+            soak_frame_cache_path,
+        });
+        bundle_registry.RegisterMany(hostprobe_raw_artifact_paths);
+        bundle_registry.RegisterOptional(sdk_log_artifact_path);
+        bundle_registry.RegisterOptional(config_verify_artifact_path);
+        bundle_registry.RegisterOptional(camera_config_artifact_path);
+        bundle_registry.RegisterOptional(config_report_artifact_path);
+        const std::vector<fs::path> bundle_artifact_paths = bundle_registry.BuildManifestInput();
         if (!artifacts::WriteBundleManifestJson(bundle_dir, bundle_artifact_paths,
                                                 bundle_manifest_path, error)) {
           logger.Error("failed to write bundle manifest during soak pause", {{"error", error}});
@@ -3092,29 +3072,28 @@ int ExecuteScenarioRunInternal(const RunOptions& options, bool use_per_run_bundl
   }
 
   fs::path bundle_manifest_path;
-  std::vector<fs::path> completion_optional_artifacts = {
-      sdk_log_artifact_path,
-      config_verify_artifact_path,
-      camera_config_artifact_path,
-      config_report_artifact_path,
-  };
+  artifacts::BundleArtifactRegistry bundle_registry;
+  bundle_registry.RegisterMany({
+      scenario_artifact_path,
+      hostprobe_artifact_path,
+      run_artifact_path,
+      events_path,
+      metrics_csv_path,
+      metrics_json_path,
+      summary_markdown_path,
+      report_html_path,
+  });
+  bundle_registry.RegisterMany(hostprobe_raw_artifact_paths);
+  bundle_registry.RegisterOptional(sdk_log_artifact_path);
+  bundle_registry.RegisterOptional(config_verify_artifact_path);
+  bundle_registry.RegisterOptional(camera_config_artifact_path);
+  bundle_registry.RegisterOptional(config_report_artifact_path);
   if (options.soak_mode) {
-    completion_optional_artifacts.push_back(soak_frame_cache_path);
-    completion_optional_artifacts.push_back(soak_checkpoint_latest_path);
-    completion_optional_artifacts.push_back(soak_checkpoint_history_path);
+    bundle_registry.RegisterOptional(soak_frame_cache_path);
+    bundle_registry.RegisterOptional(soak_checkpoint_latest_path);
+    bundle_registry.RegisterOptional(soak_checkpoint_history_path);
   }
-  std::vector<fs::path> bundle_artifact_paths = BuildBundleManifestArtifactPaths(
-      {
-          scenario_artifact_path,
-          hostprobe_artifact_path,
-          run_artifact_path,
-          events_path,
-          metrics_csv_path,
-          metrics_json_path,
-          summary_markdown_path,
-          report_html_path,
-      },
-      completion_optional_artifacts, hostprobe_raw_artifact_paths);
+  const std::vector<fs::path> bundle_artifact_paths = bundle_registry.BuildManifestInput();
   if (!artifacts::WriteBundleManifestJson(bundle_dir, bundle_artifact_paths, bundle_manifest_path,
                                           error)) {
     logger.Error("failed to write bundle manifest", {{"error", error}});

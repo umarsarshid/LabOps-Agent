@@ -149,6 +149,7 @@ target_compile_features(labops_metrics PUBLIC cxx_std_20)
 
 # Artifact writers convert in-memory run contracts into stable on-disk outputs.
 add_library(labops_artifacts
+  src/artifacts/bundle_registry.cpp
   src/artifacts/bundle_manifest_writer.cpp
   src/artifacts/bundle_zip_writer.cpp
   src/artifacts/camera_config_writer.cpp
@@ -373,6 +374,15 @@ add_labops_smoke_test(
   NAME bundle_manifest_writer_smoke
   SOURCES
     tests/artifacts/bundle_manifest_writer_smoke.cpp
+  LIBRARIES
+    labops_artifacts
+)
+
+# Smoke test for bundle artifact registry behavior (required vs optional).
+add_labops_smoke_test(
+  NAME bundle_registry_smoke
+  SOURCES
+    tests/artifacts/bundle_registry_smoke.cpp
   LIBRARIES
     labops_artifacts
 )
