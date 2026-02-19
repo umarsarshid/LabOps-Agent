@@ -54,12 +54,26 @@ struct RealDeviceMetadata {
   TransportCounterSnapshot transport_counters;
 };
 
+// Webcam-device metadata captured when a run resolves a concrete webcam.
+//
+// This mirrors the "resolved selector" evidence for webcam runs so operators
+// can quickly confirm which local camera was targeted.
+struct WebcamDeviceMetadata {
+  std::string device_id;
+  std::string friendly_name;
+  std::optional<std::string> bus_info;
+  std::optional<std::string> selector_text;
+  std::optional<std::string> selection_rule;
+  std::optional<std::uint64_t> discovered_index;
+};
+
 // RunInfo combines run identity, immutable config, and lifecycle timing into
 // the minimal contract required to explain what executed and when.
 struct RunInfo {
   std::string run_id;
   RunConfig config;
   std::optional<RealDeviceMetadata> real_device;
+  std::optional<WebcamDeviceMetadata> webcam_device;
   RunTimestamps timestamps;
 };
 
@@ -69,6 +83,7 @@ std::string ToJson(const RunConfig& run_config);
 std::string ToJson(const TransportCounterStatus& counter);
 std::string ToJson(const TransportCounterSnapshot& counters);
 std::string ToJson(const RealDeviceMetadata& real_device);
+std::string ToJson(const WebcamDeviceMetadata& webcam_device);
 std::string ToJson(const RunInfo& run_info);
 
 } // namespace labops::core::schema

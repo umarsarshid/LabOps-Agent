@@ -27,6 +27,10 @@ stable interface regardless of real hardware availability.
   capability modeling and JSON-friendly serialization, including partial support
   representation (supported width/height/fps/pixel_format while exposure is
   unsupported by omission).
+- `webcam_device_selector_smoke.cpp`: validates webcam selector parsing and
+  deterministic resolution rules (`id` exact match, stable sorted `index`,
+  `name_contains`, default index `0`) plus fixture-driven discovery via
+  `LABOPS_WEBCAM_DEVICE_FIXTURE`.
 - `real_backend_factory_smoke.cpp`: validates real-backend factory behavior in
   both build states (enabled -> real skeleton, disabled -> sdk_stub fallback)
   and verifies enabled-lifecycle start/stop safety without requiring camera

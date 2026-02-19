@@ -65,9 +65,13 @@ The project needs one consistent workflow that can run on different camera stack
     `trigger`, `frame_rate`).
   - adds normalized device/control capability types with JSON-friendly
     serialization (`WebcamDeviceInfo`, `WebcamControlId`, `SupportedControls`).
+  - adds deterministic webcam selector parsing/resolution (`id`, `index`,
+    `name_contains`, default index `0`) plus fixture-driven discovery
+    (`LABOPS_WEBCAM_DEVICE_FIXTURE`) so selection behavior is testable without
+    physical hardware.
   - includes per-platform availability probes under `linux/`, `macos/`, and
-    `windows/` with explicit `BACKEND_NOT_AVAILABLE` reasons until capture
-    loops are implemented.
+  `windows/` with explicit `BACKEND_NOT_AVAILABLE` reasons until capture
+  loops are implemented.
 
 ## Current and planned backends
 

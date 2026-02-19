@@ -59,6 +59,28 @@ std::string ToJson(const RealDeviceMetadata& real_device) {
   return out.str();
 }
 
+std::string ToJson(const WebcamDeviceMetadata& webcam_device) {
+  std::ostringstream out;
+  out << "{"
+      << "\"device_id\":\"" << core::EscapeJson(webcam_device.device_id) << "\","
+      << "\"friendly_name\":\"" << core::EscapeJson(webcam_device.friendly_name) << "\"";
+  if (webcam_device.bus_info.has_value()) {
+    out << ",\"bus_info\":\"" << core::EscapeJson(webcam_device.bus_info.value()) << "\"";
+  }
+  if (webcam_device.selector_text.has_value()) {
+    out << ",\"selector\":\"" << core::EscapeJson(webcam_device.selector_text.value()) << "\"";
+  }
+  if (webcam_device.selection_rule.has_value()) {
+    out << ",\"selection_rule\":\"" << core::EscapeJson(webcam_device.selection_rule.value())
+        << "\"";
+  }
+  if (webcam_device.discovered_index.has_value()) {
+    out << ",\"discovered_index\":" << webcam_device.discovered_index.value();
+  }
+  out << "}";
+  return out.str();
+}
+
 std::string ToJson(const RunInfo& run_info) {
   std::ostringstream out;
   out << "{"
@@ -66,6 +88,9 @@ std::string ToJson(const RunInfo& run_info) {
       << "\"config\":" << ToJson(run_info.config);
   if (run_info.real_device.has_value()) {
     out << ",\"real_device\":" << ToJson(run_info.real_device.value());
+  }
+  if (run_info.webcam_device.has_value()) {
+    out << ",\"webcam_device\":" << ToJson(run_info.webcam_device.value());
   }
   out << ","
       << "\"timestamps\":{"

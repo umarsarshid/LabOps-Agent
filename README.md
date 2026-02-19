@@ -18,7 +18,8 @@ Then you can compare that run to a known-good run (baseline) to see what changed
 For each run, you get a folder with files like:
 
 - `run.json`: run settings and metadata (and for real runs: resolved camera
-  model/serial/transport plus firmware/SDK version evidence when available)
+  model/serial/transport plus firmware/SDK version evidence when available;
+  and for webcam runs: resolved webcam id/name/selection-rule evidence)
 - `config_verify.json` (real backend): requested vs actual vs supported
   setting readback after apply
 - `camera_config.json` (real backend): engineer-readable camera config report
@@ -78,6 +79,12 @@ Selector format:
 - `serial:<value>`
 - `user_id:<value>`
 - optional `index:<n>` (0-based) to disambiguate when multiple devices match
+
+When `backend` is `webcam`, scenario field `webcam.device_selector` supports:
+- `id` (exact match)
+- `index` (stable sorted index)
+- `name_contains` (first case-insensitive match)
+- no selector provided -> defaults to index `0`
 
 ## Typical Workflow
 

@@ -22,6 +22,7 @@
 #include "backends/real_sdk/transport_counters.hpp"
 #include "backends/sim/scenario_config.hpp"
 #include "backends/sim/sim_camera_backend.hpp"
+#include "backends/webcam/device_selector.hpp"
 #include "backends/webcam/webcam_factory.hpp"
 #include "core/errors/exit_codes.hpp"
 #include "core/json_dom.hpp"
@@ -265,6 +266,7 @@ struct RunPlan {
   std::vector<backends::real_sdk::ApplyParamInput> real_params;
   std::optional<std::string> netem_profile;
   std::optional<std::string> device_selector;
+  std::optional<backends::webcam::WebcamDeviceSelector> webcam_device_selector;
   struct Thresholds {
     std::optional<double> min_avg_fps;
     std::optional<double> max_drop_rate_percent;
@@ -685,11 +687,21 @@ bool ParseListDevicesOptions(const std::vector<std::string_view>& args, ListDevi
 }
 
 bool ValidateDeviceSelectorText(std::string_view selector_text, std::string& error) {
-  backends::real_sdk::DeviceSelector parsed;
-  if (backends::real_sdk::ParseDeviceSelector(selector_text, parsed, error)) {
+  backends::real_sdk::DeviceSelector real_selector;
+  if (backends::real_sdk::ParseDeviceSelector(selector_text, real_selector, error)) {
     return true;
   }
-  error = "invalid device selector '" + std::string(selector_text) + "': " + error;
+
+  std::string real_error = error;
+  backends::webcam::WebcamDeviceSelector webcam_selector;
+  if (backends::webcam::ParseWebcamDeviceSelector(selector_text, webcam_selector, error)) {
+    return true;
+  }
+
+  error = "invalid device selector '" + std::string(selector_text) +
+          "': expected real selector (serial/user_id/index) or webcam selector "
+          "(id/index/name_contains). real parser: " +
+          real_error + "; webcam parser: " + error;
   return false;
 }
 
@@ -1286,7 +1298,11 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
       error = "scenario device_selector must not be empty";
       return false;
     }
-    if (!ValidateDeviceSelectorText(scenario_model.device_selector.value(), error)) {
+    backends::real_sdk::DeviceSelector parsed_selector;
+    if (!backends::real_sdk::ParseDeviceSelector(scenario_model.device_selector.value(),
+                                                 parsed_selector, error)) {
+      error = "invalid scenario device_selector '" + scenario_model.device_selector.value() +
+              "': " + error;
       return false;
     }
     plan.device_selector = scenario_model.device_selector.value();
@@ -1294,6 +1310,30 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
 
   if (plan.device_selector.has_value() && plan.backend != kBackendRealStub) {
     error = "device_selector requires backend real_stub";
+    return false;
+  }
+
+  if (scenario_model.webcam.device_selector.has_value()) {
+    backends::webcam::WebcamDeviceSelector selector;
+    if (scenario_model.webcam.device_selector->id.has_value()) {
+      selector.id = scenario_model.webcam.device_selector->id.value();
+    }
+    if (scenario_model.webcam.device_selector->name_contains.has_value()) {
+      selector.name_contains = scenario_model.webcam.device_selector->name_contains.value();
+    }
+    if (scenario_model.webcam.device_selector->index.has_value()) {
+      const std::uint64_t raw_index = scenario_model.webcam.device_selector->index.value();
+      if (raw_index > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max())) {
+        error = "scenario webcam.device_selector.index is out of range";
+        return false;
+      }
+      selector.index = static_cast<std::size_t>(raw_index);
+    }
+    plan.webcam_device_selector = std::move(selector);
+  }
+
+  if (plan.webcam_device_selector.has_value() && plan.backend != kBackendWebcam) {
+    error = "webcam.device_selector requires backend webcam";
     return false;
   }
 
@@ -1349,8 +1389,16 @@ bool BuildBackendFromRunPlan(const RunPlan& run_plan,
 }
 
 struct ResolvedDeviceSelection {
+  enum class Kind {
+    kReal = 0,
+    kWebcam,
+  };
+
+  Kind kind = Kind::kReal;
   std::string selector_text;
-  backends::real_sdk::DeviceInfo device;
+  std::string selection_rule;
+  std::optional<backends::real_sdk::DeviceInfo> real_device;
+  std::optional<backends::webcam::WebcamDeviceInfo> webcam_device;
   std::size_t discovered_index = 0;
 };
 
@@ -1358,21 +1406,43 @@ void AttachResolvedDeviceMetadataToRunInfo(
     const std::optional<ResolvedDeviceSelection>& resolved_device_selection,
     core::schema::RunInfo& run_info) {
   run_info.real_device.reset();
+  run_info.webcam_device.reset();
   if (!resolved_device_selection.has_value()) {
     return;
   }
 
   const ResolvedDeviceSelection& selected = resolved_device_selection.value();
-  core::schema::RealDeviceMetadata real_device;
-  real_device.model = selected.device.model;
-  real_device.serial = selected.device.serial;
-  real_device.transport = selected.device.transport;
-  if (!selected.device.user_id.empty()) {
-    real_device.user_id = selected.device.user_id;
+  if (selected.kind == ResolvedDeviceSelection::Kind::kReal && selected.real_device.has_value()) {
+    const backends::real_sdk::DeviceInfo& resolved_real = selected.real_device.value();
+    core::schema::RealDeviceMetadata real_device;
+    real_device.model = resolved_real.model;
+    real_device.serial = resolved_real.serial;
+    real_device.transport = resolved_real.transport;
+    if (!resolved_real.user_id.empty()) {
+      real_device.user_id = resolved_real.user_id;
+    }
+    real_device.firmware_version = resolved_real.firmware_version;
+    real_device.sdk_version = resolved_real.sdk_version.value_or("unknown");
+    run_info.real_device = std::move(real_device);
+    return;
   }
-  real_device.firmware_version = selected.device.firmware_version;
-  real_device.sdk_version = selected.device.sdk_version.value_or("unknown");
-  run_info.real_device = std::move(real_device);
+
+  if (selected.kind == ResolvedDeviceSelection::Kind::kWebcam &&
+      selected.webcam_device.has_value()) {
+    const backends::webcam::WebcamDeviceInfo& resolved_webcam = selected.webcam_device.value();
+    core::schema::WebcamDeviceMetadata webcam_device;
+    webcam_device.device_id = resolved_webcam.device_id;
+    webcam_device.friendly_name = resolved_webcam.friendly_name;
+    webcam_device.bus_info = resolved_webcam.bus_info;
+    if (!selected.selector_text.empty()) {
+      webcam_device.selector_text = selected.selector_text;
+    }
+    if (!selected.selection_rule.empty()) {
+      webcam_device.selection_rule = selected.selection_rule;
+    }
+    webcam_device.discovered_index = static_cast<std::uint64_t>(selected.discovered_index);
+    run_info.webcam_device = std::move(webcam_device);
+  }
 }
 
 core::schema::TransportCounterStatus
@@ -1413,26 +1483,75 @@ bool ResolveDeviceSelectionForRun(const RunPlan& run_plan, const RunOptions& opt
     selector_text = run_plan.device_selector.value();
   }
 
-  if (!selector_text.has_value()) {
+  if (run_plan.backend == kBackendRealStub) {
+    if (!selector_text.has_value()) {
+      return true;
+    }
+
+    backends::real_sdk::DeviceInfo selected_device;
+    std::size_t selected_index = 0;
+    if (!backends::real_sdk::ResolveConnectedDevice(selector_text.value(), selected_device,
+                                                    selected_index, error)) {
+      return false;
+    }
+
+    resolved = ResolvedDeviceSelection{
+        .kind = ResolvedDeviceSelection::Kind::kReal,
+        .selector_text = selector_text.value(),
+        .selection_rule = "real_selector",
+        .real_device = std::move(selected_device),
+        .discovered_index = selected_index,
+    };
     return true;
   }
-  if (run_plan.backend != kBackendRealStub) {
-    error = "--device/device_selector requires backend real_stub";
-    return false;
+
+  if (run_plan.backend == kBackendWebcam) {
+    backends::webcam::WebcamDeviceSelector webcam_selector;
+    std::string webcam_selector_text;
+    if (!options.device_selector.empty()) {
+      if (!backends::webcam::ParseWebcamDeviceSelector(options.device_selector, webcam_selector,
+                                                       error)) {
+        error = "invalid webcam --device selector '" + options.device_selector + "': " + error;
+        return false;
+      }
+      webcam_selector_text = options.device_selector;
+    } else if (run_plan.webcam_device_selector.has_value()) {
+      webcam_selector = run_plan.webcam_device_selector.value();
+      if (webcam_selector.id.has_value()) {
+        webcam_selector_text = "id:" + webcam_selector.id.value();
+      } else if (webcam_selector.index.has_value()) {
+        webcam_selector_text = "index:" + std::to_string(webcam_selector.index.value());
+      } else if (webcam_selector.name_contains.has_value()) {
+        webcam_selector_text = "name_contains:" + webcam_selector.name_contains.value();
+      }
+    }
+
+    std::vector<backends::webcam::WebcamDeviceInfo> devices;
+    if (!backends::webcam::EnumerateConnectedDevices(devices, error)) {
+      return false;
+    }
+
+    backends::webcam::WebcamSelectionResult webcam_result;
+    if (!backends::webcam::ResolveWebcamDeviceSelector(devices, webcam_selector, webcam_result,
+                                                       error)) {
+      return false;
+    }
+
+    resolved = ResolvedDeviceSelection{
+        .kind = ResolvedDeviceSelection::Kind::kWebcam,
+        .selector_text = webcam_selector_text.empty() ? std::string("default:index:0")
+                                                      : std::move(webcam_selector_text),
+        .selection_rule = std::string(backends::webcam::ToString(webcam_result.rule)),
+        .webcam_device = webcam_result.device,
+        .discovered_index = webcam_result.index,
+    };
+    return true;
   }
 
-  backends::real_sdk::DeviceInfo selected_device;
-  std::size_t selected_index = 0;
-  if (!backends::real_sdk::ResolveConnectedDevice(selector_text.value(), selected_device,
-                                                  selected_index, error)) {
+  if (selector_text.has_value()) {
+    error = "--device/device_selector requires backend real_stub or webcam";
     return false;
   }
-
-  resolved = ResolvedDeviceSelection{
-      .selector_text = selector_text.value(),
-      .device = std::move(selected_device),
-      .discovered_index = selected_index,
-  };
   return true;
 }
 
@@ -1448,30 +1567,47 @@ bool ApplyDeviceSelectionToBackend(backends::ICameraBackend& backend,
   };
 
   if (!apply("device.selector", selection.selector_text) ||
-      !apply("device.index", std::to_string(selection.discovered_index)) ||
-      !apply("device.model", selection.device.model) ||
-      !apply("device.serial", selection.device.serial) ||
-      !apply("device.user_id",
-             selection.device.user_id.empty() ? "(none)" : selection.device.user_id) ||
-      !apply("device.transport", selection.device.transport)) {
+      !apply("device.selection_rule", selection.selection_rule) ||
+      !apply("device.index", std::to_string(selection.discovered_index))) {
     return false;
   }
 
-  if (selection.device.ip_address.has_value() &&
-      !apply("device.ip", selection.device.ip_address.value())) {
-    return false;
+  if (selection.kind == ResolvedDeviceSelection::Kind::kReal && selection.real_device.has_value()) {
+    const backends::real_sdk::DeviceInfo& device = selection.real_device.value();
+    if (!apply("device.model", device.model) || !apply("device.serial", device.serial) ||
+        !apply("device.user_id", device.user_id.empty() ? "(none)" : device.user_id) ||
+        !apply("device.transport", device.transport)) {
+      return false;
+    }
+
+    if (device.ip_address.has_value() && !apply("device.ip", device.ip_address.value())) {
+      return false;
+    }
+    if (device.mac_address.has_value() && !apply("device.mac", device.mac_address.value())) {
+      return false;
+    }
+    if (device.firmware_version.has_value() &&
+        !apply("device.firmware_version", device.firmware_version.value())) {
+      return false;
+    }
+    if (device.sdk_version.has_value() &&
+        !apply("device.sdk_version", device.sdk_version.value())) {
+      return false;
+    }
+    return true;
   }
-  if (selection.device.mac_address.has_value() &&
-      !apply("device.mac", selection.device.mac_address.value())) {
-    return false;
-  }
-  if (selection.device.firmware_version.has_value() &&
-      !apply("device.firmware_version", selection.device.firmware_version.value())) {
-    return false;
-  }
-  if (selection.device.sdk_version.has_value() &&
-      !apply("device.sdk_version", selection.device.sdk_version.value())) {
-    return false;
+
+  if (selection.kind == ResolvedDeviceSelection::Kind::kWebcam &&
+      selection.webcam_device.has_value()) {
+    const backends::webcam::WebcamDeviceInfo& device = selection.webcam_device.value();
+    if (!apply("device.id", device.device_id) ||
+        !apply("device.friendly_name", device.friendly_name)) {
+      return false;
+    }
+    if (device.bus_info.has_value() && !apply("device.bus_info", device.bus_info.value())) {
+      return false;
+    }
+    return true;
   }
 
   return true;
@@ -1966,21 +2102,33 @@ int PrepareRunContext(const RunOptions& options, bool use_per_run_bundle_dir, bo
   }
   if (ctx.resolved_device_selection.has_value()) {
     const ResolvedDeviceSelection& selected = ctx.resolved_device_selection.value();
-    ctx.logger.Info(
-        "device selector resolved",
-        {{"selector", selected.selector_text},
-         {"selected_index", std::to_string(selected.discovered_index)},
-         {"selected_model", selected.device.model},
-         {"selected_serial", selected.device.serial},
-         {"selected_user_id", selected.device.user_id.empty() ? "(none)" : selected.device.user_id},
-         {"selected_transport", selected.device.transport}});
-    if (selected.device.firmware_version.has_value()) {
-      ctx.logger.Info("device selector firmware detected",
-                      {{"selected_firmware_version", selected.device.firmware_version.value()}});
-    }
-    if (selected.device.sdk_version.has_value()) {
-      ctx.logger.Info("device selector sdk version detected",
-                      {{"selected_sdk_version", selected.device.sdk_version.value()}});
+    if (selected.kind == ResolvedDeviceSelection::Kind::kReal && selected.real_device.has_value()) {
+      const backends::real_sdk::DeviceInfo& device = selected.real_device.value();
+      ctx.logger.Info("device selector resolved",
+                      {{"selector", selected.selector_text},
+                       {"selected_index", std::to_string(selected.discovered_index)},
+                       {"selected_model", device.model},
+                       {"selected_serial", device.serial},
+                       {"selected_user_id", device.user_id.empty() ? "(none)" : device.user_id},
+                       {"selected_transport", device.transport}});
+      if (device.firmware_version.has_value()) {
+        ctx.logger.Info("device selector firmware detected",
+                        {{"selected_firmware_version", device.firmware_version.value()}});
+      }
+      if (device.sdk_version.has_value()) {
+        ctx.logger.Info("device selector sdk version detected",
+                        {{"selected_sdk_version", device.sdk_version.value()}});
+      }
+    } else if (selected.kind == ResolvedDeviceSelection::Kind::kWebcam &&
+               selected.webcam_device.has_value()) {
+      const backends::webcam::WebcamDeviceInfo& device = selected.webcam_device.value();
+      ctx.logger.Info("webcam device selector resolved",
+                      {{"selector", selected.selector_text},
+                       {"selection_rule", selected.selection_rule},
+                       {"selected_index", std::to_string(selected.discovered_index)},
+                       {"selected_device_id", device.device_id},
+                       {"selected_friendly_name", device.friendly_name},
+                       {"selected_bus_info", device.bus_info.value_or("(none)")}});
     }
   }
 
@@ -3022,6 +3170,28 @@ int EmitFinalConsoleSummary(const RunOptions& options, std::string_view success_
                             RunExecutionContext& ctx) {
   std::cout << success_prefix << options.scenario_path << '\n';
   std::cout << "run_id: " << ctx.run_info.run_id << '\n';
+  if (ctx.run_info.real_device.has_value()) {
+    const core::schema::RealDeviceMetadata& real = ctx.run_info.real_device.value();
+    std::cout << "selected_device_type: real\n";
+    std::cout << "selected_device_model: " << real.model << '\n';
+    std::cout << "selected_device_serial: " << real.serial << '\n';
+    std::cout << "selected_device_transport: " << real.transport << '\n';
+  }
+  if (ctx.run_info.webcam_device.has_value()) {
+    const core::schema::WebcamDeviceMetadata& webcam = ctx.run_info.webcam_device.value();
+    std::cout << "selected_device_type: webcam\n";
+    std::cout << "selected_webcam_id: " << webcam.device_id << '\n';
+    std::cout << "selected_webcam_name: " << webcam.friendly_name << '\n';
+    if (webcam.selector_text.has_value()) {
+      std::cout << "selected_webcam_selector: " << webcam.selector_text.value() << '\n';
+    }
+    if (webcam.selection_rule.has_value()) {
+      std::cout << "selected_webcam_rule: " << webcam.selection_rule.value() << '\n';
+    }
+    if (webcam.discovered_index.has_value()) {
+      std::cout << "selected_webcam_index: " << webcam.discovered_index.value() << '\n';
+    }
+  }
   std::cout << "bundle: " << ctx.bundle_dir.string() << '\n';
   std::cout << "scenario: " << ctx.scenario_artifact_path.string() << '\n';
   std::cout << "hostprobe: " << ctx.hostprobe_artifact_path.string() << '\n';

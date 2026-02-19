@@ -90,6 +90,7 @@ add_library(labops_backends
   src/backends/sim/sim_camera_backend.cpp
   src/backends/webcam/capabilities.cpp
   src/backends/webcam/device_model.cpp
+  src/backends/webcam/device_selector.cpp
   src/backends/webcam/platform_probe.cpp
   src/backends/webcam/webcam_factory.cpp
   src/backends/webcam/linux/platform_probe_linux.cpp
@@ -473,6 +474,16 @@ add_labops_smoke_test(
   NAME webcam_device_model_smoke
   SOURCES
     tests/backends/webcam_device_model_smoke.cpp
+  LIBRARIES
+    labops_backends
+)
+
+# Smoke test validating webcam selector parsing + deterministic resolution
+# contract (`id`, `index`, `name_contains`, default index 0).
+add_labops_smoke_test(
+  NAME webcam_device_selector_smoke
+  SOURCES
+    tests/backends/webcam_device_selector_smoke.cpp
   LIBRARIES
     labops_backends
 )
@@ -867,6 +878,19 @@ add_labops_smoke_test(
   NAME run_device_selector_resolution_smoke
   SOURCES
     tests/labops/run_device_selector_resolution_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
+)
+
+# Integration smoke test for webcam selector resolution via scenario
+# `webcam.device_selector` rules with fixture-driven discovery.
+add_labops_smoke_test(
+  NAME run_webcam_selector_resolution_smoke
+  SOURCES
+    tests/labops/run_webcam_selector_resolution_smoke.cpp
     src/labops/cli/router.cpp
   INCLUDE_DIRS
     src

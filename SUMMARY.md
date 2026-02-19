@@ -1,92 +1,137 @@
 # LabOps Summary
 
-## Commit: additive webcam scenario fields
+## Commit: deterministic webcam selector resolution
 
 Date: 2026-02-19
 
 ### Goal
-Add minimal, additive webcam-specific scenario fields so old scenarios remain valid and new webcam scenarios can be validated cleanly.
+Implement deterministic webcam selector resolution for `backend: "webcam"` so runs consistently choose the same webcam by explicit rules (`id`, `index`, `name_contains`, or default index `0`) and record that decision in logs and artifacts.
 
 ### Implemented
 
-1. Extended `ScenarioModel` with optional webcam fields
-- Updated `src/scenarios/model.hpp`:
-  - added `ScenarioModel::Webcam` section with:
-    - `device_selector` object:
-      - `index`
-      - `id`
-      - `name_contains`
-    - `requested_width`
-    - `requested_height`
-    - `requested_fps`
-    - `requested_pixel_format`
-- Updated `src/scenarios/model.cpp` parser:
-  - parses canonical `webcam.*` fields.
-  - keeps parsing lenient for optional fields (type mismatches treated as unset).
-  - added compatibility fallback parsing for top-level requested webcam hints:
-    - `requested_width`, `requested_height`, `requested_fps`,
-      `requested_pixel_format`.
+1. Added a dedicated webcam selector module
+- Added `src/backends/webcam/device_selector.hpp` and `src/backends/webcam/device_selector.cpp`.
+- New contracts:
+  - `WebcamDeviceSelector`
+  - `WebcamSelectionRule`
+  - `WebcamSelectionResult`
+- New behavior:
+  - parse webcam selector text (`id:<value>`, `index:<n>`, `name_contains:<text>`)
+  - enumerate webcam devices from fixture env var `LABOPS_WEBCAM_DEVICE_FIXTURE`
+  - deterministic resolve order:
+    1. `id` exact match
+    2. `index` in stable-sorted device list
+    3. first case-insensitive `name_contains` match
+    4. default index `0`
 
 Why:
-- Provides a normalized place for webcam-specific requests without changing
-  existing `camera` structures.
-- Keeps run-path compatibility behavior stable while adding new schema surface.
+- Keeps selector behavior explicit and reproducible.
+- Gives one reusable place for webcam selection logic instead of embedding it in CLI flow.
+- Supports CI/local testing without physical webcams via fixture discovery.
 
-2. Added strict validator rules for new webcam section
+2. Wired webcam selector resolution into run orchestration
+- Updated `src/labops/cli/router.cpp`:
+  - `RunPlan` now carries optional webcam selector data from `ScenarioModel`.
+  - Scenario webcam selector is enforced to backend compatibility (`webcam.device_selector` requires `backend: "webcam"`).
+  - Run-time device resolution now supports both real and webcam backends with backend-specific parsing/resolution paths.
+  - Selection is logged with rule + selected identity for webcam.
+  - Selector metadata is applied to backend params (`device.selector`, `device.selection_rule`, `device.index`, etc.).
+
+Why:
+- Ensures deterministic selection happens before backend connect.
+- Makes selection choices visible and auditable in structured logs.
+- Preserves existing real-backend selector behavior while adding webcam path cleanly.
+
+3. Extended run contract with webcam metadata
+- Updated `src/core/schema/run_contract.hpp` and `src/core/schema/run_contract.cpp`:
+  - added `WebcamDeviceMetadata`
+  - added optional `RunInfo.webcam_device`
+  - added JSON serialization for webcam device evidence
+
+Why:
+- Captures resolved webcam identity and selector rule directly in `run.json` for triage provenance.
+- Prevents “which webcam did this run use?” ambiguity.
+
+4. Exposed selection details in run summary output
+- Updated `src/artifacts/run_summary_writer.cpp`:
+  - added `## Device Selection` section when real/webcam device metadata is present
+  - includes webcam selector text, rule, and index when available
+
+Why:
+- Engineers can quickly inspect selected device context from `summary.md` without opening raw JSON.
+
+5. Added schema validation for webcam selector/backend compatibility
 - Updated `src/scenarios/validator.cpp`:
-  - new `ValidateWebcam(...)` checks:
-    - `webcam` must be an object when present.
-    - `webcam.device_selector` must be object when present.
-    - selector must include at least one key of `index`, `id`, `name_contains`.
-    - `index` must be non-negative integer.
-    - `id` and `name_contains` must be non-empty strings.
-    - `requested_width` and `requested_height` must be positive integers.
-    - `requested_fps` must be a positive number (int or decimal).
-    - `requested_pixel_format` must be a non-empty string.
-  - wired webcam validation into scenario object validation flow.
+  - `webcam.device_selector` now reports actionable error unless backend is `webcam`
 
 Why:
-- Gives actionable schema errors for webcam scenarios.
-- Keeps old scenarios unaffected (additive optional section only).
+- Stops ambiguous scenario intent early.
+- Keeps validate/run behavior aligned for webcam selector semantics.
 
-3. Added/expanded tests to prove additive compatibility
-- Updated `tests/scenarios/scenario_validation_smoke.cpp`:
-  - added valid webcam scenario that passes validation.
-  - added invalid webcam scenario with targeted assertion checks for each new
-    field’s error path/message.
-- Updated `tests/scenarios/scenario_model_equivalence_smoke.cpp`:
-  - compares parsed webcam request fields in canonical vs legacy-style forms.
-  - adds dedicated parse test for `webcam.device_selector` object values.
-
-Why:
-- Demonstrates old+new validation behavior explicitly.
-- Prevents future regressions in parser/validator treatment of webcam fields.
-
-4. Updated schema docs/readmes
-- Updated `docs/scenario_schema.md`:
-  - top-level shape includes `webcam`.
-  - backend enum docs include `webcam`.
-  - documents all new webcam field definitions and constraints.
-- Updated `src/scenarios/README.md` and `tests/scenarios/README.md`.
+6. Added focused tests for selector behavior and integration
+- Added `tests/backends/webcam_device_selector_smoke.cpp`:
+  - parser coverage (`id`, `index`, `name_contains`, invalid keys)
+  - deterministic resolution coverage across all rule paths
+  - fixture enumeration + stable ordering coverage
+- Added `tests/labops/run_webcam_selector_resolution_smoke.cpp`:
+  - runs `labops run` with `backend: webcam` + `webcam.device_selector`
+  - verifies selector decision is logged
+  - verifies `run.json` includes `webcam_device` evidence fields even on connect failure
+- Updated existing tests/docs:
+  - `tests/schema/run_contract_json_smoke.cpp`
+  - `tests/scenarios/scenario_validation_smoke.cpp`
+  - `CMakeLists.txt` (new test targets)
 
 Why:
-- Keeps operator/developer documentation aligned with actual validator/model
-  behavior.
+- Locks deterministic selector behavior with regression tests.
+- Proves end-to-end evidence contract for webcam selection metadata.
+
+7. Updated docs/readmes for new selector contract
+- Updated:
+  - `README.md`
+  - `docs/scenario_schema.md`
+  - `docs/triage_bundle_spec.md`
+  - `src/backends/README.md`
+  - `src/backends/webcam/README.md`
+  - `src/labops/cli/README.md`
+  - `src/scenarios/README.md`
+  - `tests/backends/README.md`
+  - `tests/labops/README.md`
+  - `tests/scenarios/README.md`
+
+Why:
+- Keeps operator/developer guidance aligned with actual runtime and artifact behavior.
+- Prevents contract drift between implementation and docs.
 
 ### Files changed
+- `CMakeLists.txt`
+- `README.md`
 - `docs/scenario_schema.md`
+- `docs/triage_bundle_spec.md`
+- `src/artifacts/run_summary_writer.cpp`
+- `src/backends/README.md`
+- `src/backends/webcam/README.md`
+- `src/backends/webcam/device_selector.hpp`
+- `src/backends/webcam/device_selector.cpp`
+- `src/core/schema/run_contract.hpp`
+- `src/core/schema/run_contract.cpp`
+- `src/labops/cli/README.md`
+- `src/labops/cli/router.cpp`
 - `src/scenarios/README.md`
-- `src/scenarios/model.hpp`
-- `src/scenarios/model.cpp`
 - `src/scenarios/validator.cpp`
+- `tests/backends/README.md`
+- `tests/backends/webcam_device_selector_smoke.cpp`
+- `tests/labops/README.md`
+- `tests/labops/run_webcam_selector_resolution_smoke.cpp`
 - `tests/scenarios/README.md`
 - `tests/scenarios/scenario_validation_smoke.cpp`
-- `tests/scenarios/scenario_model_equivalence_smoke.cpp`
+- `tests/schema/run_contract_json_smoke.cpp`
 - `SUMMARY.md`
 
 ### Verification
 
 1. Formatting
+- `bash tools/clang_format.sh --fix`
 - `bash tools/clang_format.sh --check`
 - Result: passed
 
@@ -95,13 +140,13 @@ Why:
 - Result: passed
 
 3. Focused tests
-- `ctest --test-dir build -R "scenario_validation_smoke|scenario_model_equivalence_smoke|validate_actionable_smoke" --output-on-failure`
-- Result: passed
+- `ctest --test-dir build -R "webcam_device_selector_smoke|run_webcam_selector_resolution_smoke|scenario_validation_smoke|run_contract_json_smoke" --output-on-failure`
+- Result: passed (`4/4`)
 
 4. Full suite
 - `ctest --test-dir build --output-on-failure`
-- Result: passed (`75/75`)
+- Result: passed (`77/77`)
 
 ### Notes
-- Existing scenarios remain valid because all webcam additions are optional.
-- New webcam scenarios now validate with clear, field-specific messages.
+- Deterministic webcam selection is now implemented and test-covered without requiring physical webcams by using fixture-driven discovery.
+- `run.json` and `summary.md` now carry webcam selection provenance when resolved.

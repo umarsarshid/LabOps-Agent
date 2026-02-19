@@ -36,11 +36,14 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
     `REAL_SDK_UNAVAILABLE`).
 - Route scenario validation through schema loader with actionable errors.
 - Parse and validate scenario-level `device_selector` plus CLI `--device`
-  overrides; resolve selectors deterministically (serial/user_id with optional
-  index tie-break) before backend connect so repeated runs target the same
-  camera identity.
+  overrides; resolve selectors deterministically before backend connect so
+  repeated runs target the same camera identity.
+  - real-backend selectors: `serial`/`user_id` with optional index tie-break.
+  - webcam selectors: `id`, `index`, or `name_contains` with deterministic
+    fallback to default index `0`.
   - attach resolved identity/version metadata to `run.json` (`real_device`)
-    so triage bundles capture exact hardware provenance.
+    plus webcam identity metadata (`webcam_device`) so triage bundles capture
+    exact hardware provenance.
   - collect transport-layer counters in best-effort mode (`resends`,
     `packet_errors`, `dropped_packets`) and write explicit availability status
     into `run.json` even on backend-connect failures.

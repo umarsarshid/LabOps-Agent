@@ -103,7 +103,7 @@ Optional output:
 | `scenario.json` | yes | scenario writer | Preserves exact scenario input used for run reproducibility. |
 | `hostprobe.json` | yes | host probe writer | Captures host OS/CPU/RAM/uptime/load context and parsed NIC highlights (including MTU/link hints when available). |
 | `nic_*.txt` | yes | host probe writer | Raw NIC command outputs (platform-specific command set). |
-| `run.json` | yes | run writer | Captures run identity, immutable config, optional real-device identity/version metadata, and run timestamps. |
+| `run.json` | yes | run writer | Captures run identity, immutable config, optional real-device/webcam identity metadata, and run timestamps. |
 | `config_verify.json` | conditional (real backend) | config verify writer | Captures per-setting requested vs actual vs supported readback evidence after apply. |
 | `camera_config.json` | conditional (real backend) | camera config writer | Captures resolved camera identity plus curated node rows and missing/unsupported key lists for engineer-readable config triage. |
 | `config_report.md` | conditional (real backend) | config report writer | Provides a one-page markdown status table for applied/adjusted/unsupported settings without opening JSON artifacts. |
@@ -150,6 +150,14 @@ Canonical structure:
       "dropped_packets": { "status": "not_available" }
     }
   },
+  "webcam_device": {
+    "device_id": "cam-10",
+    "friendly_name": "USB Camera 10",
+    "bus_info": "usb:1-3",
+    "selector": "name_contains:Camera 10",
+    "selection_rule": "name_contains",
+    "discovered_index": 0
+  },
   "timestamps": {
     "created_at_utc": "2026-02-13T21:34:24.116Z",
     "started_at_utc": "2026-02-13T21:34:24.116Z",
@@ -172,6 +180,14 @@ Field notes:
     - `dropped_packets`
     each counter is either `{ "status": "available", "value": <n> }` or
     `{ "status": "not_available" }`
+- `webcam_device`: optional; present when run resolved a concrete webcam
+  - `device_id`, `friendly_name` are required when `webcam_device` exists
+  - `bus_info` is optional
+  - `selector` captures the selector text source
+  - `selection_rule` explains how selection resolved (`id`, `index`,
+    `name_contains`, or `default_index_0`)
+  - `discovered_index` is the resolved 0-based index from stable sorted
+    discovery order
 - `timestamps.*`: UTC with millisecond precision (`YYYY-MM-DDTHH:MM:SS.mmmZ`)
 
 ### `camera_config.json`

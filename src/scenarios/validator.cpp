@@ -646,6 +646,16 @@ void ValidateWebcam(const JsonValue& root, ValidationReport& report) {
   if (!has_selector_field) {
     AddIssue(report, "webcam.device_selector",
              "must include at least one selector key: index, id, or name_contains");
+    return;
+  }
+
+  const JsonValue* backend = GetField(root, "backend");
+  const std::string backend_value =
+      (backend != nullptr && IsString(backend) && !backend->string_value.empty())
+          ? backend->string_value
+          : "sim";
+  if (backend_value != "webcam") {
+    AddIssue(report, "webcam.device_selector", "requires backend to be \"webcam\"");
   }
 }
 

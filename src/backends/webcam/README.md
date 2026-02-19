@@ -6,7 +6,7 @@ Cross-platform webcam backend scaffold for direct local camera testing.
 
 LabOps already has a deterministic sim backend and a vendor-SDK-oriented real backend path. This folder adds a second real-hardware track focused on commodity webcams so teams can test the same run/metrics/bundle pipeline on a single machine without proprietary camera SDK setup.
 
-## Current scope (commit 0097)
+## Current scope
 
 - `webcam_backend.hpp/.cpp`:
   - implements `ICameraBackend` with stable state transitions and explicit
@@ -31,6 +31,20 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
     - `SupportedControls` map (`control_id -> spec`) where omitted keys are
       explicitly treated as unsupported.
   - includes JSON-friendly serializers used for capability evidence artifacts.
+- `device_selector.hpp/.cpp`:
+  - parses webcam selector clauses (`id`, `index`, `name_contains`) with
+    actionable errors.
+  - enumerates fixture-driven webcam inventories via
+    `LABOPS_WEBCAM_DEVICE_FIXTURE` so deterministic selector behavior is
+    testable without physical webcams in CI.
+  - resolves selectors deterministically using stable ordering:
+    - `id` exact match
+    - otherwise `index`
+    - otherwise `name_contains`
+    - otherwise default index `0`
+  - emits selection-rule labels (`id`, `index`, `name_contains`,
+    `default_index_0`) so CLI logs and run artifacts explain *why* one webcam
+    was chosen.
 - `platform_probe.hpp/.cpp`:
   - central dispatcher that picks the current OS probe implementation.
 - `linux/`, `macos/`, `windows/`:
@@ -41,4 +55,8 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
 
 ## Connection to the project
 
-This module is intentionally non-operational right now, but it establishes the backend contract and capability vocabulary needed for the next commits where Linux V4L2 and Windows Media Foundation capture paths are wired in.
+This module is intentionally non-operational for frame streaming right now, but
+it already provides deterministic webcam selection and identity reporting. That
+lets teams validate end-to-end run orchestration and evidence contracts before
+platform capture loops (Linux V4L2 / macOS AVFoundation / Windows Media
+Foundation) are wired in.

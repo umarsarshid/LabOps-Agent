@@ -97,6 +97,12 @@ This keeps each test focused on contract verification instead of setup code.
   fields (`resends`, `packet_errors`, `dropped_packets`), and follows
   expected exit-code behavior for
   both real-enabled and real-disabled builds.
+- `run_webcam_selector_resolution_smoke.cpp`: verifies webcam selector
+  resolution via `webcam.device_selector` (`name_contains` case shown),
+  confirms deterministic selected device identity in structured logs, and
+  confirms `run.json` captures `webcam_device` metadata
+  (`device_id`, `friendly_name`, `selector`, `selection_rule`, index) even
+  when webcam backend connect fails before streaming starts.
 - `real_apply_mode_events_smoke.cpp`: verifies real-backend `apply_mode`
   behavior:
   `best_effort` records unsupported settings and continues (including enum

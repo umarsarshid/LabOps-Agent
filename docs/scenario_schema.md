@@ -157,6 +157,7 @@ A scenario JSON document is an object with these top-level sections:
     - `name_contains` (string, optional, non-empty)
     - constraint: at least one selector key should be present when
       `device_selector` is provided.
+    - backend constraint: requires `backend: "webcam"`.
   - `requested_width` (integer, optional, `> 0`)
   - `requested_height` (integer, optional, `> 0`)
   - `requested_fps` (number, optional, `> 0`; accepts integer or decimal)
@@ -165,8 +166,12 @@ A scenario JSON document is an object with these top-level sections:
 Notes:
 
 - This section is additive and does not replace existing `camera` fields.
-- Current milestone behavior is validation/model support; backend application
-  wiring follows in later webcam milestones.
+- Webcam selector resolution is deterministic:
+  - if `id` is set: exact match on device id.
+  - else if `index` is set: pick that 0-based index from stable-sorted devices.
+  - else if `name_contains` is set: pick the first case-insensitive
+    friendly-name match.
+  - else: default to index `0`.
 
 ### `sim_faults` (optional)
 

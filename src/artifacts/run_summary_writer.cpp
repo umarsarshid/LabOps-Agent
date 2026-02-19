@@ -42,6 +42,51 @@ void WriteThresholdSection(std::ofstream& out_file, bool thresholds_passed,
   out_file << '\n';
 }
 
+void WriteDeviceSelectionSection(std::ofstream& out_file, const core::schema::RunInfo& run_info) {
+  if (!run_info.real_device.has_value() && !run_info.webcam_device.has_value()) {
+    return;
+  }
+
+  out_file << "## Device Selection\n\n";
+  if (run_info.real_device.has_value()) {
+    const core::schema::RealDeviceMetadata& real = run_info.real_device.value();
+    out_file << "- backend_device_type: `real`\n";
+    out_file << "- model: `" << real.model << "`\n";
+    out_file << "- serial: `" << real.serial << "`\n";
+    out_file << "- transport: `" << real.transport << "`\n";
+    if (real.user_id.has_value()) {
+      out_file << "- user_id: `" << real.user_id.value() << "`\n";
+    }
+    if (real.firmware_version.has_value()) {
+      out_file << "- firmware_version: `" << real.firmware_version.value() << "`\n";
+    }
+    if (real.sdk_version.has_value()) {
+      out_file << "- sdk_version: `" << real.sdk_version.value() << "`\n";
+    }
+    out_file << '\n';
+  }
+
+  if (run_info.webcam_device.has_value()) {
+    const core::schema::WebcamDeviceMetadata& webcam = run_info.webcam_device.value();
+    out_file << "- backend_device_type: `webcam`\n";
+    out_file << "- webcam_device_id: `" << webcam.device_id << "`\n";
+    out_file << "- webcam_friendly_name: `" << webcam.friendly_name << "`\n";
+    if (webcam.bus_info.has_value()) {
+      out_file << "- webcam_bus_info: `" << webcam.bus_info.value() << "`\n";
+    }
+    if (webcam.selector_text.has_value()) {
+      out_file << "- webcam_selector: `" << webcam.selector_text.value() << "`\n";
+    }
+    if (webcam.selection_rule.has_value()) {
+      out_file << "- webcam_selection_rule: `" << webcam.selection_rule.value() << "`\n";
+    }
+    if (webcam.discovered_index.has_value()) {
+      out_file << "- webcam_index: `" << webcam.discovered_index.value() << "`\n";
+    }
+    out_file << '\n';
+  }
+}
+
 void WriteAnomaliesSection(std::ofstream& out_file, const std::vector<std::string>& top_anomalies) {
   out_file << "## Top Anomalies\n\n";
   if (top_anomalies.empty()) {
@@ -136,6 +181,7 @@ bool WriteRunSummaryMarkdown(const core::schema::RunInfo& run_info,
   out_file << "| inter_frame_jitter_p95_us | "
            << core::FormatFixedDouble(report.inter_frame_jitter_us.p95_us, 3) << " |\n\n";
 
+  WriteDeviceSelectionSection(out_file, run_info);
   WriteThresholdSection(out_file, thresholds_passed, threshold_failures);
   WriteAnomaliesSection(out_file, top_anomalies);
   WriteNetemCommandSection(out_file, netem_suggestions);

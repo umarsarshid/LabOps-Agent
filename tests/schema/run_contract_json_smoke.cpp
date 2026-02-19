@@ -38,6 +38,14 @@ int main() {
   RunInfo info;
   info.run_id = "run-000001";
   info.config = config;
+  info.webcam_device = labops::core::schema::WebcamDeviceMetadata{
+      .device_id = "webcam-0",
+      .friendly_name = "DeskCam",
+      .bus_info = std::optional<std::string>("usb:1-2"),
+      .selector_text = std::optional<std::string>("id:webcam-0"),
+      .selection_rule = std::optional<std::string>("id"),
+      .discovered_index = std::optional<std::uint64_t>(0),
+  };
   info.real_device = labops::core::schema::RealDeviceMetadata{
       .model = "SprintCam",
       .serial = "SN-2000",
@@ -66,6 +74,13 @@ int main() {
   AssertContains(run_info_json, "\"run_id\":\"run-000001\"");
   AssertContains(run_info_json, "\"config\":");
   AssertContains(run_info_json, "\"real_device\":");
+  AssertContains(run_info_json, "\"webcam_device\":");
+  AssertContains(run_info_json, "\"device_id\":\"webcam-0\"");
+  AssertContains(run_info_json, "\"friendly_name\":\"DeskCam\"");
+  AssertContains(run_info_json, "\"bus_info\":\"usb:1-2\"");
+  AssertContains(run_info_json, "\"selector\":\"id:webcam-0\"");
+  AssertContains(run_info_json, "\"selection_rule\":\"id\"");
+  AssertContains(run_info_json, "\"discovered_index\":0");
   AssertContains(run_info_json, "\"model\":\"SprintCam\"");
   AssertContains(run_info_json, "\"serial\":\"SN-2000\"");
   AssertContains(run_info_json, "\"transport\":\"usb\"");

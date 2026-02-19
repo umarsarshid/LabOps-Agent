@@ -16,7 +16,8 @@ Scenario files drive repeatability. These tests ensure:
   (`sim` / `webcam` / `real_stub`), real-backend `device_selector` contract
   checks (syntax, allowed keys, backend compatibility), and additive webcam
   section checks (`webcam.device_selector` + requested width/height/fps/
-  pixel-format fields).
+  pixel-format fields), including backend compatibility for webcam selector
+  objects.
 - `sim_baseline_metrics_integration_smoke.cpp`: runs
   `scenarios/sim_baseline.json` through `labops run` and validates
   `<out>/<run_id>/metrics.json` stays within expected baseline ranges

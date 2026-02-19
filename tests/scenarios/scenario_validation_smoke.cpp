@@ -339,6 +339,38 @@ int main() {
   }
 
   {
+    const std::string invalid_webcam_selector_backend_json = R"json(
+{
+  "schema_version": "1.0",
+  "scenario_id": "webcam_selector_wrong_backend",
+  "backend": "sim",
+  "duration": { "duration_ms": 1000 },
+  "camera": { "fps": 20 },
+  "webcam": {
+    "device_selector": {
+      "id": "cam-0"
+    }
+  },
+  "thresholds": { "min_avg_fps": 1.0 }
+}
+)json";
+
+    labops::scenarios::ValidationReport report;
+    std::string error;
+    if (!labops::scenarios::ValidateScenarioText(invalid_webcam_selector_backend_json, report,
+                                                 error)) {
+      Fail("ValidateScenarioText failed unexpectedly for webcam selector/backend mismatch: " +
+           error);
+    }
+    if (report.valid) {
+      Fail("expected webcam selector/backend mismatch scenario to fail validation");
+    }
+    if (!ContainsIssue(report, "webcam.device_selector", "requires backend")) {
+      Fail("missing actionable issue for webcam.device_selector backend requirement");
+    }
+  }
+
+  {
     const std::string invalid_json = R"json(
 {
   "schema_version": "1.0",

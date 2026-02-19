@@ -23,6 +23,9 @@ A repeatable lab depends on declarative scenario files. This module ensures scen
   actionable error messages keyed by field path (used by `labops validate`),
   including `netem_profile` reference checks against
   `tools/netem_profiles/<profile>.json`.
+  - validates webcam selector constraints (`index`/`id`/`name_contains`) and
+    enforces backend compatibility (`webcam.device_selector` requires
+    `backend: "webcam"`).
 - `netem_profile_support.hpp/.cpp`: shared slug/path helpers for
   `netem_profile` lookup so runtime (`labops run`) and validation
   (`labops validate`) use the same resolution rules.
