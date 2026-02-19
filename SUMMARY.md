@@ -1,89 +1,76 @@
 # LabOps Summary
 
-## Commit: webcam device/control capability model
+## Commit: explicit config-status event emission helper
 
 Date: 2026-02-19
 
 ### Goal
-Define a concrete webcam device + control capability model that can represent partial support per device and serialize it in a JSON-friendly form.
+Add a single explicit event helper for config-status outcomes so `CONFIG_APPLIED`, `CONFIG_UNSUPPORTED`, and `CONFIG_ADJUSTED` are emitted through one contract path, while preserving existing payload schemas and run behavior.
 
 ### Implemented
 
-1. Added normalized webcam device/control types
-- New files:
-  - `src/backends/webcam/device_model.hpp`
-  - `src/backends/webcam/device_model.cpp`
-- Added `WebcamDeviceInfo` with:
-  - `device_id`
-  - `friendly_name`
-  - optional `bus_info`
-  - `supported_controls`
-- Added `WebcamControlId` enum with core controls:
-  - `width`, `height`, `fps`, `pixel_format`, `exposure`, `gain`,
-    `auto_exposure`, `auto_fps_hint`
-- Added `WebcamControlValueType` enum:
-  - `integer`, `float`, `boolean`, `enum`
-- Added `WebcamControlSpec`:
-  - `value_type`
-  - numeric `range` (`min/max/step`, optional)
-  - `enum_values`
-  - `read_only`
-- Added `SupportedControls` map:
-  - `WebcamControlId -> WebcamControlSpec`
-- Added helper:
-  - `SupportsControl(...)` to check support by control presence
+1. Added unified config-status emission API in events facade
+- Updated `src/events/emitter.hpp`:
+  - added `Emitter::ConfigStatusEvent` with `Kind`:
+    - `kApplied`
+    - `kUnsupported`
+    - `kAdjusted`
+  - added `EmitConfigStatus(const ConfigStatusEvent&, std::string&)`
+- Updated `src/events/emitter.cpp`:
+  - implemented `EmitConfigStatus(...)` with explicit switch-to-event mapping:
+    - `kApplied -> CONFIG_APPLIED`
+    - `kUnsupported -> CONFIG_UNSUPPORTED`
+    - `kAdjusted -> CONFIG_ADJUSTED`
+  - keeps payload keys exactly aligned with existing event contract.
 
 Why:
-- Gives one normalized contract for webcam capability discovery and reporting.
-- Keeps per-platform naming differences hidden behind stable IDs.
-- Makes partial support explicit and easy to reason about.
+- Before this change, config outcome payload construction was spread across multiple methods/callsites.
+- One helper centralizes contract enforcement and reduces drift risk.
 
-2. Added JSON-friendly serialization helpers
-- Added serializers:
-  - `ToJson(const WebcamControlSpec&)`
-  - `ToJson(const SupportedControls&)`
-  - `ToJson(const WebcamDeviceInfo&)`
-- Output is structured for artifacts/logging tooling and human inspection.
+2. Kept legacy typed emitter methods as wrappers (backward-compatible)
+- `EmitConfigApplied(...)`, `EmitConfigUnsupported(...)`, and
+  `EmitConfigAdjusted(...)` now delegate to `EmitConfigStatus(...)`.
 
 Why:
-- Capability evidence needs to be machine-parsable and stable in outputs.
-- Enables future bundle artifacts and debug views without ad-hoc formatting.
+- Preserves current callsites/tests and avoids breaking external/internal usage.
+- Introduces the new helper without changing behavior expectations.
 
-3. Added smoke test proving partial-support representation
-- New test:
-  - `tests/backends/webcam_device_model_smoke.cpp`
-- Test builds a device that supports:
-  - width, height, fps, pixel_format
-- And intentionally does not support:
-  - exposure (omitted from map)
-- Verifies:
-  - support checks via `SupportsControl(...)`
-  - serialized JSON includes supported keys and omits unsupported one
+3. Wired run orchestration to the explicit helper
+- Updated `src/labops/cli/router.cpp`:
+  - real apply path now emits unsupported and adjusted rows through
+    `EmitConfigStatus(...)`.
+  - config-applied emission points also route through `EmitConfigStatus(...)`.
 
 Why:
-- Directly validates the core “done when” requirement for this milestone.
+- Ensures backend config outcome reporting uses the unified helper in real
+  execution flow, not only in isolated emitter tests.
+- Keeps unsupported knobs reportable in best-effort runs without changing
+  pass/fail semantics.
 
-4. Wired build + docs
-- Updated `CMakeLists.txt`:
-  - adds `src/backends/webcam/device_model.cpp` to `labops_backends`
-  - adds `webcam_device_model_smoke` test target
-- Updated docs:
-  - `src/backends/README.md`
-  - `src/backends/webcam/README.md`
-  - `tests/backends/README.md`
+4. Extended emitter smoke coverage for unsupported/adjusted
+- Updated `tests/events/emitter_smoke.cpp`:
+  - emits `CONFIG_UNSUPPORTED` and `CONFIG_ADJUSTED` via the new helper.
+  - verifies payload fields remain contract-accurate.
+  - updated expected event-line count and ordering assertions.
 
 Why:
-- Keeps discovery/documentation current for future contributors.
-- Ensures the new model is compiled and tested continuously.
+- Locks the new helper contract with explicit payload assertions.
+- Prevents regression where helper emits incorrect keys or misses fields.
+
+5. Updated module docs
+- Updated `src/events/README.md` to document explicit config-status helper usage.
+- Updated `tests/events/README.md` to include emitter smoke coverage details.
+
+Why:
+- Keeps design intent and test surface discoverable for future contributors.
 
 ### Files changed
-- `CMakeLists.txt`
-- `src/backends/README.md`
-- `src/backends/webcam/README.md`
-- `src/backends/webcam/device_model.hpp` (new)
-- `src/backends/webcam/device_model.cpp` (new)
-- `tests/backends/README.md`
-- `tests/backends/webcam_device_model_smoke.cpp` (new)
+- `src/events/emitter.hpp`
+- `src/events/emitter.cpp`
+- `src/labops/cli/router.cpp`
+- `tests/events/emitter_smoke.cpp`
+- `src/events/README.md`
+- `tests/events/README.md`
 - `SUMMARY.md`
 
 ### Verification
@@ -97,7 +84,7 @@ Why:
 - Result: passed
 
 3. Focused tests
-- `ctest --test-dir build -R "webcam_device_model_smoke|webcam_backend_smoke|list_backends_smoke|scenario_validation_smoke" --output-on-failure`
+- `ctest --test-dir build -R "emitter_smoke|real_apply_mode_events_smoke|run_stream_trace_smoke" --output-on-failure`
 - Result: passed
 
 4. Full suite
@@ -105,5 +92,6 @@ Why:
 - Result: passed (`75/75`)
 
 ### Notes
-- Unsupported controls are represented by omission from `SupportedControls`.
-- This commit defines the model contract only; it does not yet enumerate live webcam hardware controls from platform APIs.
+- No event payload schema changes were introduced.
+- Best-effort real-backend runs still record unsupported knobs as evidence
+  (`CONFIG_UNSUPPORTED`) without failing the run, matching existing behavior.

@@ -9,6 +9,9 @@ contract and append-only JSONL writer behavior from regressions.
 
 ## Current contents
 
+- `emitter_smoke.cpp`: verifies typed emitter facade payload contracts,
+  including explicit config-status helper emission for `CONFIG_APPLIED`,
+  `CONFIG_UNSUPPORTED`, and `CONFIG_ADJUSTED`.
 - `events_jsonl_smoke.cpp`: verifies append behavior and required keys in
   `events.jsonl` lines, including lifecycle-critical event type serialization
   (`DEVICE_DISCONNECTED`, `TRANSPORT_ANOMALY`).

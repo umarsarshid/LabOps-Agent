@@ -69,6 +69,38 @@ int main() {
     Fail("EmitConfigApplied failed: " + error);
   }
 
+  if (!emitter.EmitConfigStatus(
+          {
+              .kind = labops::events::Emitter::ConfigStatusEvent::Kind::kUnsupported,
+              .ts = std::chrono::system_clock::time_point(std::chrono::milliseconds(1'500)),
+              .run_id = "run-1",
+              .scenario_id = "sim_baseline",
+              .apply_mode = "best_effort",
+              .generic_key = "exposure",
+              .requested_value = "12345",
+              .reason = "control unsupported on device",
+          },
+          error)) {
+    Fail("EmitConfigStatus(unsupported) failed: " + error);
+  }
+
+  if (!emitter.EmitConfigStatus(
+          {
+              .kind = labops::events::Emitter::ConfigStatusEvent::Kind::kAdjusted,
+              .ts = std::chrono::system_clock::time_point(std::chrono::milliseconds(1'750)),
+              .run_id = "run-1",
+              .scenario_id = "sim_baseline",
+              .apply_mode = "best_effort",
+              .generic_key = "fps",
+              .requested_value = "120",
+              .reason = "clamped to device max",
+              .node_name = "FrameRate",
+              .applied_value = "60",
+          },
+          error)) {
+    Fail("EmitConfigStatus(adjusted) failed: " + error);
+  }
+
   if (!emitter.EmitStreamStarted(
           {
               .ts = std::chrono::system_clock::time_point(std::chrono::milliseconds(2'000)),
@@ -129,8 +161,8 @@ int main() {
   }
 
   const std::vector<std::string> lines = ReadNonEmptyLines(events_path);
-  if (lines.size() != 5U) {
-    Fail("expected exactly five event lines");
+  if (lines.size() != 7U) {
+    Fail("expected exactly seven event lines");
   }
 
   AssertContains(lines[0], "\"type\":\"CONFIG_APPLIED\"");
@@ -140,24 +172,37 @@ int main() {
   AssertContains(lines[0], "\"param.fps\":\"30\"");
   AssertContains(lines[0], "\"param.drop_percent\":\"20\"");
 
-  AssertContains(lines[1], "\"type\":\"STREAM_STARTED\"");
-  AssertContains(lines[1], "\"backend\":\"sim\"");
-  AssertContains(lines[1], "\"duration_ms\":\"1000\"");
-  AssertContains(lines[1], "\"seed\":\"777\"");
+  AssertContains(lines[1], "\"type\":\"CONFIG_UNSUPPORTED\"");
+  AssertContains(lines[1], "\"apply_mode\":\"best_effort\"");
+  AssertContains(lines[1], "\"generic_key\":\"exposure\"");
+  AssertContains(lines[1], "\"requested_value\":\"12345\"");
+  AssertContains(lines[1], "\"reason\":\"control unsupported on device\"");
 
-  AssertContains(lines[2], "\"type\":\"FRAME_DROPPED\"");
-  AssertContains(lines[2], "\"frame_id\":\"42\"");
-  AssertContains(lines[2], "\"reason\":\"sim_fault_injection\"");
+  AssertContains(lines[2], "\"type\":\"CONFIG_ADJUSTED\"");
+  AssertContains(lines[2], "\"apply_mode\":\"best_effort\"");
+  AssertContains(lines[2], "\"generic_key\":\"fps\"");
+  AssertContains(lines[2], "\"requested_value\":\"120\"");
+  AssertContains(lines[2], "\"applied_value\":\"60\"");
+  AssertContains(lines[2], "\"node_name\":\"FrameRate\"");
 
-  AssertContains(lines[3], "\"type\":\"FRAME_TIMEOUT\"");
-  AssertContains(lines[3], "\"frame_id\":\"43\"");
-  AssertContains(lines[3], "\"reason\":\"acquisition_timeout\"");
+  AssertContains(lines[3], "\"type\":\"STREAM_STARTED\"");
+  AssertContains(lines[3], "\"backend\":\"sim\"");
+  AssertContains(lines[3], "\"duration_ms\":\"1000\"");
+  AssertContains(lines[3], "\"seed\":\"777\"");
 
-  AssertContains(lines[4], "\"type\":\"TRANSPORT_ANOMALY\"");
-  AssertContains(lines[4], "\"heuristic_id\":\"resend_spike\"");
-  AssertContains(lines[4], "\"counter\":\"resends\"");
-  AssertContains(lines[4], "\"observed_value\":\"120\"");
-  AssertContains(lines[4], "\"threshold\":\"50\"");
+  AssertContains(lines[4], "\"type\":\"FRAME_DROPPED\"");
+  AssertContains(lines[4], "\"frame_id\":\"42\"");
+  AssertContains(lines[4], "\"reason\":\"sim_fault_injection\"");
+
+  AssertContains(lines[5], "\"type\":\"FRAME_TIMEOUT\"");
+  AssertContains(lines[5], "\"frame_id\":\"43\"");
+  AssertContains(lines[5], "\"reason\":\"acquisition_timeout\"");
+
+  AssertContains(lines[6], "\"type\":\"TRANSPORT_ANOMALY\"");
+  AssertContains(lines[6], "\"heuristic_id\":\"resend_spike\"");
+  AssertContains(lines[6], "\"counter\":\"resends\"");
+  AssertContains(lines[6], "\"observed_value\":\"120\"");
+  AssertContains(lines[6], "\"threshold\":\"50\"");
 
   fs::remove_all(out_dir, cleanup_ec);
   std::cout << "emitter_smoke: ok\n";

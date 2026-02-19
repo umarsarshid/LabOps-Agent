@@ -64,47 +64,93 @@ bool Emitter::EmitFrameOutcome(const FrameOutcomeEvent& event, std::string& erro
   return EmitRaw(ToEventType(event.outcome), event.ts, std::move(payload), error);
 }
 
-bool Emitter::EmitConfigApplied(const ConfigAppliedEvent& event, std::string& error) const {
-  std::map<std::string, std::string> payload = {
-      {"run_id", event.run_id},
-      {"scenario_id", event.scenario_id},
-      {"applied_count", std::to_string(event.applied_params.size())},
-  };
+bool Emitter::EmitConfigStatus(const ConfigStatusEvent& event, std::string& error) const {
+  switch (event.kind) {
+  case ConfigStatusEvent::Kind::kApplied: {
+    std::map<std::string, std::string> payload = {
+        {"run_id", event.run_id},
+        {"scenario_id", event.scenario_id},
+        {"applied_count", std::to_string(event.applied_params.size())},
+    };
 
-  // Prefix backend params so run-level metadata fields remain unambiguous.
-  for (const auto& [key, value] : event.applied_params) {
-    payload["param." + key] = value;
+    // Prefix backend params so run-level metadata fields remain unambiguous.
+    for (const auto& [key, value] : event.applied_params) {
+      payload["param." + key] = value;
+    }
+    return EmitRaw(EventType::kConfigApplied, event.ts, std::move(payload), error);
+  }
+  case ConfigStatusEvent::Kind::kUnsupported:
+    return EmitRaw(EventType::kConfigUnsupported, event.ts,
+                   {
+                       {"run_id", event.run_id},
+                       {"scenario_id", event.scenario_id},
+                       {"apply_mode", event.apply_mode},
+                       {"generic_key", event.generic_key},
+                       {"requested_value", event.requested_value},
+                       {"reason", event.reason},
+                   },
+                   error);
+  case ConfigStatusEvent::Kind::kAdjusted:
+    return EmitRaw(EventType::kConfigAdjusted, event.ts,
+                   {
+                       {"run_id", event.run_id},
+                       {"scenario_id", event.scenario_id},
+                       {"apply_mode", event.apply_mode},
+                       {"generic_key", event.generic_key},
+                       {"node_name", event.node_name},
+                       {"requested_value", event.requested_value},
+                       {"applied_value", event.applied_value},
+                       {"reason", event.reason},
+                   },
+                   error);
   }
 
-  return EmitRaw(EventType::kConfigApplied, event.ts, std::move(payload), error);
+  error = "unsupported config status event kind";
+  return false;
+}
+
+bool Emitter::EmitConfigApplied(const ConfigAppliedEvent& event, std::string& error) const {
+  return EmitConfigStatus(
+      {
+          .kind = ConfigStatusEvent::Kind::kApplied,
+          .ts = event.ts,
+          .run_id = event.run_id,
+          .scenario_id = event.scenario_id,
+          .applied_params = event.applied_params,
+      },
+      error);
 }
 
 bool Emitter::EmitConfigUnsupported(const ConfigUnsupportedEvent& event, std::string& error) const {
-  return EmitRaw(EventType::kConfigUnsupported, event.ts,
-                 {
-                     {"run_id", event.run_id},
-                     {"scenario_id", event.scenario_id},
-                     {"apply_mode", event.apply_mode},
-                     {"generic_key", event.generic_key},
-                     {"requested_value", event.requested_value},
-                     {"reason", event.reason},
-                 },
-                 error);
+  return EmitConfigStatus(
+      {
+          .kind = ConfigStatusEvent::Kind::kUnsupported,
+          .ts = event.ts,
+          .run_id = event.run_id,
+          .scenario_id = event.scenario_id,
+          .apply_mode = event.apply_mode,
+          .generic_key = event.generic_key,
+          .requested_value = event.requested_value,
+          .reason = event.reason,
+      },
+      error);
 }
 
 bool Emitter::EmitConfigAdjusted(const ConfigAdjustedEvent& event, std::string& error) const {
-  return EmitRaw(EventType::kConfigAdjusted, event.ts,
-                 {
-                     {"run_id", event.run_id},
-                     {"scenario_id", event.scenario_id},
-                     {"apply_mode", event.apply_mode},
-                     {"generic_key", event.generic_key},
-                     {"node_name", event.node_name},
-                     {"requested_value", event.requested_value},
-                     {"applied_value", event.applied_value},
-                     {"reason", event.reason},
-                 },
-                 error);
+  return EmitConfigStatus(
+      {
+          .kind = ConfigStatusEvent::Kind::kAdjusted,
+          .ts = event.ts,
+          .run_id = event.run_id,
+          .scenario_id = event.scenario_id,
+          .apply_mode = event.apply_mode,
+          .generic_key = event.generic_key,
+          .requested_value = event.requested_value,
+          .reason = event.reason,
+          .node_name = event.node_name,
+          .applied_value = event.applied_value,
+      },
+      error);
 }
 
 bool Emitter::EmitTransportAnomaly(const TransportAnomalyEvent& event, std::string& error) const {

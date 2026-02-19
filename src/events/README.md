@@ -17,6 +17,8 @@ Debugging camera failures requires timeline evidence, not just summary metrics. 
 - `emitter.hpp/.cpp`: thin typed facade that emits common run-flow events
   (stream start, frame outcome, config apply outcomes, transport anomaly)
   while preserving the same JSONL event contract.
+  - includes explicit config-status helper emission for:
+    `CONFIG_APPLIED`, `CONFIG_UNSUPPORTED`, `CONFIG_ADJUSTED`.
 - `event_model.hpp/.cpp`: `EventType` and `Event{ts,type,payload}` contract
   plus JSON serialization.
 - `jsonl_writer.hpp/.cpp`: append-only writer for `events.jsonl` (one JSON

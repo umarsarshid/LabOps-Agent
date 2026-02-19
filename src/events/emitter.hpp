@@ -73,6 +73,37 @@ public:
     std::string reason;
   };
 
+  // Unified config-status event input used by run orchestration when emitting
+  // apply diagnostics. This keeps payload contracts centralized for:
+  // - CONFIG_APPLIED
+  // - CONFIG_UNSUPPORTED
+  // - CONFIG_ADJUSTED
+  struct ConfigStatusEvent {
+    enum class Kind {
+      kApplied,
+      kUnsupported,
+      kAdjusted,
+    };
+
+    Kind kind = Kind::kApplied;
+    std::chrono::system_clock::time_point ts{};
+    std::string run_id;
+    std::string scenario_id;
+
+    // kApplied fields.
+    std::map<std::string, std::string> applied_params;
+
+    // kUnsupported / kAdjusted shared fields.
+    std::string apply_mode;
+    std::string generic_key;
+    std::string requested_value;
+    std::string reason;
+
+    // kAdjusted-specific fields.
+    std::string node_name;
+    std::string applied_value;
+  };
+
   struct TransportAnomalyEvent {
     std::chrono::system_clock::time_point ts{};
     std::string run_id;
@@ -91,6 +122,7 @@ public:
 
   bool EmitStreamStarted(const StreamStartedEvent& event, std::string& error) const;
   bool EmitFrameOutcome(const FrameOutcomeEvent& event, std::string& error) const;
+  bool EmitConfigStatus(const ConfigStatusEvent& event, std::string& error) const;
   bool EmitConfigApplied(const ConfigAppliedEvent& event, std::string& error) const;
   bool EmitConfigUnsupported(const ConfigUnsupportedEvent& event, std::string& error) const;
   bool EmitConfigAdjusted(const ConfigAdjustedEvent& event, std::string& error) const;

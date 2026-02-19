@@ -1672,8 +1672,9 @@ bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan&
     }
     for (const auto& unsupported : apply_result.unsupported) {
       std::string event_error;
-      if (!emitter.EmitConfigUnsupported(
+      if (!emitter.EmitConfigStatus(
               {
+                  .kind = events::Emitter::ConfigStatusEvent::Kind::kUnsupported,
                   .ts = std::chrono::system_clock::now(),
                   .run_id = run_info.run_id,
                   .scenario_id = run_info.config.scenario_id,
@@ -1692,8 +1693,9 @@ bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan&
   append_skipped_transport_tuning_rows();
 
   for (const auto& unsupported : apply_result.unsupported) {
-    if (!emitter.EmitConfigUnsupported(
+    if (!emitter.EmitConfigStatus(
             {
+                .kind = events::Emitter::ConfigStatusEvent::Kind::kUnsupported,
                 .ts = std::chrono::system_clock::now(),
                 .run_id = run_info.run_id,
                 .scenario_id = run_info.config.scenario_id,
@@ -1714,17 +1716,18 @@ bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan&
     if (!applied.adjusted) {
       continue;
     }
-    if (!emitter.EmitConfigAdjusted(
+    if (!emitter.EmitConfigStatus(
             {
+                .kind = events::Emitter::ConfigStatusEvent::Kind::kAdjusted,
                 .ts = std::chrono::system_clock::now(),
                 .run_id = run_info.run_id,
                 .scenario_id = run_info.config.scenario_id,
                 .apply_mode = backends::real_sdk::ToString(run_plan.real_apply_mode),
                 .generic_key = applied.generic_key,
-                .node_name = applied.node_name,
                 .requested_value = applied.requested_value,
-                .applied_value = applied.applied_value,
                 .reason = applied.adjustment_reason,
+                .node_name = applied.node_name,
+                .applied_value = applied.applied_value,
             },
             error)) {
       return false;
@@ -2172,8 +2175,9 @@ int ConfigureBackend(const RunOptions& options, ScenarioRunResult* run_result,
       return kExitFailure;
     }
 
-    if (!emitter.EmitConfigApplied(
+    if (!emitter.EmitConfigStatus(
             {
+                .kind = events::Emitter::ConfigStatusEvent::Kind::kApplied,
                 .ts = std::chrono::system_clock::now(),
                 .run_id = ctx.run_info.run_id,
                 .scenario_id = ctx.run_info.config.scenario_id,
@@ -2253,8 +2257,9 @@ int ConfigureBackend(const RunOptions& options, ScenarioRunResult* run_result,
 
   if (!ctx.config_applied_event_emitted) {
     const auto config_applied_at = std::chrono::system_clock::now();
-    if (!emitter.EmitConfigApplied(
+    if (!emitter.EmitConfigStatus(
             {
+                .kind = events::Emitter::ConfigStatusEvent::Kind::kApplied,
                 .ts = config_applied_at,
                 .run_id = ctx.run_info.run_id,
                 .scenario_id = ctx.run_info.config.scenario_id,
