@@ -16,11 +16,7 @@ inline int DispatchRunScenario(const std::filesystem::path& scenario_path,
                                const std::filesystem::path& out_root,
                                const std::vector<std::string>& extra_args = {}) {
   std::vector<std::string> argv_storage = {
-      "labops",
-      "run",
-      scenario_path.string(),
-      "--out",
-      out_root.string(),
+      "labops", "run", scenario_path.string(), "--out", out_root.string(),
   };
   argv_storage.insert(argv_storage.end(), extra_args.begin(), extra_args.end());
   return DispatchArgs(argv_storage);
@@ -36,7 +32,8 @@ inline void RunScenarioOrFail(const std::filesystem::path& scenario_path,
   }
 }
 
-inline std::vector<std::filesystem::path> CollectRunBundleDirs(const std::filesystem::path& out_root) {
+inline std::vector<std::filesystem::path>
+CollectRunBundleDirs(const std::filesystem::path& out_root) {
   if (!std::filesystem::exists(out_root)) {
     Fail("output root does not exist: " + out_root.string());
   }
@@ -64,8 +61,9 @@ inline std::filesystem::path RequireSingleRunBundleDir(const std::filesystem::pa
   return bundle_dirs.front();
 }
 
-inline std::vector<std::filesystem::path> CollectFilesWithPrefixAndExtension(
-    const std::filesystem::path& directory, std::string_view prefix, std::string_view extension) {
+inline std::vector<std::filesystem::path>
+CollectFilesWithPrefixAndExtension(const std::filesystem::path& directory, std::string_view prefix,
+                                   std::string_view extension) {
   std::vector<std::filesystem::path> files;
   for (const auto& entry : std::filesystem::directory_iterator(directory)) {
     if (!entry.is_regular_file()) {

@@ -47,6 +47,14 @@ cmake -S . -B tmp/build
 cmake --build tmp/build
 ```
 
+Optional webcam OpenCV bootstrap gate:
+
+```bash
+# Explicitly disable OpenCV dependency for webcam backend bootstrap.
+cmake -S . -B tmp/build-no-opencv -DLABOPS_ENABLE_WEBCAM_OPENCV=OFF
+cmake --build tmp/build-no-opencv
+```
+
 ```bash
 ./tmp/build/labops version
 ./tmp/build/labops list-backends

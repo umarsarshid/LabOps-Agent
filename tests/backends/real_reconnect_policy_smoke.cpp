@@ -47,7 +47,9 @@ public:
     return false;
   }
 
-  BackendConfig DumpConfig() const override { return {}; }
+  BackendConfig DumpConfig() const override {
+    return {};
+  }
 
   std::vector<FrameSample> PullFrames(std::chrono::milliseconds, std::string& error) override {
     error = "not used in test";
@@ -73,8 +75,8 @@ int main() {
   using labops::backends::real_sdk::ComputeReconnectAttemptsRemaining;
   using labops::backends::real_sdk::ExecuteReconnectAttempts;
   using labops::backends::real_sdk::IsLikelyDisconnectError;
-  using labops::core::logging::LogLevel;
   using labops::core::logging::Logger;
+  using labops::core::logging::LogLevel;
   using labops::tests::common::AssertContains;
   using labops::tests::common::Fail;
 

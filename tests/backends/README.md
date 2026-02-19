@@ -22,7 +22,7 @@ stable interface regardless of real hardware availability.
 - `webcam_backend_smoke.cpp`: validates that the webcam backend module compiles
   across platforms, preserves config params, and returns explicit
   `BACKEND_NOT_AVAILABLE` errors until platform capture implementations are
-  wired.
+  wired, and records OpenCV bootstrap status fields in `dump_config()`.
 - `webcam_device_model_smoke.cpp`: validates normalized webcam device/control
   capability modeling and JSON-friendly serialization, including partial support
   representation (supported width/height/fps/pixel_format while exposure is

@@ -178,12 +178,10 @@ int main() {
     const std::filesystem::path temp_root =
         labops::tests::common::CreateUniqueTempDir("labops-webcam-selector-smoke");
     const std::filesystem::path fixture_path = temp_root / "webcams.csv";
-    WriteFixtureFile(
-        fixture_path,
-        "# webcam fixture\n"
-        "device_id,friendly_name,bus_info\n"
-        "cam-20,USB Camera 20,usb:2-1\n"
-        "cam-10,USB Camera 10,usb:1-3\n");
+    WriteFixtureFile(fixture_path, "# webcam fixture\n"
+                                   "device_id,friendly_name,bus_info\n"
+                                   "cam-20,USB Camera 20,usb:2-1\n"
+                                   "cam-10,USB Camera 10,usb:1-3\n");
 
     const std::string fixture_path_text = fixture_path.string();
     ScopedEnvOverride fixture_override("LABOPS_WEBCAM_DEVICE_FIXTURE", fixture_path_text.c_str());

@@ -15,6 +15,21 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(LABOPS_ENABLE_CATCH2_TESTS "Enable Catch2-based unit tests" ON)
 option(LABOPS_FETCH_CATCH2 "Fetch Catch2 when not available locally" OFF)
 
+# Webcam OpenCV bootstrap toggle.
+#
+# Default policy:
+# - local/dev: ON (so engineers can quickly wire a webcam bootstrap path)
+# - CI: OFF (to keep CI dependency surface minimal unless explicitly enabled)
+if(DEFINED ENV{CI} AND NOT "$ENV{CI}" STREQUAL "")
+  set(LABOPS_ENABLE_WEBCAM_OPENCV_DEFAULT OFF)
+else()
+  set(LABOPS_ENABLE_WEBCAM_OPENCV_DEFAULT ON)
+endif()
+option(LABOPS_ENABLE_WEBCAM_OPENCV
+  "Enable OpenCV bootstrap wiring for webcam backend"
+  ${LABOPS_ENABLE_WEBCAM_OPENCV_DEFAULT}
+)
+
 # Real backend integration path toggle.
 # Default stays OFF so Linux/macOS/Windows builds do not require any
 # proprietary vendor SDK in local dev or CI.
@@ -49,6 +64,22 @@ if(LABOPS_ENABLE_REAL_BACKEND)
   endif()
 else()
   message(STATUS "Real backend disabled (LABOPS_ENABLE_REAL_BACKEND=OFF)")
+endif()
+
+# Webcam OpenCV bootstrap effective state.
+# If requested but OpenCV is unavailable, keep build portable by falling back
+# to non-OpenCV webcam scaffolding while surfacing a clear status line.
+set(LABOPS_WEBCAM_OPENCV_EFFECTIVE OFF)
+if(LABOPS_ENABLE_WEBCAM_OPENCV)
+  find_package(OpenCV QUIET COMPONENTS core videoio imgproc)
+  if(OpenCV_FOUND)
+    set(LABOPS_WEBCAM_OPENCV_EFFECTIVE ON)
+    message(STATUS "Webcam OpenCV bootstrap enabled: OpenCV found (${OpenCV_VERSION})")
+  else()
+    message(STATUS "Webcam OpenCV bootstrap requested but OpenCV not found; bootstrap disabled")
+  endif()
+else()
+  message(STATUS "Webcam OpenCV bootstrap disabled (LABOPS_ENABLE_WEBCAM_OPENCV=OFF)")
 endif()
 
 # Shared schema library for run contracts. Keeping this in a standalone target
@@ -91,6 +122,7 @@ add_library(labops_backends
   src/backends/webcam/capabilities.cpp
   src/backends/webcam/device_model.cpp
   src/backends/webcam/device_selector.cpp
+  src/backends/webcam/opencv_bootstrap.cpp
   src/backends/webcam/platform_probe.cpp
   src/backends/webcam/webcam_factory.cpp
   src/backends/webcam/linux/platform_probe_linux.cpp
@@ -110,6 +142,18 @@ if(LABOPS_REAL_BACKEND_EFFECTIVE)
   target_include_directories(labops_backends PUBLIC "${VendorSDK_INCLUDE_DIR}")
 else()
   target_compile_definitions(labops_backends PUBLIC LABOPS_ENABLE_REAL_BACKEND=0)
+endif()
+if(LABOPS_ENABLE_WEBCAM_OPENCV)
+  target_compile_definitions(labops_backends PUBLIC LABOPS_WEBCAM_OPENCV_REQUESTED=1)
+else()
+  target_compile_definitions(labops_backends PUBLIC LABOPS_WEBCAM_OPENCV_REQUESTED=0)
+endif()
+if(LABOPS_WEBCAM_OPENCV_EFFECTIVE)
+  target_compile_definitions(labops_backends PUBLIC LABOPS_ENABLE_WEBCAM_OPENCV=1)
+  target_include_directories(labops_backends PUBLIC ${OpenCV_INCLUDE_DIRS})
+  target_link_libraries(labops_backends PUBLIC ${OpenCV_LIBS})
+else()
+  target_compile_definitions(labops_backends PUBLIC LABOPS_ENABLE_WEBCAM_OPENCV=0)
 endif()
 
 # Scenario loader/validation module.

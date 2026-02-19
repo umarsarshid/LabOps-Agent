@@ -45,6 +45,12 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
   - emits selection-rule labels (`id`, `index`, `name_contains`,
     `default_index_0`) so CLI logs and run artifacts explain *why* one webcam
     was chosen.
+- `opencv_bootstrap.hpp/.cpp`:
+  - small build-gated OpenCV bootstrap status module.
+  - when `LABOPS_ENABLE_WEBCAM_OPENCV` is effective, compiles with OpenCV and
+    records OpenCV version/status in backend config evidence.
+  - when disabled or unavailable, provides stable `disabled` status without
+    requiring any OpenCV dependency.
 - `platform_probe.hpp/.cpp`:
   - central dispatcher that picks the current OS probe implementation.
 - `linux/`, `macos/`, `windows/`:
@@ -60,3 +66,12 @@ it already provides deterministic webcam selection and identity reporting. That
 lets teams validate end-to-end run orchestration and evidence contracts before
 platform capture loops (Linux V4L2 / macOS AVFoundation / Windows Media
 Foundation) are wired in.
+
+## Build flag notes
+
+- `LABOPS_ENABLE_WEBCAM_OPENCV` controls OpenCV bootstrap compilation.
+- Default policy:
+  - local: ON
+  - CI: OFF
+- If requested but OpenCV is not installed, the build falls back to
+  non-OpenCV webcam scaffolding and reports bootstrap as disabled.

@@ -34,6 +34,15 @@ int main() {
   if (config.find("device.index") == config.end() || config.at("device.index") != "0") {
     Fail("dump_config missing echoed parameter");
   }
+  if (config.find("opencv_bootstrap_enabled") == config.end()) {
+    Fail("dump_config missing opencv_bootstrap_enabled");
+  }
+  if (config.find("opencv_bootstrap_status") == config.end()) {
+    Fail("dump_config missing opencv_bootstrap_status");
+  }
+  if (config.find("opencv_bootstrap_detail") == config.end()) {
+    Fail("dump_config missing opencv_bootstrap_detail");
+  }
 
   if (backend.Connect(error)) {
     Fail("connect unexpectedly succeeded");

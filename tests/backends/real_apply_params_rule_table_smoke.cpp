@@ -14,9 +14,15 @@ namespace {
 
 class RecordingBackend final : public labops::backends::ICameraBackend {
 public:
-  bool Connect(std::string& /*error*/) override { return true; }
-  bool Start(std::string& /*error*/) override { return true; }
-  bool Stop(std::string& /*error*/) override { return true; }
+  bool Connect(std::string& /*error*/) override {
+    return true;
+  }
+  bool Start(std::string& /*error*/) override {
+    return true;
+  }
+  bool Stop(std::string& /*error*/) override {
+    return true;
+  }
 
   bool SetParam(const std::string& key, const std::string& value, std::string& error) override {
     if (key.empty() || value.empty()) {
@@ -28,14 +34,18 @@ public:
     return true;
   }
 
-  labops::backends::BackendConfig DumpConfig() const override { return params_; }
+  labops::backends::BackendConfig DumpConfig() const override {
+    return params_;
+  }
 
   std::vector<labops::backends::FrameSample> PullFrames(std::chrono::milliseconds /*duration*/,
                                                         std::string& /*error*/) override {
     return {};
   }
 
-  const std::vector<std::pair<std::string, std::string>>& set_calls() const { return set_calls_; }
+  const std::vector<std::pair<std::string, std::string>>& set_calls() const {
+    return set_calls_;
+  }
 
 private:
   labops::backends::BackendConfig params_;
@@ -67,7 +77,8 @@ void AssertSupportedKeyCoverage(const labops::backends::real_sdk::ParamKeyMap& k
   }
 }
 
-void RunSingleCase(const labops::backends::real_sdk::ParamKeyMap& key_map, const KeyCase& key_case) {
+void RunSingleCase(const labops::backends::real_sdk::ParamKeyMap& key_map,
+                   const KeyCase& key_case) {
   using labops::backends::real_sdk::ApplyParamInput;
   using labops::backends::real_sdk::ApplyParams;
   using labops::backends::real_sdk::ApplyParamsResult;
@@ -75,7 +86,8 @@ void RunSingleCase(const labops::backends::real_sdk::ParamKeyMap& key_map, const
   using labops::backends::real_sdk::ParamApplyMode;
 
   RecordingBackend backend;
-  std::unique_ptr<labops::backends::real_sdk::INodeMapAdapter> adapter = CreateDefaultNodeMapAdapter();
+  std::unique_ptr<labops::backends::real_sdk::INodeMapAdapter> adapter =
+      CreateDefaultNodeMapAdapter();
   ApplyParamsResult result;
   std::string error;
   if (!ApplyParams(backend, key_map, *adapter,
@@ -95,7 +107,8 @@ void RunSingleCase(const labops::backends::real_sdk::ParamKeyMap& key_map, const
   }
 
   const auto& applied = result.applied.front();
-  if (applied.generic_key != key_case.generic_key || applied.node_name != key_case.expected_node_name ||
+  if (applied.generic_key != key_case.generic_key ||
+      applied.node_name != key_case.expected_node_name ||
       applied.applied_value != key_case.expected_applied_value ||
       applied.adjusted != key_case.expected_adjusted) {
     labops::tests::common::Fail("table-driven apply entry mismatch for key '" +
@@ -103,14 +116,16 @@ void RunSingleCase(const labops::backends::real_sdk::ParamKeyMap& key_map, const
   }
 
   const auto& readback = result.readback_rows.front();
-  if (readback.generic_key != key_case.generic_key || readback.node_name != key_case.expected_node_name ||
-      !readback.supported || !readback.applied || readback.actual_value != key_case.expected_applied_value ||
+  if (readback.generic_key != key_case.generic_key ||
+      readback.node_name != key_case.expected_node_name || !readback.supported ||
+      !readback.applied || readback.actual_value != key_case.expected_applied_value ||
       readback.adjusted != key_case.expected_adjusted) {
     labops::tests::common::Fail("table-driven readback mismatch for key '" +
                                 std::string(key_case.generic_key) + "'");
   }
 
-  if (backend.set_calls().size() != 1U || backend.set_calls().front().first != key_case.expected_node_name ||
+  if (backend.set_calls().size() != 1U ||
+      backend.set_calls().front().first != key_case.expected_node_name ||
       backend.set_calls().front().second != key_case.expected_applied_value) {
     labops::tests::common::Fail("backend mapped write mismatch for key '" +
                                 std::string(key_case.generic_key) + "'");

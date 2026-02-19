@@ -217,8 +217,7 @@ bool ParseWebcamDeviceSelector(std::string_view selector_text, WebcamDeviceSelec
       continue;
     }
 
-    error = "selector key '" + key +
-            "' is not supported (allowed: id, index, name_contains)";
+    error = "selector key '" + key + "' is not supported (allowed: id, index, name_contains)";
     return false;
   }
 
@@ -320,7 +319,8 @@ bool ResolveWebcamDeviceSelector(const std::vector<WebcamDeviceInfo>& devices,
 
   if (selector.name_contains.has_value()) {
     for (std::size_t i = 0; i < sorted_devices.size(); ++i) {
-      if (!ContainsCaseInsensitive(sorted_devices[i].friendly_name, selector.name_contains.value())) {
+      if (!ContainsCaseInsensitive(sorted_devices[i].friendly_name,
+                                   selector.name_contains.value())) {
         continue;
       }
       resolved.device = sorted_devices[i];

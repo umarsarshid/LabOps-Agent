@@ -15,7 +15,8 @@ void BundleArtifactRegistry::RegisterOptional(const fs::path& artifact_path) {
 }
 
 void BundleArtifactRegistry::RegisterMany(const std::vector<fs::path>& artifact_paths) {
-  required_artifacts_.insert(required_artifacts_.end(), artifact_paths.begin(), artifact_paths.end());
+  required_artifacts_.insert(required_artifacts_.end(), artifact_paths.begin(),
+                             artifact_paths.end());
 }
 
 std::vector<fs::path> BundleArtifactRegistry::BuildManifestInput() const {

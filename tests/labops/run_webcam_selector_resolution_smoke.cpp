@@ -193,9 +193,8 @@ int main() {
   ScopedEnvOverride fixture_override("LABOPS_WEBCAM_DEVICE_FIXTURE", fixture_path_text.c_str());
 
   std::string stderr_output;
-  const int exit_code =
-      DispatchWithCapturedStderr({"labops", "run", scenario_path.string(), "--out", out_dir.string()},
-                                 stderr_output);
+  const int exit_code = DispatchWithCapturedStderr(
+      {"labops", "run", scenario_path.string(), "--out", out_dir.string()}, stderr_output);
 
   if (exit_code !=
       labops::core::errors::ToInt(labops::core::errors::ExitCode::kBackendConnectFailed)) {

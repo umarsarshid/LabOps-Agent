@@ -1,6 +1,7 @@
 #include "backends/webcam/webcam_backend.hpp"
 
 #include "backends/webcam/capabilities.hpp"
+#include "backends/webcam/opencv_bootstrap.hpp"
 
 namespace labops::backends::webcam {
 
@@ -18,6 +19,9 @@ WebcamBackend::WebcamBackend() : platform_(ProbePlatformAvailability()) {
   params_["platform"] = platform_.platform_name;
   params_["platform_available"] = platform_.available ? "true" : "false";
   params_["platform_reason"] = platform_.unavailability_reason;
+  params_["opencv_bootstrap_enabled"] = IsOpenCvBootstrapEnabled() ? "true" : "false";
+  params_["opencv_bootstrap_status"] = OpenCvBootstrapStatusText();
+  params_["opencv_bootstrap_detail"] = OpenCvBootstrapDetail();
 
   AddCapabilityToConfig("capability.exposure", platform_.capabilities.exposure, params_);
   AddCapabilityToConfig("capability.gain", platform_.capabilities.gain, params_);
