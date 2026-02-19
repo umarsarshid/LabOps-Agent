@@ -23,6 +23,9 @@ This folder is that bridge.
   - supports file-level map overrides for local/vendor-specific updates.
 - `apply_params.hpp` / `apply_params.cpp`:
   - bridges scenario generic keys to SDK node names using `ParamKeyMap`.
+  - now uses table-driven per-key rule descriptors so key metadata
+    (expected type, limit hints, ordering, best-effort override, transforms,
+    and readback hooks) stays centralized instead of branch-scattered.
   - validates/coerces values via `NodeMapAdapter` in strict or best-effort mode.
   - validates enumeration knobs (for example `pixel_format`) against enum
     entries exposed by the node map adapter and reports allowed values when

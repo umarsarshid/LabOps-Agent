@@ -65,6 +65,9 @@ stable interface regardless of real hardware availability.
   clamping evidence, plus best-effort-only behavior for unsupported
   `frame_rate` and GigE transport tuning keys
   (`packet_size_bytes`, `inter_packet_delay_us`).
+- `real_apply_params_rule_table_smoke.cpp`: table-driven coverage for every
+  supported generic key in `param_key_map.json`, validating mapped node writes,
+  adjusted flags, and readback evidence in one deterministic matrix.
 - `real_transport_counters_smoke.cpp`: validates best-effort transport counter
   collection alias handling for real runs (`resends`, `packet_errors`,
   `dropped_packets`) so missing/invalid SDK values become explicit

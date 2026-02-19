@@ -553,6 +553,16 @@ add_labops_smoke_test(
     labops_backends
 )
 
+# Smoke test for table-driven per-key apply-rule coverage across all supported
+# generic->node mappings.
+add_labops_smoke_test(
+  NAME real_apply_params_rule_table_smoke
+  SOURCES
+    tests/backends/real_apply_params_rule_table_smoke.cpp
+  LIBRARIES
+    labops_backends
+)
+
 # Smoke test for best-effort transport counter collection alias handling.
 add_labops_smoke_test(
   NAME real_transport_counters_smoke

@@ -1,6 +1,7 @@
 #include "backends/real_sdk/apply_params.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <charconv>
 #include <cmath>
@@ -8,6 +9,7 @@
 #include <iomanip>
 #include <optional>
 #include <sstream>
+#include <utility>
 
 namespace labops::backends::real_sdk {
 
@@ -146,44 +148,139 @@ std::string JoinEnumValues(const std::vector<std::string>& values) {
   return joined;
 }
 
-int ApplyPriorityForGenericKey(std::string_view generic_key) {
-  // Many cameras reject ROI offsets unless width/height have already been
-  // applied. Keep this ordering explicit and centralized.
-  if (generic_key == "roi_width") {
-    return 0;
+using ValueTransformHook = bool (*)(const std::string& requested_value,
+                                    const std::vector<std::string>& enum_values,
+                                    std::string& transformed_value, bool& adjusted,
+                                    std::string& adjustment_reason);
+
+using ReadbackHook = void (*)(const AppliedParam& applied, ReadbackRow& readback_row);
+
+struct ParamRule {
+  std::string_view generic_key;
+  NodeValueType expected_node_type = NodeValueType::kUnknown;
+  bool has_expected_node_type = false;
+  std::optional<NodeNumericRange> numeric_limits_hint;
+  int apply_priority = 10;
+  bool force_best_effort = false;
+  ValueTransformHook transform_hook = nullptr;
+  ReadbackHook readback_hook = nullptr;
+};
+
+bool TransformIdentityValue(const std::string& requested_value,
+                            const std::vector<std::string>& /*enum_values*/,
+                            std::string& transformed_value, bool& adjusted,
+                            std::string& adjustment_reason) {
+  transformed_value = requested_value;
+  adjusted = false;
+  adjustment_reason.clear();
+  return true;
+}
+
+bool TransformEnumCaseInsensitive(const std::string& requested_value,
+                                  const std::vector<std::string>& enum_values,
+                                  std::string& transformed_value, bool& adjusted,
+                                  std::string& adjustment_reason) {
+  transformed_value = requested_value;
+  adjusted = false;
+  adjustment_reason.clear();
+  if (enum_values.empty()) {
+    return true;
   }
-  if (generic_key == "roi_height") {
-    return 1;
+
+  const std::optional<std::string> canonical =
+      FindCaseInsensitiveEnumValue(enum_values, requested_value);
+  if (!canonical.has_value()) {
+    return false;
   }
-  if (generic_key == "roi_offset_x") {
-    return 2;
+
+  transformed_value = canonical.value();
+  if (canonical.value() != requested_value) {
+    adjusted = true;
+    adjustment_reason = "normalized enumeration value casing";
   }
-  if (generic_key == "roi_offset_y") {
-    return 3;
+  return true;
+}
+
+void ReadbackNoOp(const AppliedParam& /*applied*/, ReadbackRow& /*readback_row*/) {}
+
+ParamRule MakeRule(std::string_view generic_key, NodeValueType expected_node_type,
+                   bool has_expected_node_type, std::optional<NodeNumericRange> numeric_limits_hint,
+                   int apply_priority, bool force_best_effort, ValueTransformHook transform_hook,
+                   ReadbackHook readback_hook) {
+  ParamRule rule;
+  rule.generic_key = generic_key;
+  rule.expected_node_type = expected_node_type;
+  rule.has_expected_node_type = has_expected_node_type;
+  rule.numeric_limits_hint = std::move(numeric_limits_hint);
+  rule.apply_priority = apply_priority;
+  rule.force_best_effort = force_best_effort;
+  rule.transform_hook = transform_hook;
+  rule.readback_hook = readback_hook;
+  return rule;
+}
+
+std::optional<NodeNumericRange> MakeRangeHint(double min, double max) {
+  return NodeNumericRange{
+      .min = min,
+      .max = max,
+  };
+}
+
+const std::array<ParamRule, 14> kParamRules = {
+    MakeRule("exposure", NodeValueType::kFloat64, true, MakeRangeHint(5.0, 10'000'000.0), 10, false,
+             TransformIdentityValue, ReadbackNoOp),
+    MakeRule("gain", NodeValueType::kFloat64, true, MakeRangeHint(0.0, 48.0), 10, false,
+             TransformIdentityValue, ReadbackNoOp),
+    MakeRule("pixel_format", NodeValueType::kEnumeration, true, std::nullopt, 10, false,
+             TransformEnumCaseInsensitive, ReadbackNoOp),
+    MakeRule("roi_width", NodeValueType::kInt64, true, MakeRangeHint(64.0, 4096.0), 0, false,
+             TransformIdentityValue, ReadbackNoOp),
+    MakeRule("roi_height", NodeValueType::kInt64, true, MakeRangeHint(64.0, 2160.0), 1, false,
+             TransformIdentityValue, ReadbackNoOp),
+    MakeRule("roi_offset_x", NodeValueType::kInt64, true, MakeRangeHint(0.0, 4095.0), 2, false,
+             TransformIdentityValue, ReadbackNoOp),
+    MakeRule("roi_offset_y", NodeValueType::kInt64, true, MakeRangeHint(0.0, 2159.0), 3, false,
+             TransformIdentityValue, ReadbackNoOp),
+    MakeRule("roi", NodeValueType::kString, true, std::nullopt, 10, false, TransformIdentityValue,
+             ReadbackNoOp),
+    MakeRule("packet_size_bytes", NodeValueType::kInt64, true, MakeRangeHint(576.0, 9000.0), 10,
+             true, TransformIdentityValue, ReadbackNoOp),
+    MakeRule("inter_packet_delay_us", NodeValueType::kInt64, true, MakeRangeHint(0.0, 100'000.0),
+             10, true, TransformIdentityValue, ReadbackNoOp),
+    MakeRule("trigger_mode", NodeValueType::kEnumeration, true, std::nullopt, 10, false,
+             TransformEnumCaseInsensitive, ReadbackNoOp),
+    MakeRule("trigger_source", NodeValueType::kEnumeration, true, std::nullopt, 10, false,
+             TransformEnumCaseInsensitive, ReadbackNoOp),
+    MakeRule("trigger_activation", NodeValueType::kEnumeration, true, std::nullopt, 10, false,
+             TransformEnumCaseInsensitive, ReadbackNoOp),
+    MakeRule("frame_rate", NodeValueType::kFloat64, true, MakeRangeHint(1.0, 240.0), 10, true,
+             TransformIdentityValue, ReadbackNoOp),
+};
+
+const ParamRule& ResolveParamRule(std::string_view generic_key) {
+  for (const ParamRule& rule : kParamRules) {
+    if (rule.generic_key == generic_key) {
+      return rule;
+    }
   }
-  return 10;
+
+  static const ParamRule kDefaultRule = MakeRule("", NodeValueType::kUnknown, false, std::nullopt,
+                                                 10, false, TransformIdentityValue, ReadbackNoOp);
+  return kDefaultRule;
 }
 
 std::vector<ApplyParamInput> OrderApplyInputs(const std::vector<ApplyParamInput>& params) {
   std::vector<ApplyParamInput> ordered = params;
   std::stable_sort(ordered.begin(), ordered.end(),
                    [](const ApplyParamInput& lhs, const ApplyParamInput& rhs) {
-                     return ApplyPriorityForGenericKey(lhs.generic_key) <
-                            ApplyPriorityForGenericKey(rhs.generic_key);
+                     return ResolveParamRule(lhs.generic_key).apply_priority <
+                            ResolveParamRule(rhs.generic_key).apply_priority;
                    });
   return ordered;
 }
 
-bool IsBestEffortOnlyKey(std::string_view generic_key) {
-  // Some cameras expose stream rate as read-only or transport-constrained.
-  // Treat frame-rate writes as best-effort so a missing/locked rate control
-  // does not block evidence collection runs.
-  return generic_key == "frame_rate" || generic_key == "packet_size_bytes" ||
-         generic_key == "inter_packet_delay_us";
-}
-
-ParamApplyMode ResolveModeForKey(std::string_view generic_key, ParamApplyMode default_mode) {
-  if (IsBestEffortOnlyKey(generic_key)) {
+ParamApplyMode ResolveModeForRule(const ParamRule& rule, ParamApplyMode default_mode) {
+  if (rule.force_best_effort) {
     return ParamApplyMode::kBestEffort;
   }
   return default_mode;
@@ -267,6 +364,134 @@ bool RecordUnsupportedParameter(const std::string& generic_key, const std::strin
     error = "unsupported parameter '" + generic_key + "': " + reason;
     return false;
   }
+  return true;
+}
+
+struct PreparedNodeWrite {
+  std::string backend_value;
+  bool adjusted = false;
+  std::string adjustment_reason;
+  std::string unsupported_reason;
+};
+
+bool PrepareBoolWrite(INodeMapAdapter& node_adapter, std::string_view node_name,
+                      std::string_view requested_value, PreparedNodeWrite& prepared,
+                      std::string& write_error) {
+  prepared = PreparedNodeWrite{};
+  bool parsed = false;
+  if (!ParseBool(requested_value, parsed)) {
+    prepared.unsupported_reason = "expected boolean value";
+    return false;
+  }
+  if (!node_adapter.TrySetBool(node_name, parsed, write_error)) {
+    prepared.unsupported_reason =
+        write_error.empty() ? "node rejected bool value" : std::move(write_error);
+    return false;
+  }
+  prepared.backend_value = parsed ? "true" : "false";
+  return true;
+}
+
+bool PrepareInt64Write(INodeMapAdapter& node_adapter, std::string_view node_name,
+                       std::string_view requested_value, PreparedNodeWrite& prepared,
+                       std::string& write_error) {
+  prepared = PreparedNodeWrite{};
+  std::int64_t parsed = 0;
+  if (!ParseInt64(requested_value, parsed)) {
+    prepared.unsupported_reason = "expected integer value";
+    return false;
+  }
+
+  NodeNumericRange range;
+  if (node_adapter.TryGetNumericRange(node_name, range)) {
+    double value = static_cast<double>(parsed);
+    std::string adjust_reason;
+    if (ClampWithRange(value, range, adjust_reason)) {
+      parsed = static_cast<std::int64_t>(std::llround(value));
+      prepared.adjusted = true;
+      prepared.adjustment_reason = std::move(adjust_reason);
+    }
+  }
+
+  if (!node_adapter.TrySetInt64(node_name, parsed, write_error)) {
+    prepared.unsupported_reason =
+        write_error.empty() ? "node rejected integer value" : std::move(write_error);
+    return false;
+  }
+
+  prepared.backend_value = std::to_string(parsed);
+  return true;
+}
+
+bool PrepareFloat64Write(INodeMapAdapter& node_adapter, std::string_view node_name,
+                         std::string_view requested_value, PreparedNodeWrite& prepared,
+                         std::string& write_error) {
+  prepared = PreparedNodeWrite{};
+  double parsed = 0.0;
+  if (!ParseDouble(requested_value, parsed)) {
+    prepared.unsupported_reason = "expected floating-point value";
+    return false;
+  }
+
+  NodeNumericRange range;
+  if (node_adapter.TryGetNumericRange(node_name, range)) {
+    std::string adjust_reason;
+    if (ClampWithRange(parsed, range, adjust_reason)) {
+      prepared.adjusted = true;
+      prepared.adjustment_reason = std::move(adjust_reason);
+    }
+  }
+
+  if (!node_adapter.TrySetFloat64(node_name, parsed, write_error)) {
+    prepared.unsupported_reason =
+        write_error.empty() ? "node rejected float value" : std::move(write_error);
+    return false;
+  }
+
+  prepared.backend_value = FormatDouble(parsed);
+  return true;
+}
+
+bool PrepareTextWrite(INodeMapAdapter& node_adapter, std::string_view node_name,
+                      std::string_view generic_key, std::string_view requested_value,
+                      NodeValueType node_type, const ParamRule& rule, PreparedNodeWrite& prepared,
+                      std::string& write_error) {
+  prepared = PreparedNodeWrite{};
+  std::string transformed_value;
+  bool transformed_adjusted = false;
+  std::string transform_reason;
+
+  if (node_type == NodeValueType::kEnumeration) {
+    const std::vector<std::string> allowed = node_adapter.ListEnumValues(node_name);
+    const ValueTransformHook transform_hook =
+        rule.transform_hook == nullptr ? TransformEnumCaseInsensitive : rule.transform_hook;
+    if (!transform_hook(std::string(requested_value), allowed, transformed_value,
+                        transformed_adjusted, transform_reason)) {
+      prepared.unsupported_reason = "value '" + std::string(requested_value) +
+                                    "' is not supported for key '" + std::string(node_name) +
+                                    "' (allowed: " + JoinEnumValues(allowed) + ")";
+      return false;
+    }
+  } else {
+    const ValueTransformHook transform_hook =
+        rule.transform_hook == nullptr ? TransformIdentityValue : rule.transform_hook;
+    if (!transform_hook(std::string(requested_value), {}, transformed_value, transformed_adjusted,
+                        transform_reason)) {
+      prepared.unsupported_reason =
+          "value transform rejected input for key '" + std::string(generic_key) + "'";
+      return false;
+    }
+  }
+
+  if (!node_adapter.TrySetString(node_name, transformed_value, write_error)) {
+    prepared.unsupported_reason =
+        write_error.empty() ? "node rejected string value" : std::move(write_error);
+    return false;
+  }
+
+  prepared.backend_value = transformed_value;
+  prepared.adjusted = transformed_adjusted;
+  prepared.adjustment_reason = std::move(transform_reason);
   return true;
 }
 
@@ -447,7 +672,8 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
     if (generic_key.empty()) {
       continue;
     }
-    const ParamApplyMode effective_mode = ResolveModeForKey(generic_key, mode);
+    const ParamRule& rule = ResolveParamRule(generic_key);
+    const ParamApplyMode effective_mode = ResolveModeForRule(rule, mode);
 
     std::string node_name;
     if (!key_map.Resolve(generic_key, node_name)) {
@@ -483,141 +709,28 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
         .applied_value = input.requested_value,
     };
 
+    PreparedNodeWrite prepared;
     std::string write_error;
-    std::string backend_value = input.requested_value;
+    bool prepared_ok = false;
     const NodeValueType node_type = node_adapter.GetType(node_name);
     switch (node_type) {
-    case NodeValueType::kBool: {
-      bool parsed = false;
-      if (!ParseBool(input.requested_value, parsed)) {
-        if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
-                                        /*supported=*/true, "expected boolean value",
-                                        effective_mode, result, error)) {
-          return false;
-        }
-        continue;
-      }
-      if (!node_adapter.TrySetBool(node_name, parsed, write_error)) {
-        const std::string reason = write_error.empty() ? "node rejected bool value" : write_error;
-        if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
-                                        /*supported=*/true, reason, effective_mode, result,
-                                        error)) {
-          return false;
-        }
-        continue;
-      }
-      backend_value = parsed ? "true" : "false";
+    case NodeValueType::kBool:
+      prepared_ok =
+          PrepareBoolWrite(node_adapter, node_name, input.requested_value, prepared, write_error);
       break;
-    }
-    case NodeValueType::kInt64: {
-      std::int64_t parsed = 0;
-      if (!ParseInt64(input.requested_value, parsed)) {
-        if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
-                                        /*supported=*/true, "expected integer value",
-                                        effective_mode, result, error)) {
-          return false;
-        }
-        continue;
-      }
-
-      NodeNumericRange range;
-      if (node_adapter.TryGetNumericRange(node_name, range)) {
-        double value = static_cast<double>(parsed);
-        std::string adjust_reason;
-        if (ClampWithRange(value, range, adjust_reason)) {
-          parsed = static_cast<std::int64_t>(std::llround(value));
-          applied.adjusted = true;
-          applied.adjustment_reason = std::move(adjust_reason);
-        }
-      }
-
-      if (!node_adapter.TrySetInt64(node_name, parsed, write_error)) {
-        const std::string reason =
-            write_error.empty() ? "node rejected integer value" : write_error;
-        if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
-                                        /*supported=*/true, reason, effective_mode, result,
-                                        error)) {
-          return false;
-        }
-        continue;
-      }
-
-      backend_value = std::to_string(parsed);
+    case NodeValueType::kInt64:
+      prepared_ok =
+          PrepareInt64Write(node_adapter, node_name, input.requested_value, prepared, write_error);
       break;
-    }
-    case NodeValueType::kFloat64: {
-      double parsed = 0.0;
-      if (!ParseDouble(input.requested_value, parsed)) {
-        if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
-                                        /*supported=*/true, "expected floating-point value",
-                                        effective_mode, result, error)) {
-          return false;
-        }
-        continue;
-      }
-
-      NodeNumericRange range;
-      if (node_adapter.TryGetNumericRange(node_name, range)) {
-        std::string adjust_reason;
-        if (ClampWithRange(parsed, range, adjust_reason)) {
-          applied.adjusted = true;
-          applied.adjustment_reason = std::move(adjust_reason);
-        }
-      }
-
-      if (!node_adapter.TrySetFloat64(node_name, parsed, write_error)) {
-        const std::string reason = write_error.empty() ? "node rejected float value" : write_error;
-        if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
-                                        /*supported=*/true, reason, effective_mode, result,
-                                        error)) {
-          return false;
-        }
-        continue;
-      }
-
-      backend_value = FormatDouble(parsed);
+    case NodeValueType::kFloat64:
+      prepared_ok = PrepareFloat64Write(node_adapter, node_name, input.requested_value, prepared,
+                                        write_error);
       break;
-    }
     case NodeValueType::kEnumeration:
-    case NodeValueType::kString: {
-      std::string normalized_value = input.requested_value;
-      if (node_type == NodeValueType::kEnumeration) {
-        const std::vector<std::string> allowed = node_adapter.ListEnumValues(node_name);
-        if (!allowed.empty()) {
-          const std::optional<std::string> canonical =
-              FindCaseInsensitiveEnumValue(allowed, input.requested_value);
-          if (!canonical.has_value()) {
-            const std::string reason = "value '" + input.requested_value +
-                                       "' is not supported for key '" + node_name +
-                                       "' (allowed: " + JoinEnumValues(allowed) + ")";
-            if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
-                                            /*supported=*/true, reason, effective_mode, result,
-                                            error)) {
-              return false;
-            }
-            continue;
-          }
-          if (canonical.value() != input.requested_value) {
-            normalized_value = canonical.value();
-            applied.adjusted = true;
-            applied.adjustment_reason = "normalized enumeration value casing";
-          }
-        }
-      }
-
-      if (!node_adapter.TrySetString(node_name, normalized_value, write_error)) {
-        const std::string reason = write_error.empty() ? "node rejected string value" : write_error;
-        if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
-                                        /*supported=*/true, reason, effective_mode, result,
-                                        error)) {
-          return false;
-        }
-        continue;
-      }
-
-      backend_value = normalized_value;
+    case NodeValueType::kString:
+      prepared_ok = PrepareTextWrite(node_adapter, node_name, generic_key, input.requested_value,
+                                     node_type, rule, prepared, write_error);
       break;
-    }
     case NodeValueType::kUnknown:
     default:
       if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
@@ -628,8 +741,19 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
       continue;
     }
 
+    if (!prepared_ok) {
+      if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
+                                      /*supported=*/true, prepared.unsupported_reason,
+                                      effective_mode, result, error)) {
+        return false;
+      }
+      continue;
+    }
+    applied.adjusted = prepared.adjusted;
+    applied.adjustment_reason = std::move(prepared.adjustment_reason);
+
     std::string backend_error;
-    if (!backend.SetParam(node_name, backend_value, backend_error)) {
+    if (!backend.SetParam(node_name, prepared.backend_value, backend_error)) {
       const std::string reason = "backend rejected mapped value: " +
                                  (backend_error.empty() ? "unknown error" : backend_error);
       if (!RecordUnsupportedParameter(generic_key, input.requested_value, resolved_node_name,
@@ -654,9 +778,12 @@ bool ApplyParams(ICameraBackend& backend, const ParamKeyMap& key_map, INodeMapAd
       }
       readback_row.reason += "readback unavailable: " + readback_error;
     }
+    if (rule.readback_hook != nullptr) {
+      rule.readback_hook(applied, readback_row);
+    }
     result.readback_rows.push_back(readback_row);
 
-    applied.applied_value = backend_value;
+    applied.applied_value = prepared.backend_value;
     result.applied.push_back(std::move(applied));
   }
 
