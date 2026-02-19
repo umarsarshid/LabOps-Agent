@@ -11,6 +11,7 @@ The codebase needs companion documentation for workflows, bundle contracts, play
 - Architecture and operating docs.
 - Triage bundle contract (`triage_bundle_spec.md`).
 - Scenario schema contract (`scenario_schema.md`).
+- Architecture invariants contract (`architecture_invariants.md`).
 - Release verification checklist (`release_verification.md`).
 - Real-backend local setup/safety guide (`real_backend_setup.md`).
 - Real-backend troubleshooting playbook (`real_backend_troubleshooting.md`).

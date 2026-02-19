@@ -620,6 +620,20 @@ add_labops_smoke_test(
     ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
 
+# Architecture contract smoke test:
+# validates stable artifact names, key event payload fields, and representative
+# exit-code semantics (success / thresholds-failed / schema-invalid).
+add_labops_smoke_test(
+  NAME architecture_contract_check_smoke
+  SOURCES
+    tests/labops/architecture_contract_check_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
+)
+
 # Integration smoke test validating Ctrl+C shutdown behavior:
 # interrupted runs still flush a complete artifact bundle before exit.
 add_labops_smoke_test(

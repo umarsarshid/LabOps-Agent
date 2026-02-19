@@ -155,8 +155,7 @@ int main() {
       loaded_after_interrupt.completed_duration != base_state.completed_duration ||
       loaded_after_interrupt.checkpoints_written != base_state.checkpoints_written) {
     RemovePathBestEffort(temp_root);
-    labops::tests::common::Fail(
-        "checkpoint contents changed after interrupted-write simulation");
+    labops::tests::common::Fail("checkpoint contents changed after interrupted-write simulation");
   }
   const std::string persisted_text = ReadFileToString(checkpoint_path);
   AssertContains(persisted_text, "\"run_id\": \"run-base\"");
@@ -182,8 +181,7 @@ int main() {
     RemovePathBestEffort(temp_root);
     labops::tests::common::Fail("failed to load recovered checkpoint path: " + error);
   }
-  if (recovered_state.run_id != base_state.run_id ||
-      recovered_state.status != base_state.status ||
+  if (recovered_state.run_id != base_state.run_id || recovered_state.status != base_state.status ||
       recovered_state.total_duration != base_state.total_duration) {
     RemovePathBestEffort(temp_root);
     labops::tests::common::Fail("recovered checkpoint state does not match expected values");

@@ -1,64 +1,83 @@
-# SUMMARY — 0096 `docs(real): add real-backend troubleshooting page`
+# LabOps Summary
 
-## Goal
-Create a practical real-backend troubleshooting runbook that reads like internal AE/QA notes, focused on the most common lab blockers:
-- device not found
-- timeouts
-- trigger confusion
-- GigE MTU/packet issues
+## Commit: architecture invariants doc + contract smoke checks
 
-## Implementation
+Date: 2026-02-19
 
-### 1) Added a dedicated troubleshooting runbook
-File:
-- `docs/real_backend_troubleshooting.md`
+### Goal
+Make architecture-level behavior contracts explicit and enforceable with a lightweight CI check, without changing runtime behavior.
 
-What:
-- Added a symptom-based guide with a short first-pass triage flow.
-- Added dedicated sections for each requested issue class:
-  - Device not found
-  - Timeouts / intermittent frame gaps
-  - Trigger confusion
-  - GigE MTU / packet-size issues
-- For each section, documented:
-  - typical signs
-  - likely causes
-  - concrete checks (commands + artifacts)
-  - practical fix pattern
-  - evidence to attach for escalation
-- Added an escalation checklist for handoffs.
+### Implemented
+
+1. Added architecture invariants documentation
+- New file: `docs/architecture_invariants.md`
+- Captures stable, cross-cutting contracts:
+  - bundle artifact names/layout
+  - exit-code contract
+  - event stream structure and required lifecycle events
+  - threshold pass/fail semantics
+  - `run.json` / `metrics.json` structural field expectations
+- Includes a change policy so future contract updates are deliberate and paired with tests/docs.
 
 Why:
-- Engineers need fast, repeatable triage steps in production-like lab incidents.
-- A symptom-first runbook reduces back-and-forth and improves quality of handoff evidence.
+- These invariants were previously implicit and spread across many tests/files.
+- A single architecture contract doc reduces accidental behavior drift during refactors.
 
-### 2) Linked the runbook from core docs entry points
-Files:
+2. Added lightweight contract-check smoke test
+- New file: `tests/labops/architecture_contract_check_smoke.cpp`
+- New CMake target: `architecture_contract_check_smoke`
+- What it validates from real command execution (`labops::cli::Dispatch`):
+  - passing run returns `ExitCode::kSuccess`
+  - required core artifacts are emitted in run bundle
+  - `run.json` contains stable run/config/timestamp fields
+  - `metrics.json` contains core metrics keys
+  - `events.jsonl` contains `STREAM_STARTED` and `STREAM_STOPPED`
+  - event payloads include key contract fields (`run_id`, `scenario_id`, frame counters)
+  - threshold-fail scenario returns `ExitCode::kThresholdsFailed` and still emits evidence with summary `FAIL`
+  - invalid scenario validation returns `ExitCode::kSchemaInvalid`
+
+Why:
+- Adds one high-signal “contract guardrail” test spanning the most important architecture invariants.
+- Prevents subtle contract breaks that may not be caught by module-level tests alone.
+
+3. Documentation index updates
+- Updated `docs/README.md` to include `architecture_invariants.md`.
+- Updated `tests/labops/README.md` with the new contract smoke test description.
+
+Why:
+- Keeps docs and test inventory discoverable for future contributors.
+
+4. Required formatting cleanup for existing tracked test file
+- `tests/labops/soak_checkpoint_resilience_smoke.cpp` had clang-format violations under current formatter rules.
+- Applied formatting-only fix (no behavior change).
+
+Why:
+- `tools/clang_format.sh --check` is part of verification gate; this file needed formatting for CI/local gate to pass.
+
+### Files changed
+- `docs/architecture_invariants.md` (new)
+- `tests/labops/architecture_contract_check_smoke.cpp` (new)
+- `CMakeLists.txt`
 - `docs/README.md`
-- `docs/real_backend_setup.md`
-- `README.md`
+- `tests/labops/README.md`
+- `tests/labops/soak_checkpoint_resilience_smoke.cpp` (format-only)
+- `SUMMARY.md`
 
-What:
-- Added references so the troubleshooting doc is discoverable from:
-  - top-level project README
-  - docs index
-  - real-backend setup guide
+### Verification
 
-Why:
-- Good runbooks only help if engineers can find them quickly during failures.
+1. Formatting
+- `bash tools/clang_format.sh --check`
+- Result: passed
 
-## Verification
+2. Build + focused checks
+- `cmake --build build`
+- `ctest --test-dir build -R "architecture_contract_check_smoke|run_stream_trace_smoke|run_threshold_failure_smoke|validate_actionable_smoke" --output-on-failure`
+- Result: passed (4/4)
 
-Link/path checks:
-- `rg -n "real_backend_troubleshooting.md" README.md docs/README.md docs/real_backend_setup.md`
-- confirmed all expected references exist.
-- `test -f docs/real_backend_troubleshooting.md` -> doc exists.
+3. Full suite
+- `ctest --test-dir build --output-on-failure`
+- Result: passed (73/73)
 
-Repo hygiene checks:
-- `bash tools/clang_format.sh --check` -> pass
-- `cmake --build build` -> pass
-
-## Outcome
-- Real-backend troubleshooting guidance now exists as a single operational runbook.
-- The doc is written in practical AE/QA style and anchored to actual LabOps artifacts.
-- Entry-point docs now route engineers to the runbook directly.
+### Notes
+- No behavior changes to runtime contract logic were introduced.
+- Contract checks now run with normal `ctest`, so they are CI-visible by default.
