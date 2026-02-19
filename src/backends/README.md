@@ -63,6 +63,8 @@ The project needs one consistent workflow that can run on different camera stack
   - introduces a capability model (`unsupported`, `best_effort`, `supported`)
     for key webcam controls (`exposure`, `gain`, `pixel_format`, `roi`,
     `trigger`, `frame_rate`).
+  - adds normalized device/control capability types with JSON-friendly
+    serialization (`WebcamDeviceInfo`, `WebcamControlId`, `SupportedControls`).
   - includes per-platform availability probes under `linux/`, `macos/`, and
     `windows/` with explicit `BACKEND_NOT_AVAILABLE` reasons until capture
     loops are implemented.

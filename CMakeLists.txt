@@ -89,6 +89,7 @@ add_library(labops_backends
   src/backends/sim/scenario_config.cpp
   src/backends/sim/sim_camera_backend.cpp
   src/backends/webcam/capabilities.cpp
+  src/backends/webcam/device_model.cpp
   src/backends/webcam/platform_probe.cpp
   src/backends/webcam/webcam_factory.cpp
   src/backends/webcam/linux/platform_probe_linux.cpp
@@ -462,6 +463,16 @@ add_labops_smoke_test(
   NAME webcam_backend_smoke
   SOURCES
     tests/backends/webcam_backend_smoke.cpp
+  LIBRARIES
+    labops_backends
+)
+
+# Smoke test validating normalized webcam device/control capability modeling
+# and JSON-friendly serialization output.
+add_labops_smoke_test(
+  NAME webcam_device_model_smoke
+  SOURCES
+    tests/backends/webcam_device_model_smoke.cpp
   LIBRARIES
     labops_backends
 )

@@ -1,94 +1,89 @@
 # LabOps Summary
 
-## Commit: webcam backend registry + list-backends availability reasons
+## Commit: webcam device/control capability model
 
 Date: 2026-02-19
 
 ### Goal
-Register the webcam backend in backend selection plumbing and expose webcam availability with explicit reason text in `labops list-backends`.
+Define a concrete webcam device + control capability model that can represent partial support per device and serialize it in a JSON-friendly form.
 
 ### Implemented
 
-1. Added dedicated webcam factory/registry surface
+1. Added normalized webcam device/control types
 - New files:
-  - `src/backends/webcam/webcam_factory.hpp`
-  - `src/backends/webcam/webcam_factory.cpp`
-- Added `WebcamBackendAvailability` contract:
-  - `compiled`
-  - `available`
-  - `reason`
-  - `platform`
-- Added factory functions:
-  - `GetWebcamBackendAvailability()`
-  - `CreateWebcamBackend()`
+  - `src/backends/webcam/device_model.hpp`
+  - `src/backends/webcam/device_model.cpp`
+- Added `WebcamDeviceInfo` with:
+  - `device_id`
+  - `friendly_name`
+  - optional `bus_info`
+  - `supported_controls`
+- Added `WebcamControlId` enum with core controls:
+  - `width`, `height`, `fps`, `pixel_format`, `exposure`, `gain`,
+    `auto_exposure`, `auto_fps_hint`
+- Added `WebcamControlValueType` enum:
+  - `integer`, `float`, `boolean`, `enum`
+- Added `WebcamControlSpec`:
+  - `value_type`
+  - numeric `range` (`min/max/step`, optional)
+  - `enum_values`
+  - `read_only`
+- Added `SupportedControls` map:
+  - `WebcamControlId -> WebcamControlSpec`
+- Added helper:
+  - `SupportsControl(...)` to check support by control presence
 
 Why:
-- Keeps backend registration/status logic in one place (instead of scattered in CLI).
-- Gives operators explicit availability reasons without digging into implementation files.
+- Gives one normalized contract for webcam capability discovery and reporting.
+- Keeps per-platform naming differences hidden behind stable IDs.
+- Makes partial support explicit and easy to reason about.
 
-2. Wired webcam factory into build graph
-- Updated `CMakeLists.txt` to compile `src/backends/webcam/webcam_factory.cpp` into `labops_backends`.
-
-Why:
-- Ensures backend registry logic is always compiled and testable across platforms.
-
-3. Registered webcam in CLI backend selection and status output
-- Updated `src/labops/cli/router.cpp`:
-  - added backend id constant: `webcam`
-  - `CommandListBackends` now prints webcam availability:
-    - `webcam ✅ enabled`
-    - or `webcam ⚠️ disabled (<reason>)`
-  - run-plan backend validation now allows: `sim`, `webcam`, `real_stub`
-  - backend construction path now handles webcam via `CreateWebcamBackend()`
-  - when webcam is not compiled for current target, returns actionable error:
-    `webcam backend not compiled on this platform`
+2. Added JSON-friendly serialization helpers
+- Added serializers:
+  - `ToJson(const WebcamControlSpec&)`
+  - `ToJson(const SupportedControls&)`
+  - `ToJson(const WebcamDeviceInfo&)`
+- Output is structured for artifacts/logging tooling and human inspection.
 
 Why:
-- Makes webcam a first-class selectable backend id.
-- Keeps list-backends output immediately useful for environment diagnosis.
+- Capability evidence needs to be machine-parsable and stable in outputs.
+- Enables future bundle artifacts and debug views without ad-hoc formatting.
 
-4. Updated scenario backend validator to include webcam
-- Updated `src/scenarios/validator.cpp` backend enum check:
-  - from `sim, real_stub`
-  - to `sim, webcam, real_stub`
-
-Why:
-- Prevents drift between accepted runtime backends and schema validation contract.
-
-5. Updated tests for new list-backends contract
-- Updated `tests/labops/list_backends_smoke.cpp`:
-  - now asserts webcam row exists
-  - verifies enabled/disabled webcam state with reason text from factory status
-- Existing smoke tests continue validating real backend state variants.
+3. Added smoke test proving partial-support representation
+- New test:
+  - `tests/backends/webcam_device_model_smoke.cpp`
+- Test builds a device that supports:
+  - width, height, fps, pixel_format
+- And intentionally does not support:
+  - exposure (omitted from map)
+- Verifies:
+  - support checks via `SupportsControl(...)`
+  - serialized JSON includes supported keys and omits unsupported one
 
 Why:
-- Locks CLI output contract for webcam status so future changes cannot silently regress operator messaging.
+- Directly validates the core “done when” requirement for this milestone.
 
-6. Updated docs/readmes for discoverability
-- Updated:
+4. Wired build + docs
+- Updated `CMakeLists.txt`:
+  - adds `src/backends/webcam/device_model.cpp` to `labops_backends`
+  - adds `webcam_device_model_smoke` test target
+- Updated docs:
   - `src/backends/README.md`
   - `src/backends/webcam/README.md`
-  - `src/labops/cli/README.md`
-  - `tests/labops/README.md`
+  - `tests/backends/README.md`
 
 Why:
-- Keeps architecture and test expectations explicit for future contributors.
+- Keeps discovery/documentation current for future contributors.
+- Ensures the new model is compiled and tested continuously.
 
 ### Files changed
 - `CMakeLists.txt`
 - `src/backends/README.md`
 - `src/backends/webcam/README.md`
-- `src/backends/webcam/webcam_factory.hpp` (new)
-- `src/backends/webcam/webcam_factory.cpp` (new)
-- `src/backends/webcam/linux/platform_probe_linux.cpp` (format)
-- `src/backends/webcam/macos/platform_probe_macos.cpp` (format)
-- `src/backends/webcam/windows/platform_probe_windows.cpp` (format)
-- `src/backends/webcam/webcam_backend.cpp` (format)
-- `src/labops/cli/router.cpp`
-- `src/labops/cli/README.md`
-- `src/scenarios/validator.cpp`
-- `tests/labops/list_backends_smoke.cpp`
-- `tests/labops/README.md`
+- `src/backends/webcam/device_model.hpp` (new)
+- `src/backends/webcam/device_model.cpp` (new)
+- `tests/backends/README.md`
+- `tests/backends/webcam_device_model_smoke.cpp` (new)
 - `SUMMARY.md`
 
 ### Verification
@@ -102,13 +97,13 @@ Why:
 - Result: passed
 
 3. Focused tests
-- `ctest --test-dir build -R "list_backends_smoke|scenario_validation_smoke|webcam_backend_smoke|run_stream_trace_smoke" --output-on-failure`
+- `ctest --test-dir build -R "webcam_device_model_smoke|webcam_backend_smoke|list_backends_smoke|scenario_validation_smoke" --output-on-failure`
 - Result: passed
 
 4. Full suite
 - `ctest --test-dir build --output-on-failure`
-- Result: passed (`74/74`)
+- Result: passed (`75/75`)
 
 ### Notes
-- Webcam backend remains intentionally unavailable at runtime until platform capture loops are implemented.
-- This commit focuses on registration and visibility contracts, not capture functionality.
+- Unsupported controls are represented by omission from `SupportedControls`.
+- This commit defines the model contract only; it does not yet enumerate live webcam hardware controls from platform APIs.

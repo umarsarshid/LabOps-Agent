@@ -23,6 +23,10 @@ stable interface regardless of real hardware availability.
   across platforms, preserves config params, and returns explicit
   `BACKEND_NOT_AVAILABLE` errors until platform capture implementations are
   wired.
+- `webcam_device_model_smoke.cpp`: validates normalized webcam device/control
+  capability modeling and JSON-friendly serialization, including partial support
+  representation (supported width/height/fps/pixel_format while exposure is
+  unsupported by omission).
 - `real_backend_factory_smoke.cpp`: validates real-backend factory behavior in
   both build states (enabled -> real skeleton, disabled -> sdk_stub fallback)
   and verifies enabled-lifecycle start/stop safety without requiring camera

@@ -24,6 +24,13 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
   - defines a small capability model (`unsupported`, `best_effort`,
     `supported`) for key control families (exposure/gain/pixel-format/ROI/
     trigger/frame-rate).
+- `device_model.hpp/.cpp`:
+  - defines normalized webcam inventory/control types:
+    - `WebcamDeviceInfo` (`device_id`, `friendly_name`, optional `bus_info`)
+    - `WebcamControlId` (width/height/fps/pixel_format/exposure/gain/etc.)
+    - `SupportedControls` map (`control_id -> spec`) where omitted keys are
+      explicitly treated as unsupported.
+  - includes JSON-friendly serializers used for capability evidence artifacts.
 - `platform_probe.hpp/.cpp`:
   - central dispatcher that picks the current OS probe implementation.
 - `linux/`, `macos/`, `windows/`:
