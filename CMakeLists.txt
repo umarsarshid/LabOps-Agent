@@ -569,6 +569,17 @@ add_labops_smoke_test(
     labops_backends
 )
 
+# Smoke test validating deterministic Linux-native V4L2 behavior through a
+# fake syscall provider (no /dev/video* access). This explicitly covers timeout
+# sequences, incomplete buffers, and adjusted format readback behavior.
+add_labops_smoke_test(
+  NAME webcam_linux_mock_provider_smoke
+  SOURCES
+    tests/backends/webcam_linux_mock_provider_smoke.cpp
+  LIBRARIES
+    labops_backends
+)
+
 # Smoke test for real-backend factory behavior:
 # enabled builds select the real skeleton, disabled builds fall back to sdk_stub.
 add_labops_smoke_test(

@@ -1,98 +1,88 @@
-# 0115 — Webcam Linux Teardown Correctness (No Device Busy)
+# 0116 — Deterministic Linux Webcam Mock-Provider Test Path
 
 ## Goal
-Ensure Linux webcam runs tear down cleanly and predictably so repeated runs do not leave `/dev/video*` wedged as busy.
+Add a Linux-native deterministic test path for webcam V4L2 behavior that does not require `/dev/video*` access or real camera hardware.
 
 ## What Was Implemented
 
-### 1) Hardened `V4l2CaptureDevice::Close` to always attempt fd close
+### 1) Added a dedicated Linux fake device smoke test
 Files:
-- `src/backends/webcam/linux/v4l2_capture_device.cpp`
+- `tests/backends/webcam_linux_mock_provider_smoke.cpp`
 
 Change:
-- `Close()` no longer returns early when `StopStreaming()` reports an error.
-- It now:
-  - attempts `StopStreaming()` first,
-  - still attempts `close(fd)` even if stop/unmap/release had an error,
-  - clears in-memory capture state if fd close succeeds,
-  - returns combined actionable error text when stop and/or close fail.
+- Added a new Linux-only smoke test binary centered on a test harness class:
+  - `FakeV4l2Device`
+- `FakeV4l2Device` injects scripted behavior via `V4l2CaptureDevice::IoOps` and never touches kernel devices.
+
+What the fake harness models:
+- `VIDIOC_QUERYCAP`, `VIDIOC_G_FMT`, `VIDIOC_S_FMT`
+- `VIDIOC_G_PARM`, `VIDIOC_S_PARM`
+- mmap stream bootstrap ioctls (`REQBUFS`, `QUERYBUF`, `QBUF`, `STREAMON`, `STREAMOFF`)
+- streaming dequeue path (`poll`, `DQBUF`, `QBUF`)
+- monotonic capture time progression through injected steady clock
 
 Why:
-- Previously, a stream teardown error could skip `close(fd)`, which is exactly the pattern that can cause "device busy" on the next run.
-- Closing the descriptor is the critical release boundary; we now prioritize attempting that boundary every time.
+- This creates a fully deterministic Linux-native validation path for V4L2 behavior in CI/dev environments without real camera hardware.
+- It prevents future Linux path regressions from being masked by machine/hardware differences.
 
-### 2) Added explicit RAII cleanup for webcam backend lifetime
+### 2) Added required behavioral coverage
 Files:
-- `src/backends/webcam/webcam_backend.hpp`
-- `src/backends/webcam/webcam_backend.cpp`
+- `tests/backends/webcam_linux_mock_provider_smoke.cpp`
+
+New test cases:
+- `TestTimeoutSequenceClassification`
+  - scripted `poll` timeouts + one ready dequeue
+  - verifies emitted sequence `TIMEOUT -> TIMEOUT -> RECEIVED`
+  - verifies frame-id progression
+- `TestIncompleteBufferClassification`
+  - scripted ready dequeue with `bytesused=0` + `V4L2_BUF_FLAG_ERROR`
+  - verifies `INCOMPLETE` classification
+- `TestAdjustedFormatBehavior`
+  - scripted driver adjustments for width/height/pixel-format/fps
+  - verifies `ApplyRequestedFormatBestEffort` produces adjusted readback rows
+
+Why:
+- These are exactly the Linux behaviors engineers care about for triage quality:
+  timeout cadence, incomplete payload detection, and requested-vs-actual config drift.
+
+### 3) Wired test into build/test system
+Files:
+- `CMakeLists.txt`
 
 Change:
-- Added `~WebcamBackend()` destructor.
-- Added `TeardownSessionBestEffort()` helper that:
-  - for Linux-native path: best-effort `StopStreaming()` + `Close()`,
-  - otherwise: best-effort `OpenCV::CloseDevice()`,
-  - clears `running_/connected_/linux_native_capture_selected_` flags.
+- Added new smoke target:
+  - `webcam_linux_mock_provider_smoke`
 
 Why:
-- Ensures session resources are released even on early exits, exceptions, or interrupted flow paths where explicit stop calls might not complete cleanly.
-- Makes teardown behavior object-lifetime-safe and less dependent on control-flow success.
+- Makes deterministic Linux mock-provider coverage part of the normal `ctest` surface.
 
-### 3) Hardened Linux-native `WebcamBackend::Stop`
+### 4) Updated backend test documentation
 Files:
-- `src/backends/webcam/webcam_backend.cpp`
+- `tests/backends/README.md`
 
 Change:
-- `Stop()` for Linux-native sessions now:
-  - attempts `StopStreaming()`,
-  - always attempts `Close()` afterward,
-  - clears session flags regardless,
-  - returns precise error messaging for stop-only, close-only, or combined teardown failures.
+- Documented `webcam_linux_mock_provider_smoke.cpp` purpose and coverage.
 
 Why:
-- Prevents internal "still running/connected" wedge states after partial teardown failures.
-- Improves repeatability by guaranteeing the backend can attempt a fresh reconnect on the next run.
-
-### 4) Added regression smoke coverage for stop-failure close path
-Files:
-- `tests/backends/webcam_linux_v4l2_capture_device_smoke.cpp`
-
-Added test:
-- `TestCloseStillClosesFdWhenStreamStopFails()`
-
-What it asserts:
-- if `VIDIOC_STREAMOFF` fails,
-- `Close()` still calls fd close,
-- device reports not-open afterward,
-- subsequent close is idempotent.
-
-Why:
-- Directly guards the no-device-busy fix with deterministic Linux fake-IO coverage.
-
-### 5) Module docs updated to reflect teardown guarantees
-Files:
-- `src/backends/webcam/linux/README.md`
-- `src/backends/webcam/README.md`
-
-Change:
-- Documented fail-safe teardown behavior and RAII cleanup expectations.
-
-Why:
-- Keeps future contributors aligned with the intended lifecycle contract and reduces regressions during future backend changes.
+- Keeps test intent visible for future contributors and avoids duplicated ad-hoc mocks.
 
 ## Verification Performed
 
-1. Formatting gate:
+1. Formatting:
 - `bash tools/clang_format.sh --check`
+- Result: passed
 
 2. Build:
 - `cmake --build build`
+- Result: passed
 
-3. Focused tests for touched behavior:
-- `ctest --test-dir build -R "webcam_linux_v4l2_capture_device_smoke|webcam_backend_smoke|run_webcam_selector_resolution_smoke|run_interrupt_flush_smoke" --output-on-failure`
+3. Focused coverage for webcam mock paths:
+- `ctest --test-dir build -R "webcam_linux_mock_provider_smoke|webcam_linux_v4l2_capture_device_smoke|webcam_opencv_mock_provider_smoke" --output-on-failure`
+- Result: passed (`3/3`)
 
-4. Full regression suite:
+4. Full regression:
 - `ctest --test-dir build --output-on-failure`
-- Result: `81/81` passed.
+- Result: passed (`82/82`)
 
 ## Outcome
-Teardown path now prioritizes descriptor release even during partial streaming teardown failures, backend lifecycle has explicit best-effort RAII cleanup, and repeated runs are protected by deterministic regression tests against the previously risky path.
+Linux-native webcam logic now has an explicit deterministic mock-provider test path, covering timeout sequences, incomplete frame classification, and adjusted format behavior without requiring real devices.

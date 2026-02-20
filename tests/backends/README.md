@@ -47,6 +47,10 @@ stable interface regardless of real hardware availability.
   streaming bootstrap lifecycle (`REQBUFS`, `QUERYBUF`, `mmap`, `QBUF`,
   `STREAMON`, `STREAMOFF`), and frame-loop classification via
   `poll` + `DQBUF` + `QBUF` (`TIMEOUT`, `RECEIVED`, `INCOMPLETE`).
+- `webcam_linux_mock_provider_smoke.cpp`: validates a deterministic Linux-only
+  `FakeV4l2Device` test path (no kernel calls) by scripting V4L2 syscall
+  outcomes through injected IO ops; covers timeout sequences, incomplete buffer
+  classification, and adjusted format/readback behavior.
 - `real_backend_factory_smoke.cpp`: validates real-backend factory behavior in
   both build states (enabled -> real skeleton, disabled -> sdk_stub fallback)
   and verifies enabled-lifecycle start/stop safety without requiring camera
