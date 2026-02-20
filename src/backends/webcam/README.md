@@ -41,6 +41,9 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
       on Linux without fixture override, or
     - OpenCV index probing (`0..LABOPS_WEBCAM_MAX_PROBE_INDEX`, default `8`)
       as fallback when native discovery returns no devices.
+  - Linux native discovery also populates `supported_controls` best-effort so
+    device reports can explicitly show what each webcam supports before a run
+    starts (width/height, pixel format, fps, and optional exposure/gain/auto-exposure).
   - fixture CSV supports optional `capture_index` so selector tests can target
     deterministic open indices without depending on real attached hardware.
   - resolves selectors deterministically using stable ordering:

@@ -30,8 +30,9 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
     (`model`, `serial`, `user_id`, `transport`, optional `ip`/`mac`,
     optional `firmware_version`/`sdk_version`) from descriptor mapping.
   - `webcam`: prints normalized webcam inventory
-    (`id`, `friendly_name`, optional `bus_info`, optional `capture_index`)
-    using fixture, Linux V4L2, or OpenCV fallback discovery.
+    (`id`, `friendly_name`, optional `bus_info`, optional `capture_index`) plus
+    explicit `supported_controls` rows (value type, ranges, enum values,
+    read-only hints) using fixture, Linux V4L2, or OpenCV fallback discovery.
 - Route scenario validation through schema loader with actionable errors.
 - Parse and validate scenario-level `device_selector` plus CLI `--device`
   overrides; resolve selectors deterministically before backend connect so

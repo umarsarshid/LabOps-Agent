@@ -121,8 +121,10 @@ int main() {
   AssertContains(stdout_text, "device[0].friendly_name: USB Camera 10");
   AssertContains(stdout_text, "device[0].bus_info: usb:1-3");
   AssertContains(stdout_text, "device[0].capture_index: 10");
+  AssertContains(stdout_text, "device[0].supported_controls.count: 0");
   AssertContains(stdout_text, "device[1].id: cam-20");
   AssertContains(stdout_text, "device[1].friendly_name: USB Camera 20");
+  AssertContains(stdout_text, "device[1].supported_controls.count: 0");
 
   labops::tests::common::RemovePathBestEffort(temp_root);
   return 0;

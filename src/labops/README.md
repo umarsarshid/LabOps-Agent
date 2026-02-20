@@ -47,7 +47,8 @@ Why this structure exists:
   - `webcam`: lists webcam devices via fixture discovery, Linux native V4L2
     query (`/dev/video*` + `VIDIOC_QUERYCAP`), or OpenCV fallback probing and
     prints normalized identity fields (`id`, `friendly_name`, optional
-    `bus_info`, optional `capture_index`).
+    `bus_info`, optional `capture_index`) plus explicit supported-control
+    rows (value type, ranges, enum values, and read-only hints).
 - `labops validate <scenario.json>`: validates scenario schema and prints
   actionable field-level errors when invalid.
 - `labops run <scenario.json> --out <dir> [--device <selector>] [--sdk-log] [--zip] [--redact] [--soak --checkpoint-interval-ms <ms> [--soak-stop-file <path>] [--resume <checkpoint.json>]] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: emits a per-run bundle under

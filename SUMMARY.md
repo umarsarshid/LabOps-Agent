@@ -1,77 +1,77 @@
 # LabOps Summary
 
-## Commit: feat(webcam/linux): add native V4L2 discovery path
+## Commit: feat(webcam/linux): model V4L2 supported controls
 
 Date: 2026-02-20
 
 ### Goal
-Implement milestone `0109` by adding Linux-native webcam enumeration that scans `/dev/video*`, queries capabilities with `VIDIOC_QUERYCAP`, and maps results into `WebcamDeviceInfo`. `list-devices --backend webcam` should surface real Linux devices even when OpenCV bootstrap is also compiled.
+Implement milestone `0110` by populating Linux V4L2 `supported_controls` for webcam devices and exposing that support clearly in device reports.
+
+Target support coverage:
+- width/height from V4L2 format/size enumeration
+- pixel formats from `VIDIOC_ENUM_FMT`
+- fps list/range best-effort from `VIDIOC_ENUM_FRAMEINTERVALS`
+- exposure/gain/auto-exposure best-effort from `VIDIOC_QUERYCTRL`
 
 ### What was implemented
 
-1. Added Linux V4L2 enumerator module
-- Added: `src/backends/webcam/linux/v4l2_device_enumerator.hpp`
-- Added: `src/backends/webcam/linux/v4l2_device_enumerator.cpp`
-- New API: `EnumerateV4l2Devices(std::vector<WebcamDeviceInfo>&, std::string&)`
+1. Expanded Linux V4L2 discovery to build supported-controls snapshot
+- Updated: `src/backends/webcam/linux/v4l2_device_enumerator.cpp`
+- Updated: `src/backends/webcam/linux/v4l2_device_enumerator.hpp`
 
-Behavior:
-- Scans `/dev` for character devices named `video*`
-- Opens each node non-blocking (`open(..., O_RDONLY | O_NONBLOCK)`)
-- Calls `VIDIOC_QUERYCAP`
-- Filters to capture-capable devices (`VIDEO_CAPTURE` / `VIDEO_CAPTURE_MPLANE`)
-- Maps into normalized `WebcamDeviceInfo`:
-  - `device_id` from node name (example `video0`)
-  - `friendly_name` from `caps.card` (fallback to `device_id`)
-  - optional `bus_info` from `caps.bus_info`
-  - optional `capture_index` parsed from `videoN`
-- Sorts deterministically by numeric index and then path
-
-Why:
-- Gives Linux users real device identity instead of index-only probing.
-- Keeps selector and list output stable/repeatable between runs.
-
-2. Wired discovery preference order for webcam backend
-- Updated: `src/backends/webcam/device_selector.cpp`
-- Updated: `src/backends/webcam/device_selector.hpp`
-
-New order when fixture is not set:
-- Linux: try native V4L2 enumeration first
-- If no native devices found: fall back to OpenCV probe indices
-- Non-Linux: existing OpenCV fallback path remains
+Added internal discovery pipeline:
+- robust ioctl wrapper (`IoctlRetry`) to tolerate `EINTR`
+- pixel-format discovery:
+  - `VIDIOC_ENUM_FMT` per capture type
+  - fourcc decode to readable strings
+- width/height discovery:
+  - `VIDIOC_ENUM_FRAMESIZES`
+  - supports discrete and stepwise/continuous sizing
+  - records min/max and step (when available)
+- fps discovery (best-effort):
+  - `VIDIOC_ENUM_FRAMEINTERVALS`
+  - records discrete fps values where available
+  - records fps min/max for stepwise/continuous intervals
+- control discovery (best-effort):
+  - `VIDIOC_QUERYCTRL` for `EXPOSURE_ABSOLUTE`, `GAIN`, `EXPOSURE_AUTO`
+  - `VIDIOC_QUERYMENU` for menu-based controls
+  - maps to normalized `WebcamControlSpec` with:
+    - `value_type`
+    - range hints
+    - enum values
+    - `read_only`
 
 Why:
-- Ensures Linux uses the strongest source of truth first.
-- Keeps cross-platform behavior working without blocking non-Linux environments.
+- This turns Linux discovery from “device identity only” into “identity + capability evidence”.
+- Engineers can now see upfront what knobs are actually available before attempting a run.
 
-3. Extended CLI `list-devices` contract to include webcam backend
+2. Added explicit webcam supported-control reporting in CLI device report
 - Updated: `src/labops/cli/router.cpp`
 
-Changes:
-- Usage/help now shows `--backend <real|webcam>`
-- Option parser accepts both `real` and `webcam`
-- Added webcam listing path that prints:
-  - backend/status/status_reason
-  - device count
-  - per-device id, friendly_name, optional bus_info, optional capture_index
-- Existing real backend behavior remains unchanged
+Added helper output path:
+- `device[i].supported_controls.count: N`
+- per supported control:
+  - `id`
+  - `value_type`
+  - `range_min`, `range_max`, `range_step` (when present)
+  - `enum_values` (when present)
+  - `read_only`
 
 Why:
-- Milestone done criteria requires direct CLI visibility for webcam devices.
-- Keeps operator experience symmetric with real backend listing.
+- Milestone “done when” asks for explicit support listing in the device report.
+- This keeps report output human-readable and automation-friendly.
 
-4. Added integration smoke test for webcam list-devices output contract
-- Added: `tests/labops/list_devices_webcam_backend_smoke.cpp`
-- Updated: `CMakeLists.txt` (new smoke test target + Linux enumerator compile unit)
+3. Strengthened webcam list-devices smoke contract
+- Updated: `tests/labops/list_devices_webcam_backend_smoke.cpp`
 
-Test validates:
-- `labops list-devices --backend webcam` succeeds
-- deterministic device ordering
-- expected output fields for fixture-backed devices
+New assertions:
+- each fixture-discovered device explicitly prints:
+  - `supported_controls.count: 0`
 
 Why:
-- Protects CLI output contract and discovery behavior from regressions.
+- Guarantees the device report always includes explicit support visibility, even when controls are absent.
 
-5. Updated module READMEs for future engineers
+4. Updated module docs for handoff clarity
 - Updated:
   - `src/backends/webcam/README.md`
   - `src/backends/webcam/linux/README.md`
@@ -80,14 +80,11 @@ Why:
   - `tests/labops/README.md`
 
 Why:
-- Keeps module docs aligned with implemented behavior and discovery precedence.
+- Keeps behavior/docs aligned so future engineers do not need code archeology.
 
 ### Files changed
-- `CMakeLists.txt`
-- `src/backends/webcam/device_selector.cpp`
-- `src/backends/webcam/device_selector.hpp`
-- `src/backends/webcam/linux/v4l2_device_enumerator.hpp`
 - `src/backends/webcam/linux/v4l2_device_enumerator.cpp`
+- `src/backends/webcam/linux/v4l2_device_enumerator.hpp`
 - `src/labops/cli/router.cpp`
 - `tests/labops/list_devices_webcam_backend_smoke.cpp`
 - `src/backends/webcam/README.md`
@@ -109,7 +106,7 @@ Why:
 
 3. Focused tests
 - Command:
-  - `ctest --test-dir build -R "list_devices_webcam_backend_smoke|list_devices_real_backend_smoke|webcam_device_selector_smoke|run_webcam_selector_resolution_smoke|list_backends_smoke" --output-on-failure`
+  - `ctest --test-dir build -R "list_devices_webcam_backend_smoke|webcam_device_model_smoke|webcam_device_selector_smoke|run_webcam_selector_resolution_smoke|list_backends_smoke" --output-on-failure`
 - Result: passed (`5/5`)
 
 4. Full regression suite
@@ -117,4 +114,4 @@ Why:
 - Result: passed (`80/80`)
 
 ### Outcome
-Linux webcam discovery now prefers native V4L2 capability queries and falls back to OpenCV probing only when needed. `labops list-devices --backend webcam` now exposes real Linux device identities and remains fully covered by smoke tests.
+Linux webcam discovery now captures and exposes supported-control evidence in a normalized form, and `labops list-devices --backend webcam` explicitly reports what each device supports.

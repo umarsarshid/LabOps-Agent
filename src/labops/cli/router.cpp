@@ -820,6 +820,50 @@ std::string FormatCompactDouble(double value) {
   return text;
 }
 
+std::string JoinCommaSeparated(const std::vector<std::string>& values) {
+  if (values.empty()) {
+    return "";
+  }
+  std::ostringstream out;
+  for (std::size_t i = 0; i < values.size(); ++i) {
+    if (i > 0U) {
+      out << ", ";
+    }
+    out << values[i];
+  }
+  return out.str();
+}
+
+void PrintWebcamSupportedControls(std::ostream& out, const std::size_t device_index,
+                                  const backends::webcam::SupportedControls& controls) {
+  out << "device[" << device_index << "].supported_controls.count: " << controls.size() << '\n';
+  std::size_t control_index = 0U;
+  for (const auto& [control_id, spec] : controls) {
+    const std::string control_prefix = "device[" + std::to_string(device_index) +
+                                       "].supported_controls[" + std::to_string(control_index) +
+                                       "]";
+    out << control_prefix << ".id: " << backends::webcam::ToString(control_id) << '\n';
+    out << control_prefix << ".value_type: " << backends::webcam::ToString(spec.value_type) << '\n';
+    if (spec.range.min.has_value()) {
+      out << control_prefix << ".range_min: " << FormatCompactDouble(spec.range.min.value())
+          << '\n';
+    }
+    if (spec.range.max.has_value()) {
+      out << control_prefix << ".range_max: " << FormatCompactDouble(spec.range.max.value())
+          << '\n';
+    }
+    if (spec.range.step.has_value()) {
+      out << control_prefix << ".range_step: " << FormatCompactDouble(spec.range.step.value())
+          << '\n';
+    }
+    if (!spec.enum_values.empty()) {
+      out << control_prefix << ".enum_values: " << JoinCommaSeparated(spec.enum_values) << '\n';
+    }
+    out << control_prefix << ".read_only: " << (spec.read_only ? "true" : "false") << '\n';
+    ++control_index;
+  }
+}
+
 void UpsertRealParam(std::vector<backends::real_sdk::ApplyParamInput>& params, std::string key,
                      std::string value) {
   for (auto& existing : params) {
@@ -3679,6 +3723,7 @@ int CommandListDevices(const std::vector<std::string_view>& args) {
     if (device.capture_index.has_value()) {
       std::cout << "device[" << i << "].capture_index: " << device.capture_index.value() << '\n';
     }
+    PrintWebcamSupportedControls(std::cout, i, device.supported_controls);
   }
   return kExitSuccess;
 }

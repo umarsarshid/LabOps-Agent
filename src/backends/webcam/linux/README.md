@@ -14,6 +14,11 @@ Linux webcam support will be implemented using V4L2 (`/dev/video*`). Keeping Lin
   - native Linux webcam discovery implementation.
   - scans `/dev/video*` character devices.
   - uses `VIDIOC_QUERYCAP` to read camera name/capabilities.
+  - enumerates supported capture formats via `VIDIOC_ENUM_FMT`.
+  - derives width/height support from `VIDIOC_ENUM_FRAMESIZES`.
+  - derives fps list/range best-effort from `VIDIOC_ENUM_FRAMEINTERVALS`.
+  - queries optional control capabilities (exposure/gain/auto-exposure) via
+    `VIDIOC_QUERYCTRL` (+ menu labels via `VIDIOC_QUERYMENU`).
   - maps discovered cameras into normalized `WebcamDeviceInfo` rows used by
     `list-devices` and selector resolution.
 
