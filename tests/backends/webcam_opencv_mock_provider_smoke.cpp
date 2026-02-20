@@ -1,5 +1,6 @@
 #include "backends/webcam/opencv_webcam_impl.hpp"
 #include "backends/webcam/testing/mock_frame_provider.hpp"
+#include "metrics/fps.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -119,6 +120,32 @@ int main() {
                                                                          frames[2].timestamp);
   if (gap.count() < 400LL) {
     Fail("stall periods should create a deterministic >=400ms timestamp gap");
+  }
+
+  // Timeout/incomplete counters should roll into metrics with the same
+  // category semantics used by real-backend acquisition.
+  labops::metrics::FpsReport report;
+  if (!labops::metrics::ComputeFpsReport(frames, std::chrono::milliseconds(600),
+                                         std::chrono::milliseconds(200), report, error)) {
+    Fail("ComputeFpsReport should succeed for webcam scripted frames: " + error);
+  }
+  if (report.frames_total != 6U) {
+    Fail("metrics total frame count mismatch");
+  }
+  if (report.received_frames_total != 3U) {
+    Fail("metrics received frame count mismatch");
+  }
+  if (report.timeout_frames_total != 2U) {
+    Fail("metrics timeout frame count mismatch");
+  }
+  if (report.incomplete_frames_total != 1U) {
+    Fail("metrics incomplete frame count mismatch");
+  }
+  if (report.dropped_generic_frames_total != 0U) {
+    Fail("metrics generic drop count should remain zero for timeout/incomplete outcomes");
+  }
+  if (report.dropped_frames_total != report.timeout_frames_total + report.incomplete_frames_total) {
+    Fail("metrics dropped total should equal timeout + incomplete counts");
   }
 
   if (!impl.CloseDevice(error)) {

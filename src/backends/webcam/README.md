@@ -61,6 +61,9 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
     frame acquisition loop, and index probing logic.
   - includes a deterministic test mode (`IWebcamFrameProvider`) so frame
     outcome classification can be validated in CI without camera access.
+  - classifies frame outcomes to match real-backend semantics:
+    - `TIMEOUT`: no frame within timeout window
+    - `INCOMPLETE`: frame arrived with invalid/empty payload
 - `capture_clock.hpp/.cpp`:
   - monotonic timestamp bridge used by webcam capture internals.
   - converts internal `steady_clock` capture times into

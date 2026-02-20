@@ -428,29 +428,51 @@ std::vector<FrameSample> OpenCvWebcamImpl::PullFrames(std::chrono::milliseconds 
   const auto deadline = std::chrono::steady_clock::now() + duration;
   while (std::chrono::steady_clock::now() < deadline) {
     const auto read_started_at = std::chrono::steady_clock::now();
-    cv::Mat frame;
-    const bool read_ok = impl_->capture.read(frame);
-    const auto read_finished_at = std::chrono::steady_clock::now();
+    const auto timeout_deadline = std::min(deadline, read_started_at + kReadTimeoutBudget);
+
+    bool saw_received_frame = false;
+    bool saw_incomplete_frame = false;
+    std::uint32_t captured_size_bytes = 0U;
+    auto outcome_ts = read_started_at;
+
+    // Keep polling within the timeout window:
+    // - no frame by deadline => TIMEOUT
+    // - frame arrives but payload is invalid/empty => INCOMPLETE
+    while (std::chrono::steady_clock::now() < timeout_deadline) {
+      cv::Mat frame;
+      const bool read_ok = impl_->capture.read(frame);
+      outcome_ts = std::chrono::steady_clock::now();
+
+      if (!read_ok) {
+        std::this_thread::sleep_for(kReadFailureBackoff);
+        continue;
+      }
+
+      captured_size_bytes = SafeFrameSizeBytes(frame);
+      if (frame.empty() || captured_size_bytes == 0U) {
+        saw_incomplete_frame = true;
+      } else {
+        saw_received_frame = true;
+      }
+      break;
+    }
 
     FrameSample sample;
     sample.frame_id = next_frame_id++;
     // Use monotonic capture time as the source of truth, then convert into
     // the existing wall-clock artifact contract.
-    sample.timestamp = impl_->capture_clock.ToWallTime(read_finished_at);
+    sample.timestamp = impl_->capture_clock.ToWallTime(outcome_ts);
 
-    if (!read_ok) {
-      sample.size_bytes = 0;
-      sample.dropped = true;
-      sample.outcome = (read_finished_at - read_started_at) >= kReadTimeoutBudget
-                           ? FrameOutcome::kTimeout
-                           : FrameOutcome::kIncomplete;
+    if (saw_received_frame) {
+      sample.size_bytes = captured_size_bytes;
+      sample.dropped = false;
+      sample.outcome = FrameOutcome::kReceived;
       frames.push_back(sample);
-      std::this_thread::sleep_for(kReadFailureBackoff);
       continue;
     }
 
-    if (frame.empty()) {
-      sample.size_bytes = 0;
+    if (saw_incomplete_frame) {
+      sample.size_bytes = captured_size_bytes;
       sample.dropped = true;
       sample.outcome = FrameOutcome::kIncomplete;
       frames.push_back(sample);
@@ -458,10 +480,11 @@ std::vector<FrameSample> OpenCvWebcamImpl::PullFrames(std::chrono::milliseconds 
       continue;
     }
 
-    sample.size_bytes = SafeFrameSizeBytes(frame);
-    sample.dropped = false;
-    sample.outcome = FrameOutcome::kReceived;
+    sample.size_bytes = 0U;
+    sample.dropped = true;
+    sample.outcome = FrameOutcome::kTimeout;
     frames.push_back(sample);
+    std::this_thread::sleep_for(kReadFailureBackoff);
   }
 
   return frames;

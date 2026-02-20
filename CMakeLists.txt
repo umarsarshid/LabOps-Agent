@@ -554,6 +554,7 @@ add_labops_smoke_test(
     tests/backends/webcam_opencv_mock_provider_smoke.cpp
   LIBRARIES
     labops_backends
+    labops_metrics
 )
 
 # Smoke test for real-backend factory behavior:

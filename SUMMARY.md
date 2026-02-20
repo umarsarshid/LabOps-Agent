@@ -1,87 +1,64 @@
 # LabOps Summary
 
-## Commit: refactor(webcam): add monotonic capture clock layer
+## Commit: feat(metrics): align webcam timeout and incomplete semantics
 
 Date: 2026-02-20
 
 ### Goal
-Implement milestone `0107` by introducing a monotonic timing layer for webcam capture internals while keeping output/event timestamp contracts unchanged.
+Implement milestone `0108` by enforcing webcam timeout/incomplete classification rules that match real-backend semantics and ensuring metric counters roll up the same way.
 
-Required outcome:
-- webcam backend uses monotonic timing internally
-- event/metrics artifacts stay contract-compliant (`system_clock` timestamps)
+Target semantics:
+- `FRAME_TIMEOUT`: no frame arrives within timeout window.
+- `FRAME_INCOMPLETE`: frame arrives but payload is invalid/empty/flagged.
 
 ### Implemented
 
-1. Added a dedicated webcam `CaptureClock` module
-- Added:
-  - `src/backends/webcam/capture_clock.hpp`
-  - `src/backends/webcam/capture_clock.cpp`
-- `CaptureClock` provides:
-  - monotonic anchor (`steady_clock`) + wall anchor (`system_clock`)
-  - conversion `ToWallTime(steady_ts)`
-  - `ResetToNow()` for live capture sessions
-  - explicit `Anchored(...)` factory for deterministic test scenarios
+1. Reworked OpenCV webcam classification loop to use timeout-window semantics
+- Updated: `src/backends/webcam/opencv_webcam_impl.cpp`
+- Previous behavior:
+  - a single failed `read()` could become `INCOMPLETE` if it returned quickly.
+- New behavior:
+  - each sample now polls within a timeout window (`kReadTimeoutBudget`)
+  - if no frame arrives by timeout deadline => `kTimeout`
+  - if frame arrives but payload is empty/invalid (`frame.empty()` or `size_bytes == 0`) => `kIncomplete`
+  - valid payload => `kReceived`
 
 Why:
-- centralizes monotonic-to-wall conversion into one reusable place
-- prevents ad-hoc timestamp stamping from drifting across webcam paths
+- makes webcam outcome classification consistent with the real backend’s intent.
+- removes ambiguous “quick read failure == incomplete” behavior.
 
-2. Wired `OpenCvWebcamImpl` to use monotonic capture timing internally
-- Updated `src/backends/webcam/opencv_webcam_impl.cpp`:
-  - added `CaptureClock` state in `Impl`
-  - test mode now tracks:
-    - `test_stream_start_steady`
-    - `test_stream_start_wall`
-  - frame timestamps now come from steady capture time converted by `CaptureClock`
-- Real OpenCV pull loop change:
-  - before: `sample.timestamp = std::chrono::system_clock::now()`
-  - now: use `read_finished_at` (steady) and convert via `capture_clock`
+2. Preserved output contract while tightening semantics
+- `FrameSample` shape and event/metrics contracts are unchanged.
+- only the webcam internal decision logic changed.
 
 Why:
-- steady clock avoids wall-clock jumps during capture loops
-- conversion preserves existing contract output type and downstream behavior
+- downstream tooling (events, metrics writers, reports) keeps the same schema.
+- behavior gets cleaner without breaking bundle consumers.
 
-3. Preserved deterministic test-mode behavior with monotonic internals
-- Test mode now anchors `CaptureClock` with explicit wall+steady anchors
-- Scripted stall gaps still produce deterministic timestamp jumps
-
-Why:
-- keeps current deterministic mock-provider tests stable
-- enforces monotonic internal timing even in test mode
-
-4. Added focused smoke test for capture-clock contract
-- Added `tests/backends/webcam_capture_clock_smoke.cpp`
-- Validates:
-  - anchor equivalence
-  - positive/negative delta mapping accuracy
-  - non-backwards behavior for increasing steady times
+3. Extended webcam deterministic smoke coverage to include metrics rollup semantics
+- Updated: `tests/backends/webcam_opencv_mock_provider_smoke.cpp`
+- Added metrics assertions via `metrics::ComputeFpsReport`:
+  - timeout/incomplete counts are preserved
+  - generic dropped stays `0` for timeout/incomplete scripted outcomes
+  - dropped total equals `timeout + incomplete`
+- Updated `CMakeLists.txt` for this test to link `labops_metrics`.
 
 Why:
-- provides direct regression coverage for the new timing layer
-- ensures future refactors do not break contract-safe conversion
+- directly verifies webcam outcome categories roll into metrics exactly like real-backend category rules.
 
-5. Build wiring + docs updates
-- Updated `CMakeLists.txt`:
-  - include `capture_clock.cpp` in `labops_backends`
-  - register `webcam_capture_clock_smoke`
-- Updated readmes:
+4. Updated module test/docs readmes
+- Updated:
   - `src/backends/webcam/README.md`
   - `tests/backends/README.md`
-- Updated `src/backends/webcam/opencv_webcam_impl.hpp` comments to describe monotonic stamping intent.
 
 Why:
-- keeps module/test documentation aligned with implementation
-- makes timestamp architecture clear for future contributors
+- documents the enforced semantics for future contributors and reviewers.
 
 ### Files changed
 - `CMakeLists.txt`
-- `src/backends/webcam/capture_clock.hpp`
-- `src/backends/webcam/capture_clock.cpp`
-- `src/backends/webcam/opencv_webcam_impl.hpp`
 - `src/backends/webcam/opencv_webcam_impl.cpp`
 - `src/backends/webcam/README.md`
-- `tests/backends/webcam_capture_clock_smoke.cpp`
+- `tests/backends/webcam_opencv_mock_provider_smoke.cpp`
 - `tests/backends/README.md`
 - `SUMMARY.md`
 
@@ -95,14 +72,17 @@ Why:
 - Command: `cmake --build build`
 - Result: passed
 
-3. Focused timing/webcam regression
+3. Focused behavior checks
 - Command:
-  - `ctest --test-dir build -R "webcam_capture_clock_smoke|webcam_opencv_mock_provider_smoke|webcam_backend_smoke|run_webcam_selector_resolution_smoke|run_stream_trace_smoke" --output-on-failure`
+  - `ctest --test-dir build -R "webcam_opencv_mock_provider_smoke|real_frame_acquisition_smoke|fps_metrics_smoke|run_stream_trace_smoke|run_webcam_selector_resolution_smoke" --output-on-failure`
 - Result: passed (`5/5`)
 
-4. Full suite regression
+4. Full regression suite
 - Command: `ctest --test-dir build --output-on-failure`
 - Result: passed (`79/79`)
 
 ### Outcome
-Webcam timing is now monotonic internally through a dedicated `CaptureClock` layer, while all external artifacts/events remain in the existing `system_clock` contract format.
+Webcam classification now follows the same category intent as real backend:
+- timeout means no frame in timeout window,
+- incomplete means frame arrived with invalid payload,
+and metrics category rollups remain consistent across backends.

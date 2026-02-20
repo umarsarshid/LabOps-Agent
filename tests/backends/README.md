@@ -37,7 +37,9 @@ stable interface regardless of real hardware availability.
 - `webcam_opencv_mock_provider_smoke.cpp`: validates webcam OpenCV-impl
   test-mode behavior using a deterministic `MockFrameProvider` (no camera
   required), including classification of received/timeout/incomplete outcomes
-  and deterministic stall-gap timestamp behavior.
+  and deterministic stall-gap timestamp behavior, plus metrics category
+  rollups (`timeout`, `incomplete`, `generic_dropped`) matching real-backend
+  semantics.
 - `real_backend_factory_smoke.cpp`: validates real-backend factory behavior in
   both build states (enabled -> real skeleton, disabled -> sdk_stub fallback)
   and verifies enabled-lifecycle start/stop safety without requiring camera
