@@ -19,6 +19,10 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
     timeout/incomplete/received outcomes with monotonic capture timestamps.
   - emits frame samples as `received`, `timeout`, or `incomplete` outcomes
     using a wall-clock pull budget.
+  - teardown is now fail-safe for Linux native sessions:
+    - stop attempts always follow with close attempts
+    - backend destructor performs best-effort cleanup so Ctrl+C/early exits do
+      not leave handles wedged
 - `webcam_factory.hpp/.cpp`:
   - centralizes backend registration hooks used by CLI backend routing.
   - reports availability (`compiled`, `available`, `reason`) for

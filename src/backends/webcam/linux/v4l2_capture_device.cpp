@@ -261,30 +261,44 @@ bool V4l2CaptureDevice::Close(std::string& error) {
   }
 
   std::string stream_error;
-  if (!StopStreaming(stream_error)) {
-    error = "failed to stop V4L2 streaming before close: " + stream_error;
-    return false;
-  }
+  const bool stopped_cleanly = StopStreaming(stream_error);
 
+  std::string close_error;
+  bool closed_cleanly = true;
   if (!io_ops_.close_fn) {
-    error = "V4L2 close operation is not configured";
-    return false;
+    closed_cleanly = false;
+    close_error = "V4L2 close operation is not configured";
+  } else if (io_ops_.close_fn(fd_) != 0) {
+    closed_cleanly = false;
+    close_error = "failed to close V4L2 device '" + device_path_ + "': " + std::strerror(errno);
   }
 
-  if (io_ops_.close_fn(fd_) != 0) {
-    error = "failed to close V4L2 device '" + device_path_ + "': " + std::strerror(errno);
-    return false;
+  // Always clear in-memory state once the fd is closed so repeated runs do not
+  // carry stale capture/session state in-process.
+  if (closed_cleanly) {
+    fd_ = -1;
+    device_path_.clear();
+    effective_capabilities_ = 0U;
+    buffer_type_ = 0U;
+    capture_method_ = V4l2CaptureMethod::kMmapStreaming;
+    mmap_buffers_.clear();
+    mmap_buffers_allocated_ = false;
+    streaming_ = false;
   }
 
-  fd_ = -1;
-  device_path_.clear();
-  effective_capabilities_ = 0U;
-  buffer_type_ = 0U;
-  capture_method_ = V4l2CaptureMethod::kMmapStreaming;
-  mmap_buffers_.clear();
-  mmap_buffers_allocated_ = false;
-  streaming_ = false;
-  return true;
+  if (stopped_cleanly && closed_cleanly) {
+    return true;
+  }
+  if (!stopped_cleanly && closed_cleanly) {
+    error = "V4L2 stream teardown reported an error before close: " + stream_error;
+    return false;
+  }
+  if (stopped_cleanly && !closed_cleanly) {
+    error = close_error;
+    return false;
+  }
+  error = "V4L2 close encountered multiple errors: stop=" + stream_error + "; close=" + close_error;
+  return false;
 }
 
 bool V4l2CaptureDevice::ApplyRequestedFormatBestEffort(const V4l2RequestedFormat& request,

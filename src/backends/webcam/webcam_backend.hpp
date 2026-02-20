@@ -24,6 +24,7 @@ namespace labops::backends::webcam {
 class WebcamBackend final : public ICameraBackend {
 public:
   WebcamBackend();
+  ~WebcamBackend() override;
 
   bool Connect(std::string& error) override;
   bool Start(std::string& error) override;
@@ -74,6 +75,7 @@ private:
   bool ApplyLinuxRequestedConfigBestEffort(std::string& error);
   bool ResolveDeviceIndex(std::size_t& index, std::string& error) const;
   bool ApplyRequestedConfig(std::string& error);
+  void TeardownSessionBestEffort() noexcept;
 
   PlatformAvailability platform_;
   // Native Linux descriptor probe used to record capture-method selection

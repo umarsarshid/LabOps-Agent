@@ -527,6 +527,36 @@ void TestCloseFailureIsActionable() {
   }
 }
 
+void TestCloseStillClosesFdWhenStreamStopFails() {
+  FakeIoState state;
+  state.device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING | V4L2_CAP_READWRITE;
+  state.fail_streamoff = true;
+  state.errno_value = EIO;
+  state.reqbuf_count_return = 2U;
+  labops::backends::webcam::V4l2CaptureDevice device(MakeIoOps(state));
+
+  labops::backends::webcam::V4l2OpenInfo info;
+  std::string error;
+  if (!device.Open("/dev/video17", info, error)) {
+    Fail("expected open to succeed before stop-failure close test");
+  }
+  labops::backends::webcam::V4l2StreamStartInfo stream_info;
+  if (!device.StartMmapStreaming(/*requested_buffer_count=*/2U, stream_info, error)) {
+    Fail("expected stream start before stop-failure close test");
+  }
+
+  if (device.Close(error)) {
+    Fail("expected close to report stream teardown failure");
+  }
+  AssertContains(error, "stream teardown reported an error");
+  AssertTrue(state.close_calls == 1, "expected close fd call even when streamoff failed");
+  AssertTrue(!device.IsOpen(), "device fd should be closed after close teardown attempt");
+
+  if (!device.Close(error)) {
+    Fail("expected idempotent close to succeed after fd was released");
+  }
+}
+
 void TestApplyRequestedFormatCapturesAdjustedReadback() {
   FakeIoState state;
   state.device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING | V4L2_CAP_READWRITE;
@@ -807,6 +837,7 @@ int main() {
   TestOpenFallsBackToReadWhenStreamingMissing();
   TestOpenFailsWithActionableErrors();
   TestCloseFailureIsActionable();
+  TestCloseStillClosesFdWhenStreamStopFails();
   TestApplyRequestedFormatCapturesAdjustedReadback();
   TestApplyRequestedFormatCapturesUnsupported();
   TestMmapStreamingStartStop();

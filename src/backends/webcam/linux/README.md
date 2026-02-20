@@ -42,6 +42,10 @@ Linux webcam support will be implemented using V4L2 (`/dev/video*`). Keeping Lin
       - zero/error payload -> `FRAME_INCOMPLETE`
     - `VIDIOC_QBUF` requeue after each dequeued frame
     - internal timestamps use monotonic `steady_clock`
+  - hardens teardown flow:
+    - always attempts `VIDIOC_STREAMOFF`, `munmap`, and descriptor close
+    - even when stream-off reports errors, close is still attempted so repeated
+      runs do not leave `/dev/video*` in a busy state
   - returns explicit/actionable errors for open/querycap/capability/close
     failures.
 

@@ -131,9 +131,26 @@ WebcamBackend::WebcamBackend() : platform_(ProbePlatformAvailability()) {
   params_["device.index"] = "0";
 }
 
+WebcamBackend::~WebcamBackend() {
+  TeardownSessionBestEffort();
+}
+
 std::string WebcamBackend::BuildNotAvailableError() const {
   return "BACKEND_NOT_AVAILABLE: webcam backend on " + platform_.platform_name +
          " is not ready: " + platform_.unavailability_reason;
+}
+
+void WebcamBackend::TeardownSessionBestEffort() noexcept {
+  std::string ignored_error;
+  if (linux_native_capture_selected_) {
+    (void)linux_capture_probe_.StopStreaming(ignored_error);
+    (void)linux_capture_probe_.Close(ignored_error);
+  } else {
+    (void)opencv_.CloseDevice(ignored_error);
+  }
+  running_ = false;
+  connected_ = false;
+  linux_native_capture_selected_ = false;
 }
 
 void WebcamBackend::ClearSessionConfigSnapshot() {
@@ -496,22 +513,37 @@ bool WebcamBackend::Stop(std::string& error) {
   }
 
   if (linux_native_capture_selected_) {
-    if (!linux_capture_probe_.StopStreaming(error)) {
-      return false;
-    }
+    std::string stop_error;
+    const bool stopped_cleanly = linux_capture_probe_.StopStreaming(stop_error);
+
     std::string close_error;
-    if (!linux_capture_probe_.Close(close_error)) {
-      error = "failed to close Linux V4L2 device: " + close_error;
-      return false;
-    }
+    const bool closed_cleanly = linux_capture_probe_.Close(close_error);
+
+    // Always clear session flags after a stop request so a follow-up run can
+    // reconnect even when teardown returns an error.
     running_ = false;
     connected_ = false;
     linux_native_capture_selected_ = false;
-    return true;
+
+    if (stopped_cleanly && closed_cleanly) {
+      return true;
+    }
+    if (!stopped_cleanly && closed_cleanly) {
+      error = "failed to stop Linux V4L2 stream cleanly: " + stop_error;
+      return false;
+    }
+    if (stopped_cleanly && !closed_cleanly) {
+      error = "failed to close Linux V4L2 device: " + close_error;
+      return false;
+    }
+    error = "Linux webcam teardown encountered multiple errors: stop=" + stop_error +
+            "; close=" + close_error;
+    return false;
   }
 
   running_ = false;
   if (!opencv_.CloseDevice(error)) {
+    connected_ = opencv_.IsDeviceOpen();
     return false;
   }
   connected_ = false;
