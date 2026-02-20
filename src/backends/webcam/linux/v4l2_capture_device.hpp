@@ -2,7 +2,9 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace labops::backends::webcam {
 
@@ -26,6 +28,30 @@ struct V4l2OpenInfo {
   std::string capabilities_hex;
   V4l2CaptureMethod capture_method = V4l2CaptureMethod::kMmapStreaming;
   std::string capture_method_reason;
+};
+
+// Requested stream format controls for Linux native best-effort apply.
+struct V4l2RequestedFormat {
+  std::optional<std::uint32_t> width;
+  std::optional<std::uint32_t> height;
+  std::optional<std::string> pixel_format;
+  std::optional<double> fps;
+};
+
+// Per-control readback evidence row emitted after best-effort apply.
+struct V4l2AppliedControl {
+  std::string generic_key;
+  std::string node_name;
+  std::string requested_value;
+  std::string actual_value;
+  bool supported = false;
+  bool applied = false;
+  bool adjusted = false;
+  std::string reason;
+};
+
+struct V4l2ApplyResult {
+  std::vector<V4l2AppliedControl> controls;
 };
 
 // Thin Linux V4L2 open/close helper used by webcam backend initialization.
@@ -52,6 +78,8 @@ public:
 
   bool Open(const std::string& device_path, V4l2OpenInfo& open_info, std::string& error);
   bool Close(std::string& error);
+  bool ApplyRequestedFormatBestEffort(const V4l2RequestedFormat& request, V4l2ApplyResult& result,
+                                      std::string& error);
 
   bool IsOpen() const;
   const std::string& DevicePath() const;
@@ -66,6 +94,8 @@ private:
   IoOps io_ops_;
   int fd_ = -1;
   std::string device_path_;
+  std::uint32_t effective_capabilities_ = 0U;
+  std::uint32_t buffer_type_ = 0U;
   V4l2CaptureMethod capture_method_ = V4l2CaptureMethod::kMmapStreaming;
 };
 

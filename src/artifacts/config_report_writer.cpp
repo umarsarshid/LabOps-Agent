@@ -84,6 +84,15 @@ std::optional<std::string> BuildKeyUnitAndRangeNote(std::string_view generic_key
   if (generic_key == "exposure") {
     return "units: us; validated range: [5, 10000000]";
   }
+  if (generic_key == "width") {
+    return "units: px; negotiated via VIDIOC_S_FMT";
+  }
+  if (generic_key == "height") {
+    return "units: px; negotiated via VIDIOC_S_FMT";
+  }
+  if (generic_key == "fps") {
+    return "units: Hz; negotiated via VIDIOC_S_PARM when supported";
+  }
   if (generic_key == "gain") {
     return "units: dB; validated range: [0, 48]";
   }

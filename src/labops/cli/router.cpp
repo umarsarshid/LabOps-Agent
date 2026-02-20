@@ -1805,6 +1805,25 @@ bool ParseNonNegativeU64Text(std::string_view text, std::uint64_t& value) {
   return ec == std::errc() && ptr == end;
 }
 
+bool ParseBoolText(std::string_view text, bool& value) {
+  if (text == "true" || text == "1" || text == "yes") {
+    value = true;
+    return true;
+  }
+  if (text == "false" || text == "0" || text == "no") {
+    value = false;
+    return true;
+  }
+  return false;
+}
+
+std::string StripPrefix(std::string_view text, std::string_view prefix) {
+  if (text.size() < prefix.size() || text.substr(0, prefix.size()) != prefix) {
+    return std::string(text);
+  }
+  return std::string(text.substr(prefix.size()));
+}
+
 void MergeWebcamReadbackParams(const backends::BackendConfig& backend_dump,
                                backends::BackendConfig& applied_params) {
   for (const auto& [key, value] : backend_dump) {
@@ -1814,31 +1833,120 @@ void MergeWebcamReadbackParams(const backends::BackendConfig& backend_dump,
   }
 }
 
-bool EmitWebcamUnsupportedEvents(const backends::BackendConfig& backend_dump,
-                                 const core::schema::RunInfo& run_info, const fs::path& bundle_dir,
-                                 fs::path& events_path, core::logging::Logger& logger,
-                                 std::string& error) {
-  events::Emitter emitter(bundle_dir, events_path);
+bool BuildWebcamApplyEvidence(const backends::BackendConfig& backend_dump,
+                              std::vector<backends::real_sdk::ApplyParamInput>& requested_params,
+                              backends::real_sdk::ApplyParamsResult& apply_result,
+                              std::string& error) {
+  requested_params.clear();
+  apply_result = backends::real_sdk::ApplyParamsResult{};
 
-  std::uint64_t unsupported_count = 0;
-  if (const auto count_it = backend_dump.find("webcam.unsupported.count");
+  std::map<std::string, std::string> requested_by_key;
+  for (const auto& [key, value] : backend_dump) {
+    if (key.rfind("webcam.requested_", 0U) != 0U) {
+      continue;
+    }
+    requested_by_key[StripPrefix(key, "webcam.requested_")] = value;
+  }
+  for (const auto& [key, value] : requested_by_key) {
+    requested_params.push_back(
+        backends::real_sdk::ApplyParamInput{.generic_key = key, .requested_value = value});
+  }
+
+  std::uint64_t readback_count = 0;
+  if (const auto count_it = backend_dump.find("webcam.readback.count");
       count_it != backend_dump.end()) {
-    if (!ParseNonNegativeU64Text(count_it->second, unsupported_count)) {
-      error = "invalid webcam unsupported count value in backend config: " + count_it->second;
+    if (!ParseNonNegativeU64Text(count_it->second, readback_count)) {
+      error = "invalid webcam readback count value in backend config: " + count_it->second;
       return false;
     }
   }
 
-  for (std::uint64_t i = 0; i < unsupported_count; ++i) {
-    const std::string prefix = "webcam.unsupported." + std::to_string(i);
-    const auto key_it = backend_dump.find(prefix + ".key");
-    const auto requested_it = backend_dump.find(prefix + ".requested");
-    const auto reason_it = backend_dump.find(prefix + ".reason");
-    if (key_it == backend_dump.end() || requested_it == backend_dump.end() ||
-        reason_it == backend_dump.end()) {
+  for (std::uint64_t i = 0; i < readback_count; ++i) {
+    const std::string prefix = "webcam.readback." + std::to_string(i);
+    const auto key_it = backend_dump.find(prefix + ".generic_key");
+    if (key_it == backend_dump.end() || key_it->second.empty()) {
       continue;
     }
 
+    const auto requested_it = backend_dump.find(prefix + ".requested");
+    const auto actual_it = backend_dump.find(prefix + ".actual");
+    const auto supported_it = backend_dump.find(prefix + ".supported");
+    const auto applied_it = backend_dump.find(prefix + ".applied");
+    const auto adjusted_it = backend_dump.find(prefix + ".adjusted");
+    const auto reason_it = backend_dump.find(prefix + ".reason");
+    const auto node_it = backend_dump.find(prefix + ".node_name");
+
+    bool supported = false;
+    bool applied = false;
+    bool adjusted = false;
+    if (supported_it == backend_dump.end() || !ParseBoolText(supported_it->second, supported)) {
+      error = "invalid webcam readback supported flag for key '" + key_it->second + "'";
+      return false;
+    }
+    if (applied_it == backend_dump.end() || !ParseBoolText(applied_it->second, applied)) {
+      error = "invalid webcam readback applied flag for key '" + key_it->second + "'";
+      return false;
+    }
+    if (adjusted_it == backend_dump.end() || !ParseBoolText(adjusted_it->second, adjusted)) {
+      error = "invalid webcam readback adjusted flag for key '" + key_it->second + "'";
+      return false;
+    }
+
+    backends::real_sdk::ReadbackRow row;
+    row.generic_key = key_it->second;
+    row.node_name = node_it != backend_dump.end() ? node_it->second : "";
+    if (requested_it != backend_dump.end() && !requested_it->second.empty()) {
+      row.requested_value = requested_it->second;
+    } else if (const auto requested_fallback = requested_by_key.find(row.generic_key);
+               requested_fallback != requested_by_key.end()) {
+      row.requested_value = requested_fallback->second;
+    }
+    row.actual_value = actual_it != backend_dump.end() ? actual_it->second : "";
+    row.supported = supported;
+    row.applied = applied;
+    row.adjusted = adjusted;
+    row.reason = reason_it != backend_dump.end() ? reason_it->second : "";
+    apply_result.readback_rows.push_back(row);
+
+    if (!supported || !applied) {
+      apply_result.unsupported.push_back(backends::real_sdk::UnsupportedParam{
+          .generic_key = row.generic_key,
+          .requested_value = row.requested_value,
+          .reason = row.reason.empty() ? "backend reported unsupported setting" : row.reason,
+      });
+      continue;
+    }
+
+    if (adjusted) {
+      apply_result.applied.push_back(backends::real_sdk::AppliedParam{
+          .generic_key = row.generic_key,
+          .node_name = row.node_name,
+          .requested_value = row.requested_value,
+          .applied_value = row.actual_value.empty() ? row.requested_value : row.actual_value,
+          .adjusted = true,
+          .adjustment_reason = row.reason,
+      });
+    } else {
+      apply_result.applied.push_back(backends::real_sdk::AppliedParam{
+          .generic_key = row.generic_key,
+          .node_name = row.node_name,
+          .requested_value = row.requested_value,
+          .applied_value = row.actual_value.empty() ? row.requested_value : row.actual_value,
+          .adjusted = false,
+          .adjustment_reason = "",
+      });
+    }
+  }
+
+  return true;
+}
+
+bool EmitWebcamConfigStatusEvents(const backends::real_sdk::ApplyParamsResult& apply_result,
+                                  const core::schema::RunInfo& run_info, const fs::path& bundle_dir,
+                                  fs::path& events_path, core::logging::Logger& logger,
+                                  std::string& error) {
+  events::Emitter emitter(bundle_dir, events_path);
+  for (const auto& unsupported : apply_result.unsupported) {
     if (!emitter.EmitConfigStatus(
             {
                 .kind = events::Emitter::ConfigStatusEvent::Kind::kUnsupported,
@@ -1846,18 +1954,69 @@ bool EmitWebcamUnsupportedEvents(const backends::BackendConfig& backend_dump,
                 .run_id = run_info.run_id,
                 .scenario_id = run_info.config.scenario_id,
                 .apply_mode = "best_effort",
-                .generic_key = key_it->second,
-                .requested_value = requested_it->second,
-                .reason = reason_it->second,
+                .generic_key = unsupported.generic_key,
+                .requested_value = unsupported.requested_value,
+                .reason = unsupported.reason,
             },
             error)) {
       return false;
     }
-
     logger.Warn("webcam config unsupported",
-                {{"generic_key", key_it->second}, {"reason", reason_it->second}});
+                {{"generic_key", unsupported.generic_key}, {"reason", unsupported.reason}});
   }
 
+  for (const auto& applied : apply_result.applied) {
+    if (!applied.adjusted) {
+      continue;
+    }
+    if (!emitter.EmitConfigStatus(
+            {
+                .kind = events::Emitter::ConfigStatusEvent::Kind::kAdjusted,
+                .ts = std::chrono::system_clock::now(),
+                .run_id = run_info.run_id,
+                .scenario_id = run_info.config.scenario_id,
+                .apply_mode = "best_effort",
+                .generic_key = applied.generic_key,
+                .requested_value = applied.requested_value,
+                .reason = applied.adjustment_reason,
+                .node_name = applied.node_name,
+                .applied_value = applied.applied_value,
+            },
+            error)) {
+      return false;
+    }
+    logger.Info("webcam config adjusted", {{"generic_key", applied.generic_key},
+                                           {"requested", applied.requested_value},
+                                           {"actual", applied.applied_value}});
+  }
+  return true;
+}
+
+bool WriteWebcamConfigArtifacts(
+    const core::schema::RunInfo& run_info, const backends::BackendConfig& backend_dump,
+    const std::vector<backends::real_sdk::ApplyParamInput>& requested_params,
+    const backends::real_sdk::ApplyParamsResult& apply_result, const fs::path& bundle_dir,
+    fs::path& config_verify_path, fs::path& camera_config_path, fs::path& config_report_path,
+    std::string& error) {
+  if (!artifacts::WriteConfigVerifyJson(run_info, apply_result,
+                                        backends::real_sdk::ParamApplyMode::kBestEffort, bundle_dir,
+                                        config_verify_path, error)) {
+    error = "failed to write config_verify.json: " + error;
+    return false;
+  }
+  if (!artifacts::WriteCameraConfigJson(run_info, backend_dump, requested_params, apply_result,
+                                        backends::real_sdk::ParamApplyMode::kBestEffort,
+                                        /*collection_error=*/"", bundle_dir, camera_config_path,
+                                        error)) {
+    error = "failed to write camera_config.json: " + error;
+    return false;
+  }
+  if (!artifacts::WriteConfigReportMarkdown(
+          run_info, requested_params, apply_result, backends::real_sdk::ParamApplyMode::kBestEffort,
+          /*collection_error=*/"", bundle_dir, config_report_path, error)) {
+    error = "failed to write config_report.md: " + error;
+    return false;
+  }
   return true;
 }
 
@@ -2598,11 +2757,26 @@ int ConfigureBackend(const RunOptions& options, ScenarioRunResult* run_result,
   if (ctx.run_plan.backend == kBackendWebcam) {
     const backends::BackendConfig backend_dump = ctx.backend->DumpConfig();
     MergeWebcamReadbackParams(backend_dump, ctx.applied_params);
-    if (!EmitWebcamUnsupportedEvents(backend_dump, ctx.run_info, ctx.bundle_dir, ctx.events_path,
-                                     ctx.logger, ctx.error)) {
-      ctx.logger.Error("failed to append webcam CONFIG_UNSUPPORTED events", {{"error", ctx.error}});
-      std::cerr << "error: failed to append webcam CONFIG_UNSUPPORTED events: " << ctx.error
-                << '\n';
+    std::vector<backends::real_sdk::ApplyParamInput> webcam_requested_params;
+    backends::real_sdk::ApplyParamsResult webcam_apply_result;
+    if (!BuildWebcamApplyEvidence(backend_dump, webcam_requested_params, webcam_apply_result,
+                                  ctx.error)) {
+      ctx.logger.Error("failed to build webcam config evidence", {{"error", ctx.error}});
+      std::cerr << "error: failed to build webcam config evidence: " << ctx.error << '\n';
+      return kExitFailure;
+    }
+    if (!EmitWebcamConfigStatusEvents(webcam_apply_result, ctx.run_info, ctx.bundle_dir,
+                                      ctx.events_path, ctx.logger, ctx.error)) {
+      ctx.logger.Error("failed to append webcam config status events", {{"error", ctx.error}});
+      std::cerr << "error: failed to append webcam config status events: " << ctx.error << '\n';
+      return kExitFailure;
+    }
+    if (!WriteWebcamConfigArtifacts(
+            ctx.run_info, backend_dump, webcam_requested_params, webcam_apply_result,
+            ctx.bundle_dir, ctx.config_verify_artifact_path, ctx.camera_config_artifact_path,
+            ctx.config_report_artifact_path, ctx.error)) {
+      ctx.logger.Error("failed to write webcam config artifacts", {{"error", ctx.error}});
+      std::cerr << "error: failed to write webcam config artifacts: " << ctx.error << '\n';
       return kExitFailure;
     }
   }

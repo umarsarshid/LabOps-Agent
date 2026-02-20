@@ -46,9 +46,31 @@ private:
     std::string reason;
   };
 
+  struct AdjustedControl {
+    std::string key;
+    std::string requested_value;
+    std::string actual_value;
+    std::string reason;
+  };
+
+  struct ReadbackRow {
+    std::string generic_key;
+    std::string node_name;
+    std::string requested_value;
+    std::string actual_value;
+    bool supported = false;
+    bool applied = false;
+    bool adjusted = false;
+    std::string reason;
+  };
+
   std::string BuildNotAvailableError() const;
   void ClearSessionConfigSnapshot();
   void RecordUnsupportedControl(std::string key, std::string requested_value, std::string reason);
+  void RecordAdjustedControl(std::string key, std::string requested_value, std::string actual_value,
+                             std::string reason);
+  void RecordReadbackRow(ReadbackRow row);
+  bool ApplyLinuxRequestedConfigBestEffort(std::string& error);
   bool ResolveDeviceIndex(std::size_t& index, std::string& error) const;
   bool ApplyRequestedConfig(std::string& error);
 
@@ -60,6 +82,9 @@ private:
   BackendConfig params_;
   RequestedConfig requested_;
   std::vector<UnsupportedControl> unsupported_controls_;
+  std::vector<AdjustedControl> adjusted_controls_;
+  std::vector<ReadbackRow> readback_rows_;
+  bool linux_native_config_applied_ = false;
   bool connected_ = false;
   bool running_ = false;
   std::uint64_t next_frame_id_ = 0;

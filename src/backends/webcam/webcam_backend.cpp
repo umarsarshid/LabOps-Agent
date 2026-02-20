@@ -72,6 +72,10 @@ std::string FormatDouble(const double value) {
   return out.str();
 }
 
+bool ApproximatelyEqual(const double left, const double right, const double tolerance = 1e-3) {
+  return std::fabs(left - right) <= tolerance;
+}
+
 std::string ToUpperAscii(std::string value) {
   for (char& c : value) {
     if (c >= 'a' && c <= 'z') {
@@ -94,6 +98,14 @@ void RemoveKeysWithPrefix(const std::string_view prefix, BackendConfig& config) 
 void AddCapabilityToConfig(const char* key, const CapabilityState capability,
                            BackendConfig& config) {
   config[key] = ToString(capability);
+}
+
+std::string RequestedKeyFromGeneric(std::string_view generic_key) {
+  return "webcam.requested_" + std::string(generic_key);
+}
+
+std::string ActualKeyFromGeneric(std::string_view generic_key) {
+  return "webcam.actual_" + std::string(generic_key);
 }
 
 } // namespace
@@ -126,7 +138,12 @@ std::string WebcamBackend::BuildNotAvailableError() const {
 
 void WebcamBackend::ClearSessionConfigSnapshot() {
   unsupported_controls_.clear();
+  adjusted_controls_.clear();
+  readback_rows_.clear();
+  linux_native_config_applied_ = false;
   RemoveKeysWithPrefix("webcam.actual_", params_);
+  RemoveKeysWithPrefix("webcam.adjusted.", params_);
+  RemoveKeysWithPrefix("webcam.readback.", params_);
   RemoveKeysWithPrefix("webcam.unsupported.", params_);
   RemoveKeysWithPrefix("webcam.linux_capture.", params_);
 }
@@ -136,6 +153,18 @@ void WebcamBackend::RecordUnsupportedControl(std::string key, std::string reques
   unsupported_controls_.push_back({.key = std::move(key),
                                    .requested_value = std::move(requested_value),
                                    .reason = std::move(reason)});
+}
+
+void WebcamBackend::RecordAdjustedControl(std::string key, std::string requested_value,
+                                          std::string actual_value, std::string reason) {
+  adjusted_controls_.push_back({.key = std::move(key),
+                                .requested_value = std::move(requested_value),
+                                .actual_value = std::move(actual_value),
+                                .reason = std::move(reason)});
+}
+
+void WebcamBackend::RecordReadbackRow(ReadbackRow row) {
+  readback_rows_.push_back(std::move(row));
 }
 
 bool WebcamBackend::ResolveDeviceIndex(std::size_t& index, std::string& error) const {
@@ -155,10 +184,14 @@ bool WebcamBackend::ResolveDeviceIndex(std::size_t& index, std::string& error) c
 
 bool WebcamBackend::ApplyRequestedConfig(std::string& error) {
   error.clear();
-  ClearSessionConfigSnapshot();
+
+  if (linux_native_config_applied_) {
+    return true;
+  }
 
   auto apply_numeric_property = [&](std::string_view key, const std::optional<double> requested,
-                                    const OpenCvCaptureProperty property) {
+                                    const OpenCvCaptureProperty property,
+                                    std::string_view generic_key, std::string_view node_name) {
     if (!requested.has_value()) {
       return;
     }
@@ -178,6 +211,21 @@ bool WebcamBackend::ApplyRequestedConfig(std::string& error) {
     }
 
     if (set_ok && read_ok) {
+      const bool adjusted = !ApproximatelyEqual(actual_value, requested.value());
+      const std::string actual_text = FormatDouble(actual_value);
+      RecordReadbackRow(
+          {.generic_key = std::string(generic_key),
+           .node_name = std::string(node_name),
+           .requested_value = requested_text,
+           .actual_value = actual_text,
+           .supported = true,
+           .applied = true,
+           .adjusted = adjusted,
+           .reason = adjusted ? "driver adjusted to nearest supported value" : std::string()});
+      if (adjusted) {
+        RecordAdjustedControl(std::string(key), requested_text, actual_text,
+                              "driver adjusted to nearest supported value");
+      }
       return;
     }
 
@@ -190,19 +238,30 @@ bool WebcamBackend::ApplyRequestedConfig(std::string& error) {
       reason = "OpenCV cannot confirm applied value: " + read_error;
     }
     RecordUnsupportedControl(std::string(key), requested_text, std::move(reason));
+    RecordReadbackRow({.generic_key = std::string(generic_key),
+                       .node_name = std::string(node_name),
+                       .requested_value = requested_text,
+                       .actual_value = read_ok ? FormatDouble(actual_value) : std::string(),
+                       .supported = false,
+                       .applied = false,
+                       .adjusted = false,
+                       .reason = unsupported_controls_.back().reason});
   };
 
   apply_numeric_property("webcam.requested_width",
                          requested_.width.has_value()
                              ? std::optional<double>(static_cast<double>(requested_.width.value()))
                              : std::nullopt,
-                         OpenCvCaptureProperty::kFrameWidth);
+                         OpenCvCaptureProperty::kFrameWidth, "width",
+                         "OpenCV.CAP_PROP_FRAME_WIDTH");
   apply_numeric_property("webcam.requested_height",
                          requested_.height.has_value()
                              ? std::optional<double>(static_cast<double>(requested_.height.value()))
                              : std::nullopt,
-                         OpenCvCaptureProperty::kFrameHeight);
-  apply_numeric_property("webcam.requested_fps", requested_.fps, OpenCvCaptureProperty::kFps);
+                         OpenCvCaptureProperty::kFrameHeight, "height",
+                         "OpenCV.CAP_PROP_FRAME_HEIGHT");
+  apply_numeric_property("webcam.requested_fps", requested_.fps, OpenCvCaptureProperty::kFps, "fps",
+                         "OpenCV.CAP_PROP_FPS");
 
   if (requested_.pixel_format.has_value()) {
     const std::string requested_text = requested_.pixel_format.value();
@@ -219,6 +278,19 @@ bool WebcamBackend::ApplyRequestedConfig(std::string& error) {
     }
 
     if (set_ok && read_ok) {
+      const bool adjusted = actual_fourcc != requested_text;
+      RecordReadbackRow({.generic_key = "pixel_format",
+                         .node_name = "OpenCV.CAP_PROP_FOURCC",
+                         .requested_value = requested_text,
+                         .actual_value = actual_fourcc,
+                         .supported = true,
+                         .applied = true,
+                         .adjusted = adjusted,
+                         .reason = adjusted ? "driver adjusted pixel format" : std::string()});
+      if (adjusted) {
+        RecordAdjustedControl("webcam.requested_pixel_format", requested_text, actual_fourcc,
+                              "driver adjusted pixel format");
+      }
       return true;
     }
 
@@ -231,9 +303,67 @@ bool WebcamBackend::ApplyRequestedConfig(std::string& error) {
       reason = "OpenCV cannot confirm applied value: " + read_error;
     }
     RecordUnsupportedControl("webcam.requested_pixel_format", requested_text, std::move(reason));
+    RecordReadbackRow({.generic_key = "pixel_format",
+                       .node_name = "OpenCV.CAP_PROP_FOURCC",
+                       .requested_value = requested_text,
+                       .actual_value = read_ok ? actual_fourcc : std::string(),
+                       .supported = false,
+                       .applied = false,
+                       .adjusted = false,
+                       .reason = unsupported_controls_.back().reason});
   }
 
   return true;
+}
+
+bool WebcamBackend::ApplyLinuxRequestedConfigBestEffort(std::string& error) {
+  error.clear();
+#if !defined(__linux__)
+  return true;
+#else
+  V4l2RequestedFormat native_request;
+  native_request.width = requested_.width;
+  native_request.height = requested_.height;
+  native_request.pixel_format = requested_.pixel_format;
+  native_request.fps = requested_.fps;
+
+  V4l2ApplyResult native_result;
+  if (!linux_capture_probe_.ApplyRequestedFormatBestEffort(native_request, native_result, error)) {
+    return false;
+  }
+
+  for (const V4l2AppliedControl& control : native_result.controls) {
+    const std::string requested_key = RequestedKeyFromGeneric(control.generic_key);
+    params_[requested_key] = control.requested_value;
+    if (!control.actual_value.empty()) {
+      params_[ActualKeyFromGeneric(control.generic_key)] = control.actual_value;
+    }
+
+    RecordReadbackRow({
+        .generic_key = control.generic_key,
+        .node_name = control.node_name,
+        .requested_value = control.requested_value,
+        .actual_value = control.actual_value,
+        .supported = control.supported,
+        .applied = control.applied,
+        .adjusted = control.adjusted,
+        .reason = control.reason,
+    });
+
+    if (!control.supported || !control.applied) {
+      RecordUnsupportedControl(requested_key, control.requested_value, control.reason);
+      continue;
+    }
+
+    if (control.adjusted) {
+      RecordAdjustedControl(requested_key, control.requested_value, control.actual_value,
+                            control.reason);
+    }
+  }
+
+  linux_native_config_applied_ = true;
+  return true;
+#endif
 }
 
 bool WebcamBackend::Connect(std::string& error) {
@@ -252,6 +382,7 @@ bool WebcamBackend::Connect(std::string& error) {
   if (!ResolveDeviceIndex(device_index, error)) {
     return false;
   }
+  ClearSessionConfigSnapshot();
 
 #if defined(__linux__)
   const std::string native_device_path = "/dev/video" + std::to_string(device_index);
@@ -264,6 +395,10 @@ bool WebcamBackend::Connect(std::string& error) {
     params_["webcam.linux_capture.capabilities_hex"] = native_open_info.capabilities_hex;
     params_["webcam.linux_capture.method"] = ToString(native_open_info.capture_method);
     params_["webcam.linux_capture.method_reason"] = native_open_info.capture_method_reason;
+
+    if (!ApplyLinuxRequestedConfigBestEffort(native_probe_error)) {
+      params_["webcam.linux_capture.apply_error"] = native_probe_error;
+    }
 
     std::string native_close_error;
     if (!linux_capture_probe_.Close(native_close_error)) {
@@ -403,12 +538,36 @@ BackendConfig WebcamBackend::DumpConfig() const {
   BackendConfig config = params_;
   config["connected"] = connected_ ? "true" : "false";
   config["running"] = running_ ? "true" : "false";
+  config["webcam.native_apply_used"] = linux_native_config_applied_ ? "true" : "false";
+
+  config["webcam.readback.count"] = std::to_string(readback_rows_.size());
+  for (std::size_t i = 0; i < readback_rows_.size(); ++i) {
+    const std::string prefix = "webcam.readback." + std::to_string(i);
+    config[prefix + ".generic_key"] = readback_rows_[i].generic_key;
+    config[prefix + ".node_name"] = readback_rows_[i].node_name;
+    config[prefix + ".requested"] = readback_rows_[i].requested_value;
+    config[prefix + ".actual"] = readback_rows_[i].actual_value;
+    config[prefix + ".supported"] = readback_rows_[i].supported ? "true" : "false";
+    config[prefix + ".applied"] = readback_rows_[i].applied ? "true" : "false";
+    config[prefix + ".adjusted"] = readback_rows_[i].adjusted ? "true" : "false";
+    config[prefix + ".reason"] = readback_rows_[i].reason;
+  }
+
   config["webcam.unsupported.count"] = std::to_string(unsupported_controls_.size());
   for (std::size_t i = 0; i < unsupported_controls_.size(); ++i) {
     const std::string prefix = "webcam.unsupported." + std::to_string(i);
     config[prefix + ".key"] = unsupported_controls_[i].key;
     config[prefix + ".requested"] = unsupported_controls_[i].requested_value;
     config[prefix + ".reason"] = unsupported_controls_[i].reason;
+  }
+
+  config["webcam.adjusted.count"] = std::to_string(adjusted_controls_.size());
+  for (std::size_t i = 0; i < adjusted_controls_.size(); ++i) {
+    const std::string prefix = "webcam.adjusted." + std::to_string(i);
+    config[prefix + ".key"] = adjusted_controls_[i].key;
+    config[prefix + ".requested"] = adjusted_controls_[i].requested_value;
+    config[prefix + ".actual"] = adjusted_controls_[i].actual_value;
+    config[prefix + ".reason"] = adjusted_controls_[i].reason;
   }
   return config;
 }
