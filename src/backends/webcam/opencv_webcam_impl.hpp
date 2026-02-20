@@ -24,6 +24,23 @@ enum class OpenCvCaptureProperty {
 
 const char* ToString(OpenCvCaptureProperty property);
 
+// Provider sample used by webcam-impl test mode.
+//
+// `stall_periods` inserts synthetic frame-period gaps before this sample so
+// tests can model timeout-like cadence cliffs deterministically.
+struct WebcamFrameProviderSample {
+  FrameOutcome outcome = FrameOutcome::kReceived;
+  std::uint32_t size_bytes = 0U;
+  std::uint32_t stall_periods = 0U;
+};
+
+class IWebcamFrameProvider {
+public:
+  virtual ~IWebcamFrameProvider() = default;
+  virtual bool Next(std::uint64_t frame_id, WebcamFrameProviderSample& sample,
+                    std::string& error) = 0;
+};
+
 // Thin OpenCV wrapper used by `WebcamBackend`.
 //
 // Responsibilities:
@@ -58,6 +75,16 @@ public:
   // Best-effort camera index probe used by webcam discovery when fixture data
   // is not provided. Indices that fail `VideoCapture::open` are skipped.
   static std::vector<std::size_t> EnumerateDeviceIndices(std::size_t max_probe_index);
+
+  // Enables deterministic scripted frame generation for tests.
+  //
+  // This mode bypasses OpenCV capture reads entirely and allows CI/local tests
+  // to validate timeout/incomplete classification without any camera hardware.
+  void EnableTestMode(std::unique_ptr<IWebcamFrameProvider> provider,
+                      std::chrono::milliseconds frame_period,
+                      std::chrono::system_clock::time_point stream_start_ts);
+  void DisableTestMode();
+  bool IsTestModeEnabled() const;
 
 private:
   struct Impl;

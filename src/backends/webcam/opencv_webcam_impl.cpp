@@ -1,5 +1,6 @@
 #include "backends/webcam/opencv_webcam_impl.hpp"
 
+#include <algorithm>
 #include <climits>
 #include <cmath>
 #include <cstdint>
@@ -7,6 +8,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 
 #if LABOPS_ENABLE_WEBCAM_OPENCV
 #include <opencv2/core/mat.hpp>
@@ -19,6 +21,7 @@ namespace {
 
 constexpr std::chrono::milliseconds kReadTimeoutBudget(200);
 constexpr std::chrono::milliseconds kReadFailureBackoff(5);
+constexpr std::uint32_t kDefaultReceivedFrameSizeBytes = 4096U;
 
 #if LABOPS_ENABLE_WEBCAM_OPENCV
 int ToOpenCvFourcc(std::string_view code) {
@@ -50,6 +53,17 @@ std::uint32_t SafeFrameSizeBytes(const cv::Mat& frame) {
 } // namespace
 
 struct OpenCvWebcamImpl::Impl {
+  bool test_mode_enabled = false;
+  bool test_device_open = false;
+  std::unique_ptr<IWebcamFrameProvider> test_provider;
+  std::chrono::milliseconds test_frame_period = std::chrono::milliseconds(33);
+  std::chrono::system_clock::time_point test_stream_start{};
+  std::uint64_t emitted_period_cursor = 0U;
+  double test_frame_width = 640.0;
+  double test_frame_height = 480.0;
+  double test_fps = 30.0;
+  std::string test_fourcc = "MJPG";
+
 #if LABOPS_ENABLE_WEBCAM_OPENCV
   cv::VideoCapture capture;
 #endif
@@ -75,8 +89,49 @@ OpenCvWebcamImpl::OpenCvWebcamImpl(OpenCvWebcamImpl&&) noexcept = default;
 
 OpenCvWebcamImpl& OpenCvWebcamImpl::operator=(OpenCvWebcamImpl&&) noexcept = default;
 
+void OpenCvWebcamImpl::EnableTestMode(std::unique_ptr<IWebcamFrameProvider> provider,
+                                      const std::chrono::milliseconds frame_period,
+                                      const std::chrono::system_clock::time_point stream_start_ts) {
+  impl_->test_mode_enabled = true;
+  impl_->test_device_open = false;
+  impl_->test_provider = std::move(provider);
+  impl_->test_frame_period = frame_period > std::chrono::milliseconds::zero()
+                                 ? frame_period
+                                 : std::chrono::milliseconds(1);
+  impl_->test_stream_start = stream_start_ts;
+  impl_->emitted_period_cursor = 0U;
+#if LABOPS_ENABLE_WEBCAM_OPENCV
+  if (impl_->capture.isOpened()) {
+    impl_->capture.release();
+  }
+#endif
+}
+
+void OpenCvWebcamImpl::DisableTestMode() {
+  impl_->test_mode_enabled = false;
+  impl_->test_device_open = false;
+  impl_->test_provider.reset();
+  impl_->test_frame_period = std::chrono::milliseconds(33);
+  impl_->test_stream_start = std::chrono::system_clock::time_point{};
+  impl_->emitted_period_cursor = 0U;
+}
+
+bool OpenCvWebcamImpl::IsTestModeEnabled() const {
+  return impl_->test_mode_enabled;
+}
+
 bool OpenCvWebcamImpl::OpenDevice(const std::size_t device_index, std::string& error) {
   error.clear();
+  if (impl_->test_mode_enabled) {
+    (void)device_index;
+    if (impl_->test_provider == nullptr) {
+      error = "test mode requires a non-null frame provider";
+      return false;
+    }
+    impl_->test_device_open = true;
+    impl_->emitted_period_cursor = 0U;
+    return true;
+  }
 #if LABOPS_ENABLE_WEBCAM_OPENCV
   if (device_index > static_cast<std::size_t>(INT_MAX)) {
     error = "BACKEND_CONNECT_FAILED: webcam index is out of range for OpenCV";
@@ -100,6 +155,10 @@ bool OpenCvWebcamImpl::OpenDevice(const std::size_t device_index, std::string& e
 
 bool OpenCvWebcamImpl::CloseDevice(std::string& error) {
   error.clear();
+  if (impl_->test_mode_enabled) {
+    impl_->test_device_open = false;
+    return true;
+  }
 #if LABOPS_ENABLE_WEBCAM_OPENCV
   if (!impl_->capture.isOpened()) {
     return true;
@@ -113,6 +172,9 @@ bool OpenCvWebcamImpl::CloseDevice(std::string& error) {
 }
 
 bool OpenCvWebcamImpl::IsDeviceOpen() const {
+  if (impl_->test_mode_enabled) {
+    return impl_->test_device_open;
+  }
 #if LABOPS_ENABLE_WEBCAM_OPENCV
   return impl_->capture.isOpened();
 #else
@@ -123,6 +185,25 @@ bool OpenCvWebcamImpl::IsDeviceOpen() const {
 bool OpenCvWebcamImpl::SetProperty(const OpenCvCaptureProperty property, const double value,
                                    std::string& error) {
   error.clear();
+  if (impl_->test_mode_enabled) {
+    if (!impl_->test_device_open) {
+      error = "test webcam device must be open before setting property";
+      return false;
+    }
+    switch (property) {
+    case OpenCvCaptureProperty::kFrameWidth:
+      impl_->test_frame_width = value;
+      return true;
+    case OpenCvCaptureProperty::kFrameHeight:
+      impl_->test_frame_height = value;
+      return true;
+    case OpenCvCaptureProperty::kFps:
+      impl_->test_fps = value;
+      return true;
+    }
+    error = "unsupported test property";
+    return false;
+  }
 #if LABOPS_ENABLE_WEBCAM_OPENCV
   if (!impl_->capture.isOpened()) {
     error = "webcam device must be open before setting OpenCV property";
@@ -144,6 +225,25 @@ bool OpenCvWebcamImpl::SetProperty(const OpenCvCaptureProperty property, const d
 bool OpenCvWebcamImpl::GetProperty(const OpenCvCaptureProperty property, double& value,
                                    std::string& error) const {
   error.clear();
+  if (impl_->test_mode_enabled) {
+    if (!impl_->test_device_open) {
+      error = "test webcam device must be open before reading property";
+      return false;
+    }
+    switch (property) {
+    case OpenCvCaptureProperty::kFrameWidth:
+      value = impl_->test_frame_width;
+      return true;
+    case OpenCvCaptureProperty::kFrameHeight:
+      value = impl_->test_frame_height;
+      return true;
+    case OpenCvCaptureProperty::kFps:
+      value = impl_->test_fps;
+      return true;
+    }
+    error = "unsupported test property";
+    return false;
+  }
 #if LABOPS_ENABLE_WEBCAM_OPENCV
   if (!impl_->capture.isOpened()) {
     error = "webcam device must be open before reading OpenCV property";
@@ -170,6 +270,14 @@ bool OpenCvWebcamImpl::SetFourcc(std::string_view fourcc_code, std::string& erro
     error = "pixel format must be exactly 4 characters for OpenCV fourcc";
     return false;
   }
+  if (impl_->test_mode_enabled) {
+    if (!impl_->test_device_open) {
+      error = "test webcam device must be open before setting fourcc";
+      return false;
+    }
+    impl_->test_fourcc = std::string(fourcc_code);
+    return true;
+  }
 #if LABOPS_ENABLE_WEBCAM_OPENCV
   if (!impl_->capture.isOpened()) {
     error = "webcam device must be open before setting OpenCV fourcc";
@@ -188,6 +296,14 @@ bool OpenCvWebcamImpl::SetFourcc(std::string_view fourcc_code, std::string& erro
 
 bool OpenCvWebcamImpl::GetFourcc(std::string& fourcc_code, std::string& error) const {
   error.clear();
+  if (impl_->test_mode_enabled) {
+    if (!impl_->test_device_open) {
+      error = "test webcam device must be open before reading fourcc";
+      return false;
+    }
+    fourcc_code = impl_->test_fourcc;
+    return true;
+  }
 #if LABOPS_ENABLE_WEBCAM_OPENCV
   if (!impl_->capture.isOpened()) {
     error = "webcam device must be open before reading OpenCV fourcc";
@@ -211,6 +327,75 @@ std::vector<FrameSample> OpenCvWebcamImpl::PullFrames(std::chrono::milliseconds 
                                                       std::uint64_t& next_frame_id,
                                                       std::string& error) {
   error.clear();
+  if (impl_->test_mode_enabled) {
+    if (duration < std::chrono::milliseconds::zero()) {
+      error = "pull_frames duration cannot be negative";
+      return {};
+    }
+    if (duration == std::chrono::milliseconds::zero()) {
+      return {};
+    }
+    if (!impl_->test_device_open) {
+      error = "test webcam device must be open before pull_frames";
+      return {};
+    }
+    if (impl_->test_provider == nullptr) {
+      error = "test mode frame provider is not configured";
+      return {};
+    }
+
+    const auto frame_period_ms = std::max<std::int64_t>(1, impl_->test_frame_period.count());
+    const std::uint64_t frame_count =
+        static_cast<std::uint64_t>(duration.count() / frame_period_ms);
+    if (frame_count == 0U) {
+      return {};
+    }
+
+    std::vector<FrameSample> frames;
+    frames.reserve(static_cast<std::size_t>(frame_count));
+    for (std::uint64_t i = 0; i < frame_count; ++i) {
+      WebcamFrameProviderSample scripted;
+      if (!impl_->test_provider->Next(next_frame_id, scripted, error)) {
+        return {};
+      }
+
+      impl_->emitted_period_cursor += scripted.stall_periods;
+      FrameSample frame;
+      frame.frame_id = next_frame_id++;
+      frame.timestamp =
+          impl_->test_stream_start +
+          impl_->test_frame_period * static_cast<std::int64_t>(impl_->emitted_period_cursor);
+      ++impl_->emitted_period_cursor;
+
+      switch (scripted.outcome) {
+      case FrameOutcome::kTimeout:
+        frame.size_bytes = 0U;
+        frame.dropped = true;
+        frame.outcome = FrameOutcome::kTimeout;
+        break;
+      case FrameOutcome::kIncomplete:
+        frame.size_bytes = scripted.size_bytes == 0U ? 1U : scripted.size_bytes;
+        frame.dropped = true;
+        frame.outcome = FrameOutcome::kIncomplete;
+        break;
+      case FrameOutcome::kDropped:
+        frame.size_bytes = scripted.size_bytes;
+        frame.dropped = true;
+        frame.outcome = FrameOutcome::kDropped;
+        break;
+      case FrameOutcome::kReceived:
+      default:
+        frame.size_bytes =
+            scripted.size_bytes == 0U ? kDefaultReceivedFrameSizeBytes : scripted.size_bytes;
+        frame.dropped = false;
+        frame.outcome = FrameOutcome::kReceived;
+        break;
+      }
+
+      frames.push_back(frame);
+    }
+    return frames;
+  }
 #if LABOPS_ENABLE_WEBCAM_OPENCV
   if (duration < std::chrono::milliseconds::zero()) {
     error = "pull_frames duration cannot be negative";

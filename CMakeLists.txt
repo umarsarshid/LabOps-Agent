@@ -128,6 +128,7 @@ add_library(labops_backends
   src/backends/webcam/webcam_factory.cpp
   src/backends/webcam/linux/platform_probe_linux.cpp
   src/backends/webcam/macos/platform_probe_macos.cpp
+  src/backends/webcam/testing/mock_frame_provider.cpp
   src/backends/webcam/windows/platform_probe_windows.cpp
   src/backends/webcam/webcam_backend.cpp
 )
@@ -529,6 +530,17 @@ add_labops_smoke_test(
   NAME webcam_device_selector_smoke
   SOURCES
     tests/backends/webcam_device_selector_smoke.cpp
+  LIBRARIES
+    labops_backends
+)
+
+# Smoke test validating OpenCV webcam-impl deterministic mock-provider mode.
+# This covers received/timeout/incomplete classification without OpenCV camera
+# access requirements.
+add_labops_smoke_test(
+  NAME webcam_opencv_mock_provider_smoke
+  SOURCES
+    tests/backends/webcam_opencv_mock_provider_smoke.cpp
   LIBRARIES
     labops_backends
 )

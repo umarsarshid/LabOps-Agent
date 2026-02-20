@@ -31,6 +31,10 @@ stable interface regardless of real hardware availability.
   deterministic resolution rules (`id` exact match, stable sorted `index`,
   `name_contains`, default index `0`) plus fixture-driven discovery via
   `LABOPS_WEBCAM_DEVICE_FIXTURE`.
+- `webcam_opencv_mock_provider_smoke.cpp`: validates webcam OpenCV-impl
+  test-mode behavior using a deterministic `MockFrameProvider` (no camera
+  required), including classification of received/timeout/incomplete outcomes
+  and deterministic stall-gap timestamp behavior.
 - `real_backend_factory_smoke.cpp`: validates real-backend factory behavior in
   both build states (enabled -> real skeleton, disabled -> sdk_stub fallback)
   and verifies enabled-lifecycle start/stop safety without requiring camera

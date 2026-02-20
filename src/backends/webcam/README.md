@@ -59,13 +59,15 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
   - thin OpenCV wrapper behind `WebcamBackend`.
   - isolates `VideoCapture` open/close, property set/readback, fourcc handling,
     frame acquisition loop, and index probing logic.
+  - includes a deterministic test mode (`IWebcamFrameProvider`) so frame
+    outcome classification can be validated in CI without camera access.
 - `platform_probe.hpp/.cpp`:
   - central dispatcher that picks the current OS probe implementation.
 - `linux/`, `macos/`, `windows/`:
   - platform-specific availability probes that currently report clear
     unavailability reasons.
 - `testing/`:
-  - reserved for future webcam backend test fixtures and platform fakes.
+  - deterministic webcam test providers used by `opencv_webcam_impl` test mode.
 
 ## Connection to the project
 
