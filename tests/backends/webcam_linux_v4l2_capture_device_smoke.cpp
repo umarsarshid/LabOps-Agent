@@ -1,15 +1,18 @@
 #include "backends/webcam/linux/v4l2_capture_device.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <optional>
 #include <string_view>
+#include <vector>
 
 #if defined(__linux__)
 #include <cstdio>
 #include <linux/videodev2.h>
+#include <poll.h>
 #include <sys/mman.h>
 #endif
 
@@ -36,11 +39,18 @@ void AssertTrue(const bool condition, std::string_view message) {
 
 #if defined(__linux__)
 struct FakeIoState {
+  struct DqbufResult {
+    std::uint32_t bytes_used = 0U;
+    std::uint32_t flags = 0U;
+  };
+
   int open_calls = 0;
   int close_calls = 0;
   int ioctl_calls = 0;
+  int poll_calls = 0;
   int reqbuf_calls = 0;
   int querybuf_calls = 0;
+  int dqbuf_calls = 0;
   int qbuf_calls = 0;
   int streamon_calls = 0;
   int streamoff_calls = 0;
@@ -85,7 +95,14 @@ struct FakeIoState {
   bool fail_streamoff = false;
   bool fail_mmap = false;
   bool fail_munmap = false;
+  bool fail_dqbuf = false;
   std::uint32_t reqbuf_count_return = 4U;
+
+  std::vector<int> poll_results;
+  std::size_t poll_cursor = 0U;
+  std::vector<DqbufResult> dqbuf_results;
+  std::size_t dqbuf_cursor = 0U;
+  std::chrono::steady_clock::time_point steady_now = std::chrono::steady_clock::time_point{};
 };
 
 std::optional<double> FpsFromTimePerFrame(const v4l2_fract& tpf) {
@@ -226,6 +243,33 @@ labops::backends::webcam::V4l2CaptureDevice::IoOps MakeIoOps(FakeIoState& state)
               return 0;
             }
 
+            if (request == VIDIOC_DQBUF) {
+              ++state.dqbuf_calls;
+              if (state.fail_dqbuf) {
+                errno = EIO;
+                return -1;
+              }
+              if (state.dqbuf_cursor >= state.dqbuf_results.size()) {
+                errno = EAGAIN;
+                return -1;
+              }
+
+              auto* buffer = static_cast<v4l2_buffer*>(arg);
+              const FakeIoState::DqbufResult result = state.dqbuf_results[state.dqbuf_cursor++];
+              buffer->index = 0U;
+              buffer->flags = result.flags;
+              if (buffer->type == V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+                buffer->bytesused = result.bytes_used;
+              } else {
+                if (buffer->m.planes == nullptr || buffer->length == 0U) {
+                  errno = EINVAL;
+                  return -1;
+                }
+                buffer->m.planes[0].bytesused = result.bytes_used;
+              }
+              return 0;
+            }
+
             if (request == VIDIOC_QBUF) {
               ++state.qbuf_calls;
               if (state.fail_qbuf) {
@@ -297,6 +341,34 @@ labops::backends::webcam::V4l2CaptureDevice::IoOps MakeIoOps(FakeIoState& state)
             errno = EINVAL;
             return -1;
           },
+      .poll_fn =
+          [&state](struct pollfd* fds, const unsigned long nfds, const int timeout_ms) {
+            ++state.poll_calls;
+            if (nfds == 0U || fds == nullptr) {
+              errno = EINVAL;
+              return -1;
+            }
+
+            const int result = state.poll_cursor < state.poll_results.size()
+                                   ? state.poll_results[state.poll_cursor++]
+                                   : 0;
+            if (result < 0) {
+              errno = EINTR;
+              return -1;
+            }
+
+            if (result == 0) {
+              if (timeout_ms > 0) {
+                state.steady_now += std::chrono::milliseconds(timeout_ms);
+              }
+              fds[0].revents = 0;
+              return 0;
+            }
+
+            state.steady_now += std::chrono::milliseconds(1);
+            fds[0].revents = POLLIN;
+            return 1;
+          },
       .mmap_fn = [&state](void* /*addr*/, const std::size_t /*length*/, const int /*prot*/,
                           const int /*flags*/, const int /*fd*/,
                           const std::int64_t /*offset*/) -> void* {
@@ -317,6 +389,7 @@ labops::backends::webcam::V4l2CaptureDevice::IoOps MakeIoOps(FakeIoState& state)
             }
             return 0;
           },
+      .steady_now_fn = [&state]() { return state.steady_now; },
   };
 }
 
@@ -634,6 +707,93 @@ void TestMmapStreamingRejectsReadFallbackDevices() {
     Fail("expected close to succeed after read-fallback start rejection");
   }
 }
+
+void TestPullFramesClassifiesTimeoutReceivedIncomplete() {
+  FakeIoState state;
+  state.device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+  state.reqbuf_count_return = 2U;
+  state.poll_results = {0, 1, 1};
+  state.dqbuf_results = {
+      FakeIoState::DqbufResult{.bytes_used = 2048U, .flags = 0U},
+      FakeIoState::DqbufResult{.bytes_used = 0U, .flags = V4L2_BUF_FLAG_ERROR},
+  };
+
+  labops::backends::webcam::V4l2CaptureDevice device(MakeIoOps(state));
+  labops::backends::webcam::V4l2OpenInfo info;
+  std::string error;
+  if (!device.Open("/dev/video15", info, error)) {
+    Fail("expected open to succeed before pull_frames test");
+  }
+  labops::backends::webcam::V4l2StreamStartInfo stream_info;
+  if (!device.StartMmapStreaming(/*requested_buffer_count=*/2U, stream_info, error)) {
+    Fail("expected streaming start before pull_frames test");
+  }
+
+  std::uint64_t next_frame_id = 100U;
+  std::vector<labops::backends::webcam::V4l2FrameSample> frames;
+  if (!device.PullFrames(std::chrono::milliseconds(202), next_frame_id, frames, error)) {
+    Fail("expected pull_frames to succeed");
+  }
+  AssertTrue(frames.size() == 3U, "expected timeout + received + incomplete samples");
+  AssertTrue(frames[0].frame_id == 100U && frames[1].frame_id == 101U && frames[2].frame_id == 102U,
+             "expected sequential frame ids");
+  AssertTrue(frames[0].outcome == labops::backends::webcam::V4l2FrameOutcome::kTimeout,
+             "expected first sample timeout");
+  AssertTrue(frames[1].outcome == labops::backends::webcam::V4l2FrameOutcome::kReceived,
+             "expected second sample received");
+  AssertTrue(frames[2].outcome == labops::backends::webcam::V4l2FrameOutcome::kIncomplete,
+             "expected third sample incomplete");
+  AssertTrue(frames[1].size_bytes == 2048U, "expected received bytes from dequeue");
+  AssertTrue(frames[2].size_bytes == 0U, "expected incomplete bytes from dequeue");
+  AssertTrue(next_frame_id == 103U, "expected next_frame_id advanced by emitted samples");
+  AssertTrue(frames[0].captured_at_steady <= frames[1].captured_at_steady &&
+                 frames[1].captured_at_steady <= frames[2].captured_at_steady,
+             "expected monotonic steady timestamps");
+  AssertTrue(state.dqbuf_calls == 2, "expected two dequeues for ready polls");
+  AssertTrue(state.qbuf_calls == 4, "expected initial queue + requeue calls");
+
+  if (!device.StopStreaming(error)) {
+    Fail("expected stop streaming after pull_frames test");
+  }
+  if (!device.Close(error)) {
+    Fail("expected close after pull_frames test");
+  }
+}
+
+void TestPullFramesDqbufFailureIsActionable() {
+  FakeIoState state;
+  state.device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+  state.reqbuf_count_return = 1U;
+  state.poll_results = {1};
+  state.fail_dqbuf = true;
+
+  labops::backends::webcam::V4l2CaptureDevice device(MakeIoOps(state));
+  labops::backends::webcam::V4l2OpenInfo info;
+  std::string error;
+  if (!device.Open("/dev/video16", info, error)) {
+    Fail("expected open to succeed before dqbuf failure test");
+  }
+  labops::backends::webcam::V4l2StreamStartInfo stream_info;
+  if (!device.StartMmapStreaming(/*requested_buffer_count=*/1U, stream_info, error)) {
+    Fail("expected streaming start before dqbuf failure test");
+  }
+
+  std::uint64_t next_frame_id = 1U;
+  std::vector<labops::backends::webcam::V4l2FrameSample> frames;
+  if (device.PullFrames(std::chrono::milliseconds(10), next_frame_id, frames, error)) {
+    Fail("expected pull_frames to fail when DQBUF fails");
+  }
+  AssertContains(error, "VIDIOC_DQBUF failed");
+
+  // Restore fake state so cleanup can proceed.
+  state.fail_dqbuf = false;
+  if (!device.StopStreaming(error)) {
+    Fail("expected stop streaming after dqbuf failure");
+  }
+  if (!device.Close(error)) {
+    Fail("expected close after dqbuf failure");
+  }
+}
 #endif
 
 } // namespace
@@ -652,6 +812,8 @@ int main() {
   TestMmapStreamingStartStop();
   TestMmapStreamingFailureIsActionable();
   TestMmapStreamingRejectsReadFallbackDevices();
+  TestPullFramesClassifiesTimeoutReceivedIncomplete();
+  TestPullFramesDqbufFailureIsActionable();
   std::cout << "webcam_linux_v4l2_capture_device_smoke: ok\n";
   return 0;
 #endif

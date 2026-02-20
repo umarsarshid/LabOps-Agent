@@ -33,6 +33,15 @@ Linux webcam support will be implemented using V4L2 (`/dev/video*`). Keeping Lin
     - `VIDIOC_QBUF`
     - `VIDIOC_STREAMON`
     - paired teardown via `VIDIOC_STREAMOFF` + `munmap` + `VIDIOC_REQBUFS(count=0)`
+  - implements frame acquisition loop for streaming sessions:
+    - `poll()` with bounded timeout budget
+    - timeout outcome emits `FRAME_TIMEOUT`
+    - `VIDIOC_DQBUF` dequeue validation (`bytesused`, `V4L2_BUF_FLAG_ERROR`)
+    - outcome mapping:
+      - valid payload -> `FRAME_RECEIVED`
+      - zero/error payload -> `FRAME_INCOMPLETE`
+    - `VIDIOC_QBUF` requeue after each dequeued frame
+    - internal timestamps use monotonic `steady_clock`
   - returns explicit/actionable errors for open/querycap/capability/close
     failures.
 

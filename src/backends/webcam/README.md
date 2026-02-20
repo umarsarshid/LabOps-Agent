@@ -13,8 +13,10 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
   - opens a selected device index, attempts requested width/height/fps/fourcc,
     and captures requested-vs-actual readback in `dump_config()`.
   - on Linux, performs a native V4L2 mmap streaming probe
-    (`REQBUFS/QUERYBUF/mmap/QBUF/STREAMON`) before handing off to OpenCV so
-    bundle evidence can confirm stream start readiness.
+    (`REQBUFS/QUERYBUF/mmap/QBUF/STREAMON`) and now uses that path as the
+    primary frame acquisition loop when available.
+  - Linux native frame loop uses `poll + DQBUF + QBUF`, classifying
+    timeout/incomplete/received outcomes with monotonic capture timestamps.
   - emits frame samples as `received`, `timeout`, or `incomplete` outcomes
     using a wall-clock pull budget.
 - `webcam_factory.hpp/.cpp`:

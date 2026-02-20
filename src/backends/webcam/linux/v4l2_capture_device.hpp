@@ -1,11 +1,14 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
 #include <vector>
+
+struct pollfd;
 
 namespace labops::backends::webcam {
 
@@ -61,6 +64,23 @@ struct V4l2StreamStartInfo {
   std::size_t buffer_count = 0U;
 };
 
+enum class V4l2FrameOutcome {
+  kReceived = 0,
+  kTimeout,
+  kIncomplete,
+};
+
+// One normalized frame outcome from Linux native capture.
+//
+// Timestamps are monotonic (`steady_clock`) so frame cadence logic is immune
+// to wall-clock jumps. Callers can map to wall clock via CaptureClock.
+struct V4l2FrameSample {
+  std::uint64_t frame_id = 0U;
+  std::chrono::steady_clock::time_point captured_at_steady{};
+  std::uint32_t size_bytes = 0U;
+  V4l2FrameOutcome outcome = V4l2FrameOutcome::kReceived;
+};
+
 // Thin Linux V4L2 open/close helper used by webcam backend initialization.
 //
 // Why this exists:
@@ -73,10 +93,12 @@ public:
     std::function<int(const char* path, int flags)> open_fn;
     std::function<int(int fd)> close_fn;
     std::function<int(int fd, unsigned long request, void* arg)> ioctl_fn;
+    std::function<int(struct ::pollfd* fds, unsigned long nfds, int timeout_ms)> poll_fn;
     std::function<void*(void* addr, std::size_t length, int prot, int flags, int fd,
                         std::int64_t offset)>
         mmap_fn;
     std::function<int(void* addr, std::size_t length)> munmap_fn;
+    std::function<std::chrono::steady_clock::time_point()> steady_now_fn;
   };
 
   static IoOps DefaultIoOps();
@@ -93,6 +115,8 @@ public:
                                       std::string& error);
   bool StartMmapStreaming(std::size_t requested_buffer_count, V4l2StreamStartInfo& stream_info,
                           std::string& error);
+  bool PullFrames(std::chrono::milliseconds duration, std::uint64_t& next_frame_id,
+                  std::vector<V4l2FrameSample>& frames, std::string& error);
   bool StopStreaming(std::string& error);
 
   bool IsOpen() const;

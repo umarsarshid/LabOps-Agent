@@ -1,5 +1,6 @@
 #include "backends/webcam/linux/v4l2_capture_device.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cerrno>
@@ -16,6 +17,7 @@
 #if defined(__linux__)
 #include <fcntl.h>
 #include <linux/videodev2.h>
+#include <poll.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -124,11 +126,15 @@ V4l2CaptureDevice::IoOps V4l2CaptureDevice::DefaultIoOps() {
   ops.ioctl_fn = [](const int fd, const unsigned long request, void* arg) {
     return ::ioctl(fd, request, arg);
   };
+  ops.poll_fn = [](struct ::pollfd* fds, const unsigned long nfds, const int timeout_ms) {
+    return ::poll(fds, static_cast<nfds_t>(nfds), timeout_ms);
+  };
   ops.mmap_fn = [](void* addr, const std::size_t length, const int prot, const int flags,
                    const int fd, const std::int64_t offset) -> void* {
     return ::mmap(addr, length, prot, flags, fd, static_cast<off_t>(offset));
   };
   ops.munmap_fn = [](void* addr, const std::size_t length) { return ::munmap(addr, length); };
+  ops.steady_now_fn = [] { return std::chrono::steady_clock::now(); };
 #else
   ops.open_fn = [](const char* /*path*/, const int /*flags*/) {
     errno = ENOSYS;
@@ -142,6 +148,11 @@ V4l2CaptureDevice::IoOps V4l2CaptureDevice::DefaultIoOps() {
     errno = ENOSYS;
     return -1;
   };
+  ops.poll_fn = [](struct ::pollfd* /*fds*/, const unsigned long /*nfds*/,
+                   const int /*timeout_ms*/) {
+    errno = ENOSYS;
+    return -1;
+  };
   ops.mmap_fn = [](void* /*addr*/, const std::size_t /*length*/, const int /*prot*/,
                    const int /*flags*/, const int /*fd*/, const std::int64_t /*offset*/) -> void* {
     errno = ENOSYS;
@@ -151,6 +162,7 @@ V4l2CaptureDevice::IoOps V4l2CaptureDevice::DefaultIoOps() {
     errno = ENOSYS;
     return -1;
   };
+  ops.steady_now_fn = [] { return std::chrono::steady_clock::now(); };
 #endif
   return ops;
 }
@@ -640,6 +652,140 @@ bool V4l2CaptureDevice::StartMmapStreaming(const std::size_t requested_buffer_co
   streaming_ = true;
   stream_info.buffer_type = buffer_type_;
   stream_info.buffer_count = mmap_buffers_.size();
+  return true;
+#endif
+}
+
+bool V4l2CaptureDevice::PullFrames(std::chrono::milliseconds duration, std::uint64_t& next_frame_id,
+                                   std::vector<V4l2FrameSample>& frames, std::string& error) {
+  error.clear();
+  frames.clear();
+
+  if (duration < std::chrono::milliseconds::zero()) {
+    error = "pull_frames duration cannot be negative";
+    return false;
+  }
+  if (duration == std::chrono::milliseconds::zero()) {
+    return true;
+  }
+
+  if (!IsOpen()) {
+    error = "device must be open before pull_frames";
+    return false;
+  }
+  if (!streaming_) {
+    error = "device must be streaming before pull_frames";
+    return false;
+  }
+
+#if !defined(__linux__)
+  (void)next_frame_id;
+  error = "V4L2 capture is only supported on Linux";
+  return false;
+#else
+  if (!io_ops_.poll_fn) {
+    error = "V4L2 poll operation is not configured";
+    return false;
+  }
+
+  const auto now_steady = [&]() {
+    if (io_ops_.steady_now_fn) {
+      return io_ops_.steady_now_fn();
+    }
+    return std::chrono::steady_clock::now();
+  };
+
+  constexpr std::chrono::milliseconds kPollBudget(200);
+  const auto deadline = now_steady() + duration;
+
+  while (now_steady() < deadline) {
+    const auto remaining =
+        std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now_steady());
+    const auto timeout_budget = std::max<std::chrono::milliseconds>(
+        std::chrono::milliseconds(1), std::min(kPollBudget, remaining));
+    const int timeout_ms = timeout_budget.count() > static_cast<decltype(timeout_budget.count())>(
+                                                        std::numeric_limits<int>::max())
+                               ? std::numeric_limits<int>::max()
+                               : static_cast<int>(timeout_budget.count());
+
+    struct pollfd pfd{};
+    pfd.fd = fd_;
+    pfd.events = POLLIN | POLLPRI | POLLERR;
+    const int poll_status = io_ops_.poll_fn(&pfd, 1U, timeout_ms);
+    const auto outcome_ts = now_steady();
+
+    if (poll_status == 0) {
+      frames.push_back(V4l2FrameSample{
+          .frame_id = next_frame_id++,
+          .captured_at_steady = outcome_ts,
+          .size_bytes = 0U,
+          .outcome = V4l2FrameOutcome::kTimeout,
+      });
+      continue;
+    }
+
+    if (poll_status < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      error = "poll failed while waiting for frame data: " + std::string(std::strerror(errno));
+      return false;
+    }
+
+    v4l2_buffer dequeue{};
+    dequeue.type = buffer_type_;
+    dequeue.memory = V4L2_MEMORY_MMAP;
+    std::array<v4l2_plane, 8U> dequeue_planes{};
+    if (buffer_type_ == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+      dequeue.m.planes = dequeue_planes.data();
+      dequeue.length = static_cast<decltype(dequeue.length)>(dequeue_planes.size());
+    }
+
+    if (IoctlRetry(fd_, VIDIOC_DQBUF, &dequeue) != 0) {
+      if (errno == EAGAIN) {
+        frames.push_back(V4l2FrameSample{
+            .frame_id = next_frame_id++,
+            .captured_at_steady = outcome_ts,
+            .size_bytes = 0U,
+            .outcome = V4l2FrameOutcome::kTimeout,
+        });
+        continue;
+      }
+      error = "VIDIOC_DQBUF failed: " + std::string(std::strerror(errno));
+      return false;
+    }
+
+    std::uint32_t bytes_used = 0U;
+    if (buffer_type_ == V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+      bytes_used = dequeue.bytesused;
+    } else if (dequeue.length > 0U && dequeue.m.planes != nullptr) {
+      bytes_used = dequeue.m.planes[0].bytesused;
+    }
+
+    const bool flagged_error = (dequeue.flags & V4L2_BUF_FLAG_ERROR) != 0U;
+    const bool incomplete = flagged_error || bytes_used == 0U;
+    frames.push_back(V4l2FrameSample{
+        .frame_id = next_frame_id++,
+        .captured_at_steady = outcome_ts,
+        .size_bytes = bytes_used,
+        .outcome = incomplete ? V4l2FrameOutcome::kIncomplete : V4l2FrameOutcome::kReceived,
+    });
+
+    v4l2_buffer requeue{};
+    requeue.type = buffer_type_;
+    requeue.memory = V4L2_MEMORY_MMAP;
+    requeue.index = dequeue.index;
+    std::array<v4l2_plane, 8U> requeue_planes{};
+    if (buffer_type_ == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+      requeue.m.planes = requeue_planes.data();
+      requeue.length = dequeue.length;
+    }
+    if (IoctlRetry(fd_, VIDIOC_QBUF, &requeue) != 0) {
+      error = "VIDIOC_QBUF failed while requeueing buffer: " + std::string(std::strerror(errno));
+      return false;
+    }
+  }
+
   return true;
 #endif
 }

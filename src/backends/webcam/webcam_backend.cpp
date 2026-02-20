@@ -141,6 +141,7 @@ void WebcamBackend::ClearSessionConfigSnapshot() {
   adjusted_controls_.clear();
   readback_rows_.clear();
   linux_native_config_applied_ = false;
+  linux_native_capture_selected_ = false;
   RemoveKeysWithPrefix("webcam.actual_", params_);
   RemoveKeysWithPrefix("webcam.adjusted.", params_);
   RemoveKeysWithPrefix("webcam.readback.", params_);
@@ -185,7 +186,7 @@ bool WebcamBackend::ResolveDeviceIndex(std::size_t& index, std::string& error) c
 bool WebcamBackend::ApplyRequestedConfig(std::string& error) {
   error.clear();
 
-  if (linux_native_config_applied_) {
+  if (linux_native_capture_selected_ && linux_native_config_applied_) {
     return true;
   }
 
@@ -383,6 +384,10 @@ bool WebcamBackend::Connect(std::string& error) {
     return false;
   }
   ClearSessionConfigSnapshot();
+  capture_clock_.ResetToNow();
+
+  std::string close_error;
+  (void)opencv_.CloseDevice(close_error);
 
 #if defined(__linux__)
   const std::string native_device_path = "/dev/video" + std::to_string(device_index);
@@ -401,34 +406,24 @@ bool WebcamBackend::Connect(std::string& error) {
     }
 
     if (native_open_info.capture_method == V4l2CaptureMethod::kMmapStreaming) {
-      V4l2StreamStartInfo stream_start_info;
-      if (linux_capture_probe_.StartMmapStreaming(/*requested_buffer_count=*/4U, stream_start_info,
-                                                  native_probe_error)) {
-        params_["webcam.linux_capture.stream_start"] = "ok";
-        params_["webcam.linux_capture.stream_buffer_count"] =
-            std::to_string(stream_start_info.buffer_count);
-        params_["webcam.linux_capture.stream_buffer_type"] =
-            std::to_string(stream_start_info.buffer_type);
-
-        std::string native_stream_stop_error;
-        if (!linux_capture_probe_.StopStreaming(native_stream_stop_error)) {
-          error = "failed to stop Linux V4L2 streaming probe: " + native_stream_stop_error;
-          return false;
-        }
-      } else {
-        params_["webcam.linux_capture.stream_start_error"] = native_probe_error;
-      }
-    } else {
-      params_["webcam.linux_capture.stream_start"] = "skipped";
-      params_["webcam.linux_capture.stream_start_reason"] =
-          "mmap streaming unavailable for selected capture method";
+      params_["webcam.linux_capture.stream_start"] = "deferred_until_start";
+      linux_native_capture_selected_ = true;
+      connected_ = true;
+      next_frame_id_ = 0;
+      params_["device.opened_index"] = std::to_string(device_index);
+      return true;
     }
+
+    params_["webcam.linux_capture.stream_start"] = "skipped";
+    params_["webcam.linux_capture.stream_start_reason"] =
+        "mmap streaming unavailable for selected capture method";
 
     std::string native_close_error;
     if (!linux_capture_probe_.Close(native_close_error)) {
       error = "failed to close Linux V4L2 probe device: " + native_close_error;
       return false;
     }
+    linux_native_config_applied_ = false;
   } else {
     // Keep probe errors as evidence but do not fail OpenCV bootstrap path yet.
     params_["webcam.linux_capture.path"] = native_device_path;
@@ -466,6 +461,24 @@ bool WebcamBackend::Start(std::string& error) {
     error = BuildNotAvailableError();
     return false;
   }
+
+  if (linux_native_capture_selected_) {
+    V4l2StreamStartInfo stream_start_info;
+    if (!linux_capture_probe_.StartMmapStreaming(/*requested_buffer_count=*/4U, stream_start_info,
+                                                 error)) {
+      params_["webcam.linux_capture.stream_start_error"] = error;
+      return false;
+    }
+    params_["webcam.linux_capture.stream_start"] = "ok";
+    params_["webcam.linux_capture.stream_buffer_count"] =
+        std::to_string(stream_start_info.buffer_count);
+    params_["webcam.linux_capture.stream_buffer_type"] =
+        std::to_string(stream_start_info.buffer_type);
+    capture_clock_.ResetToNow();
+    running_ = true;
+    return true;
+  }
+
   if (!opencv_.IsDeviceOpen()) {
     error = "webcam backend has no open capture session";
     return false;
@@ -480,6 +493,21 @@ bool WebcamBackend::Stop(std::string& error) {
   if (!running_) {
     error = "webcam backend is not running";
     return false;
+  }
+
+  if (linux_native_capture_selected_) {
+    if (!linux_capture_probe_.StopStreaming(error)) {
+      return false;
+    }
+    std::string close_error;
+    if (!linux_capture_probe_.Close(close_error)) {
+      error = "failed to close Linux V4L2 device: " + close_error;
+      return false;
+    }
+    running_ = false;
+    connected_ = false;
+    linux_native_capture_selected_ = false;
+    return true;
   }
 
   running_ = false;
@@ -598,6 +626,7 @@ BackendConfig WebcamBackend::DumpConfig() const {
 
 std::vector<FrameSample> WebcamBackend::PullFrames(std::chrono::milliseconds duration,
                                                    std::string& error) {
+  error.clear();
   if (duration < std::chrono::milliseconds::zero()) {
     error = "pull_frames duration cannot be negative";
     return {};
@@ -609,6 +638,39 @@ std::vector<FrameSample> WebcamBackend::PullFrames(std::chrono::milliseconds dur
   if (!running_) {
     error = "webcam backend must be running before pull_frames";
     return {};
+  }
+
+  if (linux_native_capture_selected_) {
+    std::vector<V4l2FrameSample> native_frames;
+    if (!linux_capture_probe_.PullFrames(duration, next_frame_id_, native_frames, error)) {
+      return {};
+    }
+
+    std::vector<FrameSample> frames;
+    frames.reserve(native_frames.size());
+    for (const V4l2FrameSample& native : native_frames) {
+      FrameSample sample;
+      sample.frame_id = native.frame_id;
+      sample.timestamp = capture_clock_.ToWallTime(native.captured_at_steady);
+      sample.size_bytes = native.size_bytes;
+      switch (native.outcome) {
+      case V4l2FrameOutcome::kTimeout:
+        sample.outcome = FrameOutcome::kTimeout;
+        sample.dropped = true;
+        break;
+      case V4l2FrameOutcome::kIncomplete:
+        sample.outcome = FrameOutcome::kIncomplete;
+        sample.dropped = true;
+        break;
+      case V4l2FrameOutcome::kReceived:
+      default:
+        sample.outcome = FrameOutcome::kReceived;
+        sample.dropped = false;
+        break;
+      }
+      frames.push_back(sample);
+    }
+    return frames;
   }
 
   std::vector<FrameSample> frames = opencv_.PullFrames(duration, next_frame_id_, error);

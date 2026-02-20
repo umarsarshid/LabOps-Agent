@@ -1,6 +1,7 @@
 #pragma once
 
 #include "backends/camera_backend.hpp"
+#include "backends/webcam/capture_clock.hpp"
 #include "backends/webcam/linux/v4l2_capture_device.hpp"
 #include "backends/webcam/opencv_webcam_impl.hpp"
 #include "backends/webcam/platform_probe.hpp"
@@ -79,12 +80,14 @@ private:
   // evidence (mmap preferred, read fallback) before OpenCV bootstrap opens.
   V4l2CaptureDevice linux_capture_probe_;
   OpenCvWebcamImpl opencv_;
+  CaptureClock capture_clock_;
   BackendConfig params_;
   RequestedConfig requested_;
   std::vector<UnsupportedControl> unsupported_controls_;
   std::vector<AdjustedControl> adjusted_controls_;
   std::vector<ReadbackRow> readback_rows_;
   bool linux_native_config_applied_ = false;
+  bool linux_native_capture_selected_ = false;
   bool connected_ = false;
   bool running_ = false;
   std::uint64_t next_frame_id_ = 0;

@@ -1,123 +1,112 @@
 # LabOps Summary
 
-## Commit: feat(webcam/linux): add V4L2 mmap streaming bootstrap
+## Commit: feat(webcam/linux): add poll+dqbuf+requeue frame acquisition
 
 Date: 2026-02-20
 
 ### Goal
-Implement milestone `0113` by adding Linux-native V4L2 mmap streaming startup lifecycle:
-- `VIDIOC_REQBUFS`
-- `VIDIOC_QUERYBUF`
-- `mmap`
-- `VIDIOC_QBUF`
-- `VIDIOC_STREAMON`
+Implement milestone `0114` for Linux webcam streaming:
+- frame acquisition loop using `poll()` + `VIDIOC_DQBUF` + `VIDIOC_QBUF`
+- timeout classification (`FRAME_TIMEOUT`)
+- dequeue validation for incomplete payloads (`FRAME_INCOMPLETE`)
+- monotonic internal frame timestamps
+- clean stream shutdown after runs
 
 Done criteria:
-- native mmap stream startup path exists and is test-covered
-- startup/teardown errors are explicit and actionable
-- webcam backend captures Linux stream-start evidence during connect
+- 10s webcam run can produce frame events and metrics using Linux native mmap path
+- timeout/received/incomplete outcomes flow through existing event and metric pipelines
+- streaming teardown remains clean and deterministic
 
 ### What was implemented
 
-1. Added mmap streaming lifecycle API to Linux V4L2 capture helper
+1. Added Linux native frame pull API to V4L2 capture helper
 - Updated: `src/backends/webcam/linux/v4l2_capture_device.hpp`
 - Updated: `src/backends/webcam/linux/v4l2_capture_device.cpp`
 
 New contracts:
-- `V4l2StreamStartInfo`
-- `StartMmapStreaming(requested_buffer_count, stream_info, error)`
-- `StopStreaming(error)`
-- `IsStreaming()`
+- `V4l2FrameOutcome` (`kReceived`, `kTimeout`, `kIncomplete`)
+- `V4l2FrameSample` (includes monotonic `captured_at_steady`)
+- `PullFrames(duration, next_frame_id, frames, error)`
 
-New internal state:
-- mapped buffer table (`address`, `length`)
-- buffer-allocation state flag
-- streaming state flag
-
-Why:
-- open/query capability checks are not enough for real capture readiness.
-- this adds the real kernel handshake for streaming so Linux webcam readiness is proven, not assumed.
-
-2. Extended IO abstraction to support mmap/munmap in production and tests
-- Updated: `V4l2CaptureDevice::IoOps`
-  - added `mmap_fn`
-  - added `munmap_fn`
-- default Linux IO ops now bind to:
-  - `::mmap`
-  - `::munmap`
+Behavior:
+- requires open + active streaming session
+- uses bounded `poll()` timeout budget per iteration
+- on `poll` timeout emits timeout sample
+- on dequeue:
+  - checks `bytesused`
+  - checks `V4L2_BUF_FLAG_ERROR`
+  - classifies as received vs incomplete
+- always requeues dequeued buffers via `VIDIOC_QBUF`
+- keeps frame timestamps in monotonic `steady_clock`
 
 Why:
-- keeps Linux runtime behavior and no-hardware tests aligned.
-- allows deterministic mmap lifecycle testing in CI without real webcams.
+- this is the core real-time acquisition loop needed for Linux webcam runs.
+- timeout and incomplete must be separated because engineers triage them differently.
+- monotonic timing prevents wall-clock jumps from corrupting frame timing behavior.
 
-3. Implemented robust startup and cleanup behavior
-- `StartMmapStreaming(...)` now:
-  - validates device is open and method is `mmap_streaming`
-  - requests buffers via `VIDIOC_REQBUFS`
-  - queries each buffer via `VIDIOC_QUERYBUF`
-  - maps each buffer via `mmap`
-  - queues each buffer via `VIDIOC_QBUF`
-  - starts stream via `VIDIOC_STREAMON`
-- `StopStreaming(...)` now:
-  - stops stream via `VIDIOC_STREAMOFF` when active
-  - unmaps buffers via `munmap`
-  - releases kernel buffers via `VIDIOC_REQBUFS(count=0)`
-- `Close(...)` now enforces stream cleanup before FD close.
+2. Extended V4L2 IO abstraction for deterministic acquisition testing
+- `IoOps` now includes:
+  - `poll_fn`
+  - `steady_now_fn`
 
 Why:
-- avoids leaked mappings/buffers and keeps repeated runs stable.
-- makes failure modes actionable (`REQBUFS`, `QUERYBUF`, `QBUF`, `STREAMON`, `STREAMOFF`, `munmap` each report clear context).
+- enables deterministic no-hardware tests for timeout/dequeue behavior without relying on actual device timing.
 
-4. Wired Linux mmap stream-start probe evidence into webcam backend connect flow
+3. Wired Linux native capture as primary webcam run path when mmap is available
+- Updated: `src/backends/webcam/webcam_backend.hpp`
 - Updated: `src/backends/webcam/webcam_backend.cpp`
 
-Behavior on Linux during connect:
-- after native open + best-effort format apply, backend now tries mmap stream bootstrap probe.
-- on success records:
-  - `webcam.linux_capture.stream_start=ok`
-  - `webcam.linux_capture.stream_buffer_count`
-  - `webcam.linux_capture.stream_buffer_type`
-- on non-mmap devices records explicit skip reason.
-- on start failure records explicit `stream_start_error` evidence (best-effort, non-fatal to OpenCV bootstrap flow).
+Behavior changes:
+- during `Connect` on Linux:
+  - if V4L2 mmap path is available, backend selects native capture path
+  - requested format/readback evidence is still recorded
+  - stream startup is deferred to `Start`
+- during `Start` on Linux native path:
+  - starts mmap streaming and records stream evidence
+- during `PullFrames` on Linux native path:
+  - calls V4L2 native pull loop
+  - converts monotonic timestamps to wall timestamps through `CaptureClock`
+  - maps native outcomes to shared backend outcomes:
+    - `kTimeout` -> `FrameOutcome::kTimeout`
+    - `kIncomplete` -> `FrameOutcome::kIncomplete`
+    - `kReceived` -> `FrameOutcome::kReceived`
+- during `Stop` on Linux native path:
+  - stops streaming then closes native V4L2 device cleanly
 
 Why:
-- surfaces real Linux stream-readiness evidence in bundle/config diagnostics.
-- keeps current OpenCV bootstrap path working while native Linux path is built incrementally.
+- this allows real Linux webcam runs to flow through existing event/metrics pipeline without shelling to OpenCV read loop when native mmap is available.
 
-5. Added deterministic no-hardware streaming smoke coverage
+4. Added deterministic smoke tests for new frame acquisition behavior
 - Updated: `tests/backends/webcam_linux_v4l2_capture_device_smoke.cpp`
 
-Added test harness support for:
-- `VIDIOC_REQBUFS`
-- `VIDIOC_QUERYBUF`
-- `VIDIOC_QBUF`
-- `VIDIOC_STREAMON`
-- `VIDIOC_STREAMOFF`
-- fake `mmap`/`munmap`
+New test coverage:
+- `TestPullFramesClassifiesTimeoutReceivedIncomplete`
+  - validates timeout + received + incomplete classification in one run
+  - validates frame-id progression and monotonic steady timestamps
+- `TestPullFramesDqbufFailureIsActionable`
+  - validates actionable error on dequeue failure
 
-New tests:
-- `TestMmapStreamingStartStop`
-  - validates full startup and teardown call sequence/counters
-- `TestMmapStreamingFailureIsActionable`
-  - validates actionable error when `REQBUFS` fails
-- `TestMmapStreamingRejectsReadFallbackDevices`
-  - validates mmap start is rejected when device is read-fallback only
+Test harness enhancements:
+- fake `poll` sequence planner
+- fake `VIDIOC_DQBUF` scripted results (`bytes_used`, `flags`)
+- deterministic monotonic clock override via `steady_now_fn`
 
 Why:
-- protects the exact stream startup contract in CI without camera dependencies.
+- protects the exact acquisition contract in CI without camera hardware.
 
-6. Updated module docs to reflect new Linux streaming bootstrap stage
+5. Updated module docs for Linux acquisition lifecycle
 - Updated:
   - `src/backends/webcam/linux/README.md`
   - `src/backends/webcam/README.md`
   - `tests/backends/README.md`
 
 Why:
-- keeps contributor handoff docs aligned with real implementation.
+- keeps handoff docs aligned with current implementation and expected behavior.
 
 ### Files changed
 - `src/backends/webcam/linux/v4l2_capture_device.hpp`
 - `src/backends/webcam/linux/v4l2_capture_device.cpp`
+- `src/backends/webcam/webcam_backend.hpp`
 - `src/backends/webcam/webcam_backend.cpp`
 - `tests/backends/webcam_linux_v4l2_capture_device_smoke.cpp`
 - `src/backends/webcam/linux/README.md`
@@ -145,4 +134,4 @@ Why:
 - Result: passed (`81/81`)
 
 ### Outcome
-Linux webcam backend now includes real mmap streaming bootstrap lifecycle with explicit evidence and deterministic CI coverage, which materially improves confidence that streaming can actually start on Linux before the full native frame acquisition loop is introduced.
+Linux webcam backend now has a real native frame acquisition loop (`poll + DQBUF + QBUF`) with explicit timeout/incomplete classification and monotonic internal timing, fully wired into existing event/metrics/report flow with deterministic test coverage and clean shutdown behavior.
