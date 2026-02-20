@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "manual_webcam_linux_smoke",
+  "description": "Developer-only Linux webcam smoke scenario for quick V4L2 bring-up verification.",
+  "backend": "webcam",
+  "apply_mode": "best_effort",
+  "duration": {
+    "duration_ms": 5000
+  },
+  "camera": {
+    "fps": 30,
+    "trigger_mode": "free_run"
+  },
+  "webcam": {
+    "device_selector": {
+      "index": 0
+    },
+    "requested_width": 1280,
+    "requested_height": 720,
+    "requested_fps": 30.0,
+    "requested_pixel_format": "MJPG"
+  },
+  "thresholds": {
+    "min_avg_fps": 1.0,
+    "max_drop_rate_percent": 100.0,
+    "max_disconnect_count": 0
+  }
+}

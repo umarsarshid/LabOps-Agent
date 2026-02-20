@@ -1,98 +1,80 @@
-# feat(cli): harden camera run lifecycle
+# test(webcam/linux): add manual smoke target
 
 ## Why this change
-A camera can stay open when a run is interrupted or when another process already has the device. That creates confusing follow-up failures (`device busy`, missing artifacts, wedged sessions). This change improves safety and operator guidance without changing output contracts.
+Developers need a one-command check to confirm a Linux machine can run the native webcam path end-to-end (connect, stream, write bundle) without relying on CI.
 
 ## What was implemented
 
-### 1) Multi-signal interruption handling in run flow
-Files:
-- `src/labops/cli/router.cpp`
-
-Changes:
-- Extended scoped signal handling from only `SIGINT` to:
-  - `SIGINT`
-  - `SIGTERM`
-  - `SIGHUP` (when available)
-- Recorded the triggering signal number in shared run state.
-- Updated interrupt messaging/logging to report the specific signal name (`SIGINT` / `SIGTERM` / `SIGHUP`).
-
-Why:
-- Runs now clean up consistently when stopped by terminal close, service stop, or normal Ctrl+C.
-
-### 2) Single-run lock for camera-oriented runs
-Files:
-- `src/labops/cli/router.cpp`
-- `tests/labops/run_single_process_lock_smoke.cpp` (new)
+### 1) Added Linux manual webcam smoke target in CMake
+File:
 - `CMakeLists.txt`
 
 Changes:
-- Added `ScopedSingleRunLock` with lock file at `tmp/labops.lock`.
-- Lock behavior:
-  - detects active PID lock and fails fast with actionable message,
-  - removes stale lock files safely,
-  - writes current PID on acquire,
-  - auto-releases lock on teardown.
-- Enabled lock acquisition in run preparation for camera backends (`webcam`, and real-enabled stub path).
-- Added smoke test `run_single_process_lock_smoke` verifying fail-fast lock enforcement.
-- Registered new smoke test target in CMake.
+- Added a new developer-only custom build target:
+  - `webcam_linux_smoke_manual`
+- Linux behavior:
+  - creates output root `tmp/manual_webcam_linux_smoke`
+  - runs:
+    - `labops run tests/manual/webcam_linux_smoke_scenario.json --out tmp/manual_webcam_linux_smoke`
+- Non-Linux behavior:
+  - target still exists, but prints a clear Linux-only message and exits cleanly.
 
 Why:
-- Prevents accidental concurrent runs that can leave camera devices busy and hard to diagnose.
+- Gives Linux developers one command for lab bring-up.
+- Keeps cross-platform developer experience clean (no missing target confusion).
+- Stays out of CI because it is a custom target, not a `ctest` test.
 
-### 3) Better webcam recovery hints on connect/selector failures
-Files:
-- `src/labops/cli/router.cpp`
+### 2) Added dedicated Linux webcam manual scenario fixture
+File:
+- `tests/manual/webcam_linux_smoke_scenario.json`
 
 Changes:
-- Added string-token based recovery hint generator for common webcam failure text (permission/busy/discovery patterns).
-- Emits platform-aware quick help, e.g.:
-  - macOS: `lsof -nP | rg -i "camera|avfoundation|coremediaio|labops"`
-  - Linux: `lsof /dev/video*`
-- Hooked hints into webcam selector resolution/connect/start failure paths.
+- New 5-second webcam scenario with:
+  - `backend: "webcam"`
+  - `apply_mode: "best_effort"`
+  - webcam selector `index: 0`
+  - requested format hints (`1280x720`, `30 fps`, `MJPG`)
+  - permissive thresholds for bring-up diagnostics.
 
 Why:
-- Engineers get immediate next steps instead of generic failure output.
+- Provides a stable, checked-in fixture for manual Linux validation.
+- Avoids ad-hoc local JSON files when onboarding or troubleshooting.
 
-### 4) Documentation updates
+### 3) Updated manual testing docs
 Files:
-- `src/labops/cli/README.md`
-- `tests/labops/README.md`
+- `tests/manual/README.md`
+- `tests/README.md`
 
 Changes:
-- Documented new lock behavior (`tmp/labops.lock`) for camera runs.
-- Updated interrupt docs to include all supported stop signals.
-- Added smoke test entry for run-lock contract.
+- Documented new Linux webcam manual command.
+- Documented output path:
+  - `tmp/manual_webcam_linux_smoke/<run_id>/`
+- Clarified non-Linux fallback behavior for the target.
 
 Why:
-- Keeps ops and test documentation aligned with runtime behavior.
-
-### 5) Formatting-only collateral update
-Files:
-- `tests/backends/webcam_linux_mock_provider_smoke.cpp`
-
-Changes:
-- `clang-format` normalization only.
-
-Why:
-- Keep style gate green and consistent.
+- Keeps manual workflow discoverable and consistent for future engineers.
 
 ## Verification performed
 
-1. Formatting
+1. Formatting:
 - `bash tools/clang_format.sh --check`
 - Result: passed
 
-2. Build
+2. Build:
 - `cmake --build build`
 - Result: passed
 
-3. Full regression suite
+3. Scenario validation:
+- `./build/labops validate tests/manual/webcam_linux_smoke_scenario.json`
+- Result: `valid: tests/manual/webcam_linux_smoke_scenario.json`
+
+4. Manual target command:
+- `cmake --build build --target webcam_linux_smoke_manual`
+- Result on this non-Linux host: prints Linux-only message and succeeds.
+
+5. Full regression:
 - `ctest --test-dir build --output-on-failure`
 - Result: passed (`83/83`)
 
 ## Outcome
-Camera run lifecycle is safer and easier to operate:
-- interruptions flush and clean up under more real-world stop paths,
-- duplicate concurrent camera runs are blocked deterministically,
-- webcam failure output now includes practical recovery commands.
+A developer can now run one command (`webcam_linux_smoke_manual`) to quickly validate Linux webcam bring-up and produce a normal run bundle, while CI remains hardware-independent.

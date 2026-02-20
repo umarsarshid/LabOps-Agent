@@ -57,6 +57,16 @@ This performs one 5-second real-backend run and writes artifacts to:
 
 - `tmp/manual_real_camera_smoke/<run_id>/`
 
+When validating Linux native webcam bring-up (V4L2 path), run:
+
+```bash
+cmake --build build --target webcam_linux_smoke_manual
+```
+
+This performs one 5-second webcam run and writes artifacts to:
+
+- `tmp/manual_webcam_linux_smoke/<run_id>/`
+
 ## Connection to the project
 
 Without test coverage, confidence in automated triage conclusions drops quickly. This folder safeguards reliability as the system scales.

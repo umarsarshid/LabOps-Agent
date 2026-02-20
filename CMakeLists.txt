@@ -1213,6 +1213,30 @@ add_custom_target(real_camera_smoke_manual
   COMMENT "Manual real camera smoke run (connect -> stream 5s -> dump config -> exit)"
 )
 
+# Manual (non-CTEST) Linux webcam smoke target for fast local hardware checks.
+# This is Linux-only because it validates the native V4L2 webcam path.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_custom_target(webcam_linux_smoke_manual
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/tmp/manual_webcam_linux_smoke"
+    COMMAND
+      ${CMAKE_COMMAND} -E chdir "${CMAKE_SOURCE_DIR}"
+      "$<TARGET_FILE:labops>"
+      run
+      "tests/manual/webcam_linux_smoke_scenario.json"
+      --out
+      "tmp/manual_webcam_linux_smoke"
+    DEPENDS labops
+    USES_TERMINAL
+    COMMENT "Manual Linux webcam smoke run (connect -> stream 5s -> emit bundle)"
+  )
+else()
+  add_custom_target(webcam_linux_smoke_manual
+    COMMAND ${CMAKE_COMMAND} -E echo "webcam_linux_smoke_manual is Linux-only and native V4L2 path is unavailable."
+    USES_TERMINAL
+    COMMENT "Linux-only webcam smoke target is unavailable on this platform"
+  )
+endif()
+
 if(LABOPS_ENABLE_CATCH2_TESTS)
   find_package(Catch2 3 QUIET)
 
