@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <map>
 #include <optional>
 #include <string>
@@ -71,6 +72,7 @@ struct WebcamDeviceInfo {
   std::string device_id;
   std::string friendly_name;
   std::optional<std::string> bus_info;
+  std::optional<std::size_t> capture_index;
   SupportedControls supported_controls;
 };
 

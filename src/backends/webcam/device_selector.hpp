@@ -43,7 +43,10 @@ bool ParseWebcamDeviceSelector(std::string_view selector_text, WebcamDeviceSelec
 
 // Enumerates webcam devices from the OSS fixture source:
 // - env var: LABOPS_WEBCAM_DEVICE_FIXTURE (CSV)
-// - CSV columns: device_id,friendly_name[,bus_info]
+// - CSV columns: device_id,friendly_name[,bus_info[,capture_index]]
+//
+// If fixture is not provided, OpenCV bootstrap discovery probes device indices
+// `0..LABOPS_WEBCAM_MAX_PROBE_INDEX` (default 8).
 //
 // This keeps selector behavior testable in CI without requiring attached
 // webcams. Future platform integrations can swap in OS-native enumeration

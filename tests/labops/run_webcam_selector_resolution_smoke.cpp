@@ -184,9 +184,11 @@ int main() {
     if (!fixture_file) {
       Fail("failed to open webcam fixture file");
     }
-    fixture_file << "device_id,friendly_name,bus_info\n";
-    fixture_file << "cam-20,USB Camera 20,usb:2-1\n";
-    fixture_file << "cam-10,USB Camera 10,usb:1-3\n";
+    fixture_file << "device_id,friendly_name,bus_info,capture_index\n";
+    // Use high capture indices to reduce accidental overlap with physical
+    // cameras on developer machines.
+    fixture_file << "cam-20,USB Camera 20,usb:2-1,9999\n";
+    fixture_file << "cam-10,USB Camera 10,usb:1-3,9998\n";
   }
 
   const std::string fixture_path_text = fixture_path.string();
@@ -196,9 +198,12 @@ int main() {
   const int exit_code = DispatchWithCapturedStderr(
       {"labops", "run", scenario_path.string(), "--out", out_dir.string()}, stderr_output);
 
-  if (exit_code !=
-      labops::core::errors::ToInt(labops::core::errors::ExitCode::kBackendConnectFailed)) {
-    Fail("expected backend-connect-failed exit code for webcam run");
+  const int success_exit_code =
+      labops::core::errors::ToInt(labops::core::errors::ExitCode::kSuccess);
+  const int backend_connect_failed_exit_code =
+      labops::core::errors::ToInt(labops::core::errors::ExitCode::kBackendConnectFailed);
+  if (exit_code != success_exit_code && exit_code != backend_connect_failed_exit_code) {
+    Fail("expected webcam run to either succeed or fail with backend-connect-failed");
   }
 
   AssertContains(stderr_output, "msg=\"webcam device selector resolved\"");

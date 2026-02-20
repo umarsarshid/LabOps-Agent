@@ -123,6 +123,7 @@ add_library(labops_backends
   src/backends/webcam/device_model.cpp
   src/backends/webcam/device_selector.cpp
   src/backends/webcam/opencv_bootstrap.cpp
+  src/backends/webcam/opencv_webcam_impl.cpp
   src/backends/webcam/platform_probe.cpp
   src/backends/webcam/webcam_factory.cpp
   src/backends/webcam/linux/platform_probe_linux.cpp

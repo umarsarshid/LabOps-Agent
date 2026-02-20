@@ -607,6 +607,9 @@ void ValidateWebcam(const JsonValue& root, ValidationReport& report) {
       requested_pixel_format != nullptr) {
     if (!IsString(requested_pixel_format) || requested_pixel_format->string_value.empty()) {
       AddIssue(report, "webcam.requested_pixel_format", "must be a non-empty string");
+    } else if (requested_pixel_format->string_value.size() != 4U) {
+      AddIssue(report, "webcam.requested_pixel_format",
+               "must be exactly 4 characters (example: \"MJPG\")");
     }
   }
 

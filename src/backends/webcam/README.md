@@ -9,10 +9,11 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
 ## Current scope
 
 - `webcam_backend.hpp/.cpp`:
-  - implements `ICameraBackend` with stable state transitions and explicit
-    `BACKEND_NOT_AVAILABLE` failures until platform capture loops are added.
-  - preserves requested params in `dump_config()` so early wiring can still be
-    inspected in artifacts/tests.
+  - implements `ICameraBackend` with OpenCV bootstrap capture support.
+  - opens a selected device index, attempts requested width/height/fps/fourcc,
+    and captures requested-vs-actual readback in `dump_config()`.
+  - emits frame samples as `received`, `timeout`, or `incomplete` outcomes
+    using a wall-clock pull budget.
 - `webcam_factory.hpp/.cpp`:
   - centralizes backend registration hooks used by CLI backend routing.
   - reports availability (`compiled`, `available`, `reason`) for
@@ -34,9 +35,12 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
 - `device_selector.hpp/.cpp`:
   - parses webcam selector clauses (`id`, `index`, `name_contains`) with
     actionable errors.
-  - enumerates fixture-driven webcam inventories via
-    `LABOPS_WEBCAM_DEVICE_FIXTURE` so deterministic selector behavior is
-    testable without physical webcams in CI.
+  - enumerates webcam inventories from either:
+    - `LABOPS_WEBCAM_DEVICE_FIXTURE` (deterministic CI/dev path), or
+    - OpenCV index probing (`0..LABOPS_WEBCAM_MAX_PROBE_INDEX`, default `8`)
+      when fixture is not provided.
+  - fixture CSV supports optional `capture_index` so selector tests can target
+    deterministic open indices without depending on real attached hardware.
   - resolves selectors deterministically using stable ordering:
     - `id` exact match
     - otherwise `index`
@@ -51,6 +55,10 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
     records OpenCV version/status in backend config evidence.
   - when disabled or unavailable, provides stable `disabled` status without
     requiring any OpenCV dependency.
+- `opencv_webcam_impl.hpp/.cpp`:
+  - thin OpenCV wrapper behind `WebcamBackend`.
+  - isolates `VideoCapture` open/close, property set/readback, fourcc handling,
+    frame acquisition loop, and index probing logic.
 - `platform_probe.hpp/.cpp`:
   - central dispatcher that picks the current OS probe implementation.
 - `linux/`, `macos/`, `windows/`:
@@ -61,11 +69,10 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
 
 ## Connection to the project
 
-This module is intentionally non-operational for frame streaming right now, but
-it already provides deterministic webcam selection and identity reporting. That
-lets teams validate end-to-end run orchestration and evidence contracts before
-platform capture loops (Linux V4L2 / macOS AVFoundation / Windows Media
-Foundation) are wired in.
+This module is now operational through an OpenCV bootstrap path. It lets teams
+run real local webcam streams through the same LabOps run pipeline (events,
+metrics, bundles, summaries) while preserving fixture-driven deterministic
+selector behavior for CI and no-hardware environments.
 
 ## Build flag notes
 

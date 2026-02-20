@@ -123,6 +123,12 @@ std::string ToJson(const WebcamDeviceInfo& device) {
   } else {
     out << "null";
   }
+  out << ",\"capture_index\":";
+  if (device.capture_index.has_value()) {
+    out << device.capture_index.value();
+  } else {
+    out << "null";
+  }
   out << ",\"supported_controls\":" << ToJson(device.supported_controls) << '}';
   return out.str();
 }

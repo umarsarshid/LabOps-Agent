@@ -1,4 +1,5 @@
 #include "backends/webcam/device_selector.hpp"
+#include "backends/webcam/opencv_webcam_impl.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -19,6 +20,7 @@ struct FixtureRow {
   std::string device_id;
   std::string friendly_name;
   std::string bus_info;
+  std::optional<std::size_t> capture_index;
 };
 
 std::string Trim(std::string_view input) {
@@ -87,6 +89,20 @@ bool ParseNonNegativeIndex(std::string_view raw, std::size_t& parsed_index) {
   return true;
 }
 
+std::size_t ResolveProbeLimit() {
+  constexpr std::size_t kDefaultProbeLimit = 8;
+  const char* env = std::getenv("LABOPS_WEBCAM_MAX_PROBE_INDEX");
+  if (env == nullptr || *env == '\0') {
+    return kDefaultProbeLimit;
+  }
+
+  std::size_t parsed = 0;
+  if (!ParseNonNegativeIndex(env, parsed)) {
+    return kDefaultProbeLimit;
+  }
+  return parsed;
+}
+
 bool ParseFixtureRow(const std::string& line, std::size_t line_number, FixtureRow& row,
                      std::string& error) {
   const std::vector<std::string> fields = SplitSimpleCsvLine(line);
@@ -98,6 +114,19 @@ bool ParseFixtureRow(const std::string& line, std::size_t line_number, FixtureRo
   row.device_id = fields[0];
   row.friendly_name = fields[1];
   row.bus_info = fields.size() >= 3U ? fields[2] : "";
+  row.capture_index.reset();
+  if (ToLower(row.device_id) == "device_id" && ToLower(row.friendly_name) == "friendly_name") {
+    return true;
+  }
+  if (fields.size() >= 4U && !fields[3].empty()) {
+    std::size_t parsed_index = 0;
+    if (!ParseNonNegativeIndex(fields[3], parsed_index)) {
+      error = "webcam fixture parse error at line " + std::to_string(line_number) +
+              ": capture_index must be a non-negative integer";
+      return false;
+    }
+    row.capture_index = parsed_index;
+  }
   return true;
 }
 
@@ -117,6 +146,10 @@ bool ContainsCaseInsensitive(std::string_view haystack, std::string_view needle)
 void StableSortDevices(std::vector<WebcamDeviceInfo>& devices) {
   std::sort(devices.begin(), devices.end(),
             [](const WebcamDeviceInfo& left, const WebcamDeviceInfo& right) {
+              if (left.capture_index.has_value() && right.capture_index.has_value() &&
+                  left.capture_index.value() != right.capture_index.value()) {
+                return left.capture_index.value() < right.capture_index.value();
+              }
               if (left.device_id != right.device_id) {
                 return left.device_id < right.device_id;
               }
@@ -135,6 +168,16 @@ WebcamDeviceInfo MapFixtureRowToDevice(const FixtureRow& row) {
   if (!bus_info.empty()) {
     device.bus_info = bus_info;
   }
+  device.capture_index = row.capture_index;
+  return device;
+}
+
+WebcamDeviceInfo MakeOpenCvDiscoveredDevice(const std::size_t index) {
+  WebcamDeviceInfo device;
+  device.device_id = "opencv-index-" + std::to_string(index);
+  device.friendly_name = "OpenCV Camera " + std::to_string(index);
+  device.bus_info = "opencv:index:" + std::to_string(index);
+  device.capture_index = index;
   return device;
 }
 
@@ -234,45 +277,51 @@ bool EnumerateConnectedDevices(std::vector<WebcamDeviceInfo>& devices, std::stri
   error.clear();
 
   const char* fixture_path = std::getenv("LABOPS_WEBCAM_DEVICE_FIXTURE");
-  if (fixture_path == nullptr || *fixture_path == '\0') {
-    return true;
-  }
-
-  std::ifstream input(fs::path(fixture_path), std::ios::binary);
-  if (!input) {
-    error = "unable to open LABOPS_WEBCAM_DEVICE_FIXTURE file: " + std::string(fixture_path);
-    return false;
-  }
-
-  std::string line;
-  std::size_t line_number = 0;
-  while (std::getline(input, line)) {
-    ++line_number;
-    const std::string trimmed = Trim(line);
-    if (trimmed.empty() || trimmed.rfind('#', 0U) == 0U) {
-      continue;
-    }
-
-    FixtureRow row;
-    if (!ParseFixtureRow(trimmed, line_number, row, error)) {
+  if (fixture_path != nullptr && *fixture_path != '\0') {
+    std::ifstream input(fs::path(fixture_path), std::ios::binary);
+    if (!input) {
+      error = "unable to open LABOPS_WEBCAM_DEVICE_FIXTURE file: " + std::string(fixture_path);
       return false;
     }
-    if (LooksLikeHeader(row)) {
-      continue;
-    }
 
-    const WebcamDeviceInfo mapped = MapFixtureRowToDevice(row);
-    if (mapped.device_id.empty()) {
-      error = "webcam fixture parse error at line " + std::to_string(line_number) +
-              ": device_id must be non-empty";
-      return false;
+    std::string line;
+    std::size_t line_number = 0;
+    while (std::getline(input, line)) {
+      ++line_number;
+      const std::string trimmed = Trim(line);
+      if (trimmed.empty() || trimmed.rfind('#', 0U) == 0U) {
+        continue;
+      }
+
+      FixtureRow row;
+      if (!ParseFixtureRow(trimmed, line_number, row, error)) {
+        return false;
+      }
+      if (LooksLikeHeader(row)) {
+        continue;
+      }
+
+      const WebcamDeviceInfo mapped = MapFixtureRowToDevice(row);
+      if (mapped.device_id.empty()) {
+        error = "webcam fixture parse error at line " + std::to_string(line_number) +
+                ": device_id must be non-empty";
+        return false;
+      }
+      if (mapped.friendly_name.empty()) {
+        error = "webcam fixture parse error at line " + std::to_string(line_number) +
+                ": friendly_name must be non-empty";
+        return false;
+      }
+      devices.push_back(mapped);
     }
-    if (mapped.friendly_name.empty()) {
-      error = "webcam fixture parse error at line " + std::to_string(line_number) +
-              ": friendly_name must be non-empty";
-      return false;
+  } else {
+    const std::size_t probe_limit = ResolveProbeLimit();
+    const std::vector<std::size_t> discovered_indices =
+        OpenCvWebcamImpl::EnumerateDeviceIndices(probe_limit);
+    devices.reserve(discovered_indices.size());
+    for (const std::size_t index : discovered_indices) {
+      devices.push_back(MakeOpenCvDiscoveredDevice(index));
     }
-    devices.push_back(mapped);
   }
 
   StableSortDevices(devices);

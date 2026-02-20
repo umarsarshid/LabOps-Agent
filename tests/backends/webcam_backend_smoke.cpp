@@ -23,7 +23,7 @@ int main() {
   labops::backends::webcam::WebcamBackend backend;
 
   std::string error;
-  if (!backend.SetParam("device.index", "0", error)) {
+  if (!backend.SetParam("device.index", "9999", error)) {
     Fail("set_param failed unexpectedly");
   }
 
@@ -31,7 +31,7 @@ int main() {
   if (config.find("backend") == config.end() || config.at("backend") != "webcam") {
     Fail("dump_config missing backend=webcam");
   }
-  if (config.find("device.index") == config.end() || config.at("device.index") != "0") {
+  if (config.find("device.index") == config.end() || config.at("device.index") != "9999") {
     Fail("dump_config missing echoed parameter");
   }
   if (config.find("opencv_bootstrap_enabled") == config.end()) {
@@ -47,7 +47,10 @@ int main() {
   if (backend.Connect(error)) {
     Fail("connect unexpectedly succeeded");
   }
-  AssertContains(error, "BACKEND_NOT_AVAILABLE");
+  if (error.find("BACKEND_NOT_AVAILABLE") == std::string::npos &&
+      error.find("BACKEND_CONNECT_FAILED") == std::string::npos) {
+    Fail("connect failed without actionable webcam error code");
+  }
 
   std::cout << "webcam_backend_smoke: ok\n";
   return 0;

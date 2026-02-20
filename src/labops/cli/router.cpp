@@ -267,6 +267,12 @@ struct RunPlan {
   std::optional<std::string> netem_profile;
   std::optional<std::string> device_selector;
   std::optional<backends::webcam::WebcamDeviceSelector> webcam_device_selector;
+  struct WebcamConfig {
+    std::optional<std::uint32_t> requested_width;
+    std::optional<std::uint32_t> requested_height;
+    std::optional<double> requested_fps;
+    std::optional<std::string> requested_pixel_format;
+  } webcam_config;
   struct Thresholds {
     std::optional<double> min_avg_fps;
     std::optional<double> max_drop_rate_percent;
@@ -1332,6 +1338,48 @@ bool LoadRunPlanFromScenario(const std::string& scenario_path, RunPlan& plan, st
     plan.webcam_device_selector = std::move(selector);
   }
 
+  if (scenario_model.webcam.requested_width.has_value()) {
+    if (scenario_model.webcam.requested_width.value() >
+        static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max())) {
+      error = "scenario webcam.requested_width is out of range";
+      return false;
+    }
+    plan.webcam_config.requested_width =
+        static_cast<std::uint32_t>(scenario_model.webcam.requested_width.value());
+  }
+  if (scenario_model.webcam.requested_height.has_value()) {
+    if (scenario_model.webcam.requested_height.value() >
+        static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max())) {
+      error = "scenario webcam.requested_height is out of range";
+      return false;
+    }
+    plan.webcam_config.requested_height =
+        static_cast<std::uint32_t>(scenario_model.webcam.requested_height.value());
+  }
+  if (scenario_model.webcam.requested_fps.has_value()) {
+    if (!std::isfinite(scenario_model.webcam.requested_fps.value()) ||
+        scenario_model.webcam.requested_fps.value() <= 0.0) {
+      error = "scenario webcam.requested_fps must be a positive number";
+      return false;
+    }
+    plan.webcam_config.requested_fps = scenario_model.webcam.requested_fps.value();
+    if (!scenario_model.camera.fps.has_value()) {
+      const double rounded = std::round(scenario_model.webcam.requested_fps.value());
+      if (rounded > 0.0 &&
+          rounded <= static_cast<double>(std::numeric_limits<std::uint32_t>::max())) {
+        plan.sim_config.fps = static_cast<std::uint32_t>(rounded);
+      }
+    }
+  }
+  if (scenario_model.webcam.requested_pixel_format.has_value()) {
+    if (scenario_model.webcam.requested_pixel_format->empty()) {
+      error = "scenario webcam.requested_pixel_format must not be empty";
+      return false;
+    }
+    plan.webcam_config.requested_pixel_format =
+        scenario_model.webcam.requested_pixel_format.value();
+  }
+
   if (plan.webcam_device_selector.has_value() && plan.backend != kBackendWebcam) {
     error = "webcam.device_selector requires backend webcam";
     return false;
@@ -1600,8 +1648,10 @@ bool ApplyDeviceSelectionToBackend(backends::ICameraBackend& backend,
   if (selection.kind == ResolvedDeviceSelection::Kind::kWebcam &&
       selection.webcam_device.has_value()) {
     const backends::webcam::WebcamDeviceInfo& device = selection.webcam_device.value();
+    const std::size_t capture_index = device.capture_index.value_or(selection.discovered_index);
     if (!apply("device.id", device.device_id) ||
-        !apply("device.friendly_name", device.friendly_name)) {
+        !apply("device.friendly_name", device.friendly_name) ||
+        !apply("device.index", std::to_string(capture_index))) {
       return false;
     }
     if (device.bus_info.has_value() && !apply("device.bus_info", device.bus_info.value())) {
@@ -1698,6 +1748,107 @@ bool IsGigETransport(const core::schema::RunInfo& run_info) {
 
 bool IsGigEOnlyTransportTuningKey(std::string_view generic_key) {
   return generic_key == "packet_size_bytes" || generic_key == "inter_packet_delay_us";
+}
+
+bool ParseNonNegativeU64Text(std::string_view text, std::uint64_t& value) {
+  if (text.empty()) {
+    return false;
+  }
+
+  const char* begin = text.data();
+  const char* end = begin + text.size();
+  const auto [ptr, ec] = std::from_chars(begin, end, value);
+  return ec == std::errc() && ptr == end;
+}
+
+void MergeWebcamReadbackParams(const backends::BackendConfig& backend_dump,
+                               backends::BackendConfig& applied_params) {
+  for (const auto& [key, value] : backend_dump) {
+    if (key.rfind("webcam.requested_", 0U) == 0U || key.rfind("webcam.actual_", 0U) == 0U) {
+      applied_params[key] = value;
+    }
+  }
+}
+
+bool EmitWebcamUnsupportedEvents(const backends::BackendConfig& backend_dump,
+                                 const core::schema::RunInfo& run_info, const fs::path& bundle_dir,
+                                 fs::path& events_path, core::logging::Logger& logger,
+                                 std::string& error) {
+  events::Emitter emitter(bundle_dir, events_path);
+
+  std::uint64_t unsupported_count = 0;
+  if (const auto count_it = backend_dump.find("webcam.unsupported.count");
+      count_it != backend_dump.end()) {
+    if (!ParseNonNegativeU64Text(count_it->second, unsupported_count)) {
+      error = "invalid webcam unsupported count value in backend config: " + count_it->second;
+      return false;
+    }
+  }
+
+  for (std::uint64_t i = 0; i < unsupported_count; ++i) {
+    const std::string prefix = "webcam.unsupported." + std::to_string(i);
+    const auto key_it = backend_dump.find(prefix + ".key");
+    const auto requested_it = backend_dump.find(prefix + ".requested");
+    const auto reason_it = backend_dump.find(prefix + ".reason");
+    if (key_it == backend_dump.end() || requested_it == backend_dump.end() ||
+        reason_it == backend_dump.end()) {
+      continue;
+    }
+
+    if (!emitter.EmitConfigStatus(
+            {
+                .kind = events::Emitter::ConfigStatusEvent::Kind::kUnsupported,
+                .ts = std::chrono::system_clock::now(),
+                .run_id = run_info.run_id,
+                .scenario_id = run_info.config.scenario_id,
+                .apply_mode = "best_effort",
+                .generic_key = key_it->second,
+                .requested_value = requested_it->second,
+                .reason = reason_it->second,
+            },
+            error)) {
+      return false;
+    }
+
+    logger.Warn("webcam config unsupported",
+                {{"generic_key", key_it->second}, {"reason", reason_it->second}});
+  }
+
+  return true;
+}
+
+bool ApplyWebcamScenarioParams(backends::ICameraBackend& backend, const RunPlan& run_plan,
+                               backends::BackendConfig& applied_params, std::string& error) {
+  auto apply = [&](std::string key, std::string value) {
+    if (!backend.SetParam(key, value, error)) {
+      return false;
+    }
+    applied_params[std::move(key)] = std::move(value);
+    return true;
+  };
+
+  if (run_plan.webcam_config.requested_width.has_value() &&
+      !apply("webcam.requested_width",
+             std::to_string(run_plan.webcam_config.requested_width.value()))) {
+    return false;
+  }
+  if (run_plan.webcam_config.requested_height.has_value() &&
+      !apply("webcam.requested_height",
+             std::to_string(run_plan.webcam_config.requested_height.value()))) {
+    return false;
+  }
+  if (run_plan.webcam_config.requested_fps.has_value() &&
+      !apply("webcam.requested_fps",
+             FormatCompactDouble(run_plan.webcam_config.requested_fps.value()))) {
+    return false;
+  }
+  if (run_plan.webcam_config.requested_pixel_format.has_value() &&
+      !apply("webcam.requested_pixel_format",
+             run_plan.webcam_config.requested_pixel_format.value())) {
+    return false;
+  }
+
+  return true;
 }
 
 bool ApplyRealParamsWithEvents(backends::ICameraBackend& backend, const RunPlan& run_plan,
@@ -2313,6 +2464,14 @@ int ConfigureBackend(const RunOptions& options, ScenarioRunResult* run_result,
     ctx.applied_params[key] = value;
   }
 
+  if (ctx.run_plan.backend == kBackendWebcam) {
+    if (!ApplyWebcamScenarioParams(*ctx.backend, ctx.run_plan, ctx.applied_params, ctx.error)) {
+      ctx.logger.Error("webcam config apply failed", {{"error", ctx.error}});
+      std::cerr << "error: webcam config failed: " << ctx.error << '\n';
+      return kExitFailure;
+    }
+  }
+
   if (ctx.run_plan.backend == kBackendRealStub) {
     if (!ApplyRealParamsWithEvents(*ctx.backend, ctx.run_plan, ctx.run_info, ctx.bundle_dir,
                                    ctx.applied_params, ctx.events_path,
@@ -2391,6 +2550,18 @@ int ConfigureBackend(const RunOptions& options, ScenarioRunResult* run_result,
     return kExitBackendConnectFailed;
   }
   ctx.logger.Info("backend connected", {{"backend", ctx.run_info.config.backend}});
+
+  if (ctx.run_plan.backend == kBackendWebcam) {
+    const backends::BackendConfig backend_dump = ctx.backend->DumpConfig();
+    MergeWebcamReadbackParams(backend_dump, ctx.applied_params);
+    if (!EmitWebcamUnsupportedEvents(backend_dump, ctx.run_info, ctx.bundle_dir, ctx.events_path,
+                                     ctx.logger, ctx.error)) {
+      ctx.logger.Error("failed to append webcam CONFIG_UNSUPPORTED events", {{"error", ctx.error}});
+      std::cerr << "error: failed to append webcam CONFIG_UNSUPPORTED events: " << ctx.error
+                << '\n';
+      return kExitFailure;
+    }
+  }
 
   if (ctx.run_plan.backend == kBackendSim) {
     if (!backends::sim::ApplyScenarioConfig(*ctx.backend, ctx.run_plan.sim_config, ctx.error,

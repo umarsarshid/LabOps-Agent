@@ -94,6 +94,10 @@ When `backend` is `webcam`, scenario field `webcam.device_selector` supports:
 - `name_contains` (first case-insensitive match)
 - no selector provided -> defaults to index `0`
 
+Note: webcam discovery uses OpenCV index probing when no fixture file is set.
+On macOS you must allow terminal camera permission or discovery will return
+no devices.
+
 ## Typical Workflow
 
 1. Validate a scenario.
@@ -133,12 +137,15 @@ RUN_DIR="$(find "$OUT_ROOT" -maxdepth 1 -type d -name 'run-*' | sort | tail -n 1
 
 ## Current Scope (Important)
 
-Right now, the default backend is a simulator.
-That means LabOps is already useful for repeatable testing and triage flow, even before full real-camera SDK integration.
+Right now, the default backend is a simulator, and there is also a webcam
+OpenCV bootstrap backend for local hardware testing.
+That means LabOps is useful for repeatable testing and triage flow before full
+vendor-SDK integration is finished.
 
 ### What this means in practice
 
-- If you want to test a physical camera today: the real camera backend still needs to be implemented.
+- If you want to test a local webcam today: use the `webcam` backend (OpenCV bootstrap path).
+- If you want to test a production SDK camera today: the proprietary SDK-specific wiring still needs to be completed in your integration environment.
 - If you want to build and prove your team workflow today: this is already useful (same commands, same evidence files, same compare flow).
 - Once the real backend is plugged in, this exact pipeline works on live camera data instead of simulated data.
 
