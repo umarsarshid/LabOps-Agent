@@ -37,6 +37,9 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Parse and validate scenario-level `device_selector` plus CLI `--device`
   overrides; resolve selectors deterministically before backend connect so
   repeated runs target the same camera identity.
+  - for camera-oriented runs, enforce a single-process lock
+    (`tmp/labops.lock`) so concurrent labops sessions do not contend for the
+    same camera and leave sessions wedged.
   - real-backend selectors: `serial`/`user_id` with optional index tie-break.
   - webcam selectors: `id`, `index`, or `name_contains` with deterministic
     fallback to default index `0`.
@@ -99,7 +102,8 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
   pause/resume behavior:
   - `soak_checkpoint.json` + `checkpoints/checkpoint_*.json`
   - `soak_frames.jsonl` frame cache used for resume without evidence loss
-  - checkpoint-boundary safe stop via signal (`Ctrl-C`) or `--soak-stop-file`
+  - checkpoint-boundary safe stop via signal (`SIGINT`, `SIGTERM`, `SIGHUP`)
+    or `--soak-stop-file`
 - Emit scenario baseline captures under `baselines/<scenario_id>/` with
   `metrics.csv` + `metrics.json` for release-style comparison workflows.
 - Compare baseline and run metric artifacts to emit `diff.json` + `diff.md`

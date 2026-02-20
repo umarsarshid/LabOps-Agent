@@ -923,6 +923,20 @@ add_labops_smoke_test(
     ${LABOPS_CLI_SMOKE_LIBRARIES}
 )
 
+# Integration smoke test for the single-process run lock (`tmp/labops.lock`):
+# verifies active lock detection fails fast before bundle creation so concurrent
+# camera runs do not race and leave hardware sessions wedged.
+add_labops_smoke_test(
+  NAME run_single_process_lock_smoke
+  SOURCES
+    tests/labops/run_single_process_lock_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
+)
+
 # Integration smoke test for netem CLI option contracts.
 # Ensures netem execution flags require explicit pairing:
 # - `--apply-netem` requires `--netem-iface <iface>`

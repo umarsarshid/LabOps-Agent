@@ -70,6 +70,9 @@ This keeps each test focused on contract verification instead of setup code.
   triggers a deterministic backend connection failure and returns the
   backend-connect-failed exit code while still emitting early evidence
   (`scenario.json`, `hostprobe.json`, `run.json`).
+- `run_single_process_lock_smoke.cpp`: verifies active single-run lock
+  detection (`tmp/labops.lock`) fails fast before bundle creation so
+  concurrent camera-oriented runs do not race against the same device.
 - `netem_option_contract_smoke.cpp`: verifies netem execution flags are used
   safely (`--apply-netem` requires `--netem-iface <iface>` and vice versa).
 - `logging_contract_smoke.cpp`: verifies structured run logs honor

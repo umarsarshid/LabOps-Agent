@@ -106,7 +106,8 @@ public:
                 *cap = v4l2_capability{};
                 cap->capabilities = capabilities_;
                 cap->device_caps = device_capabilities_;
-                std::snprintf(reinterpret_cast<char*>(cap->driver), sizeof(cap->driver), "fake_v4l2");
+                std::snprintf(reinterpret_cast<char*>(cap->driver), sizeof(cap->driver),
+                              "fake_v4l2");
                 std::snprintf(reinterpret_cast<char*>(cap->card), sizeof(cap->card), "Fake Camera");
                 return 0;
               }
@@ -215,7 +216,8 @@ public:
                 return -1;
               }
 
-              const int result = poll_cursor_ < poll_results_.size() ? poll_results_[poll_cursor_++] : 0;
+              const int result =
+                  poll_cursor_ < poll_results_.size() ? poll_results_[poll_cursor_++] : 0;
               if (result == 0) {
                 if (timeout_ms > 0) {
                   steady_now_ += std::chrono::milliseconds(timeout_ms);
@@ -228,10 +230,10 @@ public:
               fds[0].revents = POLLIN;
               return 1;
             },
-        .mmap_fn = [](void* /*addr*/, const std::size_t /*length*/, const int /*prot*/,
-                      const int /*flags*/, const int /*fd*/, const std::int64_t /*offset*/) {
-          return reinterpret_cast<void*>(0x1000000U);
-        },
+        .mmap_fn =
+            [](void* /*addr*/, const std::size_t /*length*/, const int /*prot*/,
+               const int /*flags*/, const int /*fd*/,
+               const std::int64_t /*offset*/) { return reinterpret_cast<void*>(0x1000000U); },
         .munmap_fn = [](void* /*addr*/, const std::size_t /*length*/) { return 0; },
         .steady_now_fn = [this]() { return steady_now_; },
     };

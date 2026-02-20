@@ -40,6 +40,7 @@
 
 #include <atomic>
 #include <cctype>
+#include <cerrno>
 #include <charconv>
 #include <chrono>
 #include <cmath>
@@ -135,8 +136,10 @@ void PrintListDevicesUsage(std::ostream& out) {
 // The handler only flips this atomic flag; run logic observes it at safe
 // boundaries so we can flush artifacts instead of exiting mid-write.
 std::atomic<bool> g_run_interrupt_requested{false};
+std::atomic<int> g_run_interrupt_signal_number{0};
 
-void HandleInterruptSignal(int /*signal_number*/) {
+void HandleInterruptSignal(int signal_number) {
+  g_run_interrupt_signal_number.store(signal_number);
   g_run_interrupt_requested.store(true);
 }
 
@@ -1768,6 +1771,51 @@ std::string ToLowerAscii(std::string value) {
   return value;
 }
 
+bool ContainsAnyToken(std::string_view text_lower,
+                      const std::initializer_list<std::string_view> tokens) {
+  for (const std::string_view token : tokens) {
+    if (!token.empty() && text_lower.find(token) != std::string_view::npos) {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::optional<std::string> BuildWebcamRecoveryHint(std::string_view raw_error) {
+  const std::string normalized = ToLowerAscii(std::string(raw_error));
+  const bool looks_permission_related = ContainsAnyToken(
+      normalized, {"permission", "denied", "not permitted", "unauthorized", "privacy", "access"});
+  const bool looks_busy_related = ContainsAnyToken(
+      normalized, {"busy", "in use", "already open", "already connected", "resource", "locked"});
+  const bool looks_discovery_related = ContainsAnyToken(
+      normalized, {"no webcam devices were discovered", "no devices", "device selector"});
+
+  if (!looks_permission_related && !looks_busy_related && !looks_discovery_related) {
+    return std::nullopt;
+  }
+
+  std::string hint;
+  if (looks_permission_related) {
+    hint += "camera permission may be blocked. ";
+  }
+  if (looks_busy_related) {
+    hint += "camera may be in use by another process. ";
+  }
+  if (looks_discovery_related) {
+    hint += "no webcam was discovered. ";
+  }
+
+#if defined(__APPLE__)
+  hint += "check holders with `lsof -nP | rg -i \"camera|avfoundation|coremediaio|labops\"` and "
+          "close camera apps before retrying.";
+#elif defined(__linux__)
+  hint += "check holders with `lsof /dev/video*` and close camera apps before retrying.";
+#else
+  hint += "close other camera apps and verify camera permissions before retrying.";
+#endif
+  return hint;
+}
+
 struct RealFailureDetails {
   std::string code;
   std::string actionable_message;
@@ -2299,15 +2347,39 @@ std::string ResolveSoakStopReason(const RunOptions& options) {
   return "";
 }
 
+const char* SignalNumberToName(const int signal_number) {
+  switch (signal_number) {
+  case SIGINT:
+    return "SIGINT";
+  case SIGTERM:
+    return "SIGTERM";
+#if defined(SIGHUP)
+  case SIGHUP:
+    return "SIGHUP";
+#endif
+  default:
+    return "UNKNOWN";
+  }
+}
+
 class ScopedInterruptSignalHandler {
 public:
   ScopedInterruptSignalHandler() {
     g_run_interrupt_requested.store(false);
-    previous_handler_ = std::signal(SIGINT, HandleInterruptSignal);
+    g_run_interrupt_signal_number.store(0);
+    previous_sigint_handler_ = std::signal(SIGINT, HandleInterruptSignal);
+    previous_sigterm_handler_ = std::signal(SIGTERM, HandleInterruptSignal);
+#if defined(SIGHUP)
+    previous_sighup_handler_ = std::signal(SIGHUP, HandleInterruptSignal);
+#endif
   }
 
   ~ScopedInterruptSignalHandler() {
-    (void)std::signal(SIGINT, previous_handler_);
+    (void)std::signal(SIGINT, previous_sigint_handler_);
+    (void)std::signal(SIGTERM, previous_sigterm_handler_);
+#if defined(SIGHUP)
+    (void)std::signal(SIGHUP, previous_sighup_handler_);
+#endif
   }
 
   ScopedInterruptSignalHandler(const ScopedInterruptSignalHandler&) = delete;
@@ -2315,7 +2387,147 @@ public:
 
 private:
   using SignalHandler = void (*)(int);
-  SignalHandler previous_handler_ = SIG_DFL;
+  SignalHandler previous_sigint_handler_ = SIG_DFL;
+  SignalHandler previous_sigterm_handler_ = SIG_DFL;
+#if defined(SIGHUP)
+  SignalHandler previous_sighup_handler_ = SIG_DFL;
+#endif
+};
+
+bool ParsePidText(std::string_view text, std::uint64_t& pid) {
+  while (!text.empty() && (text.front() == ' ' || text.front() == '\t' || text.front() == '\r' ||
+                           text.front() == '\n')) {
+    text.remove_prefix(1U);
+  }
+  while (!text.empty() && (text.back() == ' ' || text.back() == '\t' || text.back() == '\r' ||
+                           text.back() == '\n')) {
+    text.remove_suffix(1U);
+  }
+  if (text.empty()) {
+    return false;
+  }
+
+  std::uint64_t parsed = 0;
+  const char* begin = text.data();
+  const char* end = begin + text.size();
+  const auto [ptr, ec] = std::from_chars(begin, end, parsed);
+  if (ec != std::errc() || ptr != end || parsed == 0U) {
+    return false;
+  }
+  pid = parsed;
+  return true;
+}
+
+std::uint64_t CurrentProcessId() {
+#if defined(__linux__) || defined(__APPLE__)
+  return static_cast<std::uint64_t>(::getpid());
+#else
+  return 0U;
+#endif
+}
+
+bool IsProcessRunning(const std::uint64_t pid) {
+#if defined(__linux__) || defined(__APPLE__)
+  if (pid == 0U || pid > static_cast<std::uint64_t>(std::numeric_limits<pid_t>::max())) {
+    return false;
+  }
+  if (::kill(static_cast<pid_t>(pid), 0) == 0) {
+    return true;
+  }
+  return errno == EPERM;
+#else
+  (void)pid;
+  return false;
+#endif
+}
+
+class ScopedSingleRunLock {
+public:
+  ScopedSingleRunLock() = default;
+
+  bool Acquire(const fs::path& lock_path, std::string& error) {
+    error.clear();
+    if (acquired_) {
+      error = "internal error: run lock already acquired";
+      return false;
+    }
+    lock_path_ = lock_path;
+
+    std::error_code ec;
+    if (!lock_path_.parent_path().empty()) {
+      fs::create_directories(lock_path_.parent_path(), ec);
+      if (ec) {
+        error = "failed to create run lock directory '" + lock_path_.parent_path().string() +
+                "': " + ec.message();
+        return false;
+      }
+    }
+
+    if (fs::exists(lock_path_, ec)) {
+      if (ec) {
+        error = "failed to inspect run lock '" + lock_path_.string() + "': " + ec.message();
+        return false;
+      }
+
+      std::ifstream existing(lock_path_, std::ios::binary);
+      std::string existing_text;
+      if (existing) {
+        std::getline(existing, existing_text);
+      }
+
+      std::uint64_t existing_pid = 0U;
+      if (ParsePidText(existing_text, existing_pid) && IsProcessRunning(existing_pid)) {
+        error = "another labops run appears active (pid " + std::to_string(existing_pid) +
+                "); lock file: " + lock_path_.string() +
+                ". wait for it to finish or stop the process before retrying";
+        return false;
+      }
+
+      fs::remove(lock_path_, ec);
+      if (ec) {
+        error = "failed to clear stale run lock '" + lock_path_.string() + "': " + ec.message();
+        return false;
+      }
+    } else if (ec) {
+      error = "failed to inspect run lock '" + lock_path_.string() + "': " + ec.message();
+      return false;
+    }
+
+    std::ofstream lock_file(lock_path_, std::ios::binary | std::ios::trunc);
+    if (!lock_file) {
+      error = "failed to create run lock '" + lock_path_.string() + "'";
+      return false;
+    }
+    lock_file << CurrentProcessId() << '\n';
+    lock_file.flush();
+    if (!lock_file) {
+      error = "failed to write run lock '" + lock_path_.string() + "'";
+      return false;
+    }
+
+    acquired_ = true;
+    return true;
+  }
+
+  void Release() noexcept {
+    if (!acquired_) {
+      return;
+    }
+    std::error_code ec;
+    fs::remove(lock_path_, ec);
+    acquired_ = false;
+  }
+
+  ~ScopedSingleRunLock() {
+    Release();
+  }
+
+  ScopedSingleRunLock(const ScopedSingleRunLock&) = delete;
+  ScopedSingleRunLock& operator=(const ScopedSingleRunLock&) = delete;
+
+private:
+  fs::path lock_path_;
+  bool acquired_ = false;
 };
 
 std::vector<fs::path> CollectNicRawArtifactPaths(const fs::path& bundle_dir) {
@@ -2345,6 +2557,7 @@ struct RunExecutionContext {
   explicit RunExecutionContext(core::logging::LogLevel log_level) : logger(log_level) {}
 
   core::logging::Logger logger;
+  ScopedSingleRunLock run_lock;
   std::string error;
   RunPlan run_plan;
   std::optional<ResolvedDeviceSelection> resolved_device_selection;
@@ -2376,6 +2589,7 @@ struct RunExecutionContext {
   std::uint64_t received_count = 0;
   std::optional<std::chrono::system_clock::time_point> latest_frame_ts;
   bool interrupted_by_signal = false;
+  int interrupt_signal_number = 0;
   std::chrono::milliseconds non_soak_completed_duration{0};
   bool disconnect_failure = false;
   std::uint32_t reconnect_attempts_used = 0;
@@ -2448,10 +2662,30 @@ int PrepareRunContext(const RunOptions& options, bool use_per_run_bundle_dir, bo
     return kExitSchemaInvalid;
   }
 
+  const bool should_acquire_single_run_lock =
+      ctx.run_plan.backend == kBackendWebcam || (ctx.run_plan.backend == kBackendRealStub &&
+                                                 backends::real_sdk::IsRealBackendEnabledAtBuild());
+  if (should_acquire_single_run_lock) {
+    const fs::path lock_path = fs::path("tmp") / "labops.lock";
+    if (!ctx.run_lock.Acquire(lock_path, ctx.error)) {
+      ctx.logger.Error("run lock acquisition failed",
+                       {{"lock_path", lock_path.string()}, {"error", ctx.error}});
+      std::cerr << "error: " << ctx.error << '\n';
+      return kExitFailure;
+    }
+    ctx.logger.Debug("single-run lock acquired", {{"lock_path", lock_path.string()}});
+  }
+
   if (!ResolveDeviceSelectionForRun(ctx.run_plan, options, ctx.resolved_device_selection,
                                     ctx.error)) {
     ctx.logger.Error("device selector resolution failed", {{"error", ctx.error}});
     std::cerr << "error: device selector resolution failed: " << ctx.error << '\n';
+    if (ctx.run_plan.backend == kBackendWebcam) {
+      if (const std::optional<std::string> hint = BuildWebcamRecoveryHint(ctx.error);
+          hint.has_value()) {
+        std::cerr << "hint: " << hint.value() << '\n';
+      }
+    }
     return kExitFailure;
   }
   if (ctx.resolved_device_selection.has_value()) {
@@ -2750,6 +2984,12 @@ int ConfigureBackend(const RunOptions& options, ScenarioRunResult* run_result,
     } else {
       std::cerr << "error: backend connect failed: " << ctx.error << '\n';
     }
+    if (ctx.run_plan.backend == kBackendWebcam) {
+      if (const std::optional<std::string> hint = BuildWebcamRecoveryHint(ctx.error);
+          hint.has_value()) {
+        std::cerr << "hint: " << hint.value() << '\n';
+      }
+    }
     return kExitBackendConnectFailed;
   }
   ctx.logger.Info("backend connected", {{"backend", ctx.run_info.config.backend}});
@@ -2828,6 +3068,12 @@ int ConfigureBackend(const RunOptions& options, ScenarioRunResult* run_result,
     } else {
       ctx.logger.Error("backend start failed", {{"error", ctx.error}});
       std::cerr << "error: backend start failed: " << ctx.error << '\n';
+      if (ctx.run_plan.backend == kBackendWebcam) {
+        if (const std::optional<std::string> hint = BuildWebcamRecoveryHint(ctx.error);
+            hint.has_value()) {
+          std::cerr << "hint: " << hint.value() << '\n';
+        }
+      }
     }
     return kExitFailure;
   }
@@ -2952,6 +3198,7 @@ int ExecuteStreaming(const RunOptions& options, std::string_view success_prefix,
       while (remaining_duration > std::chrono::milliseconds::zero()) {
         if (g_run_interrupt_requested.load()) {
           ctx.interrupted_by_signal = true;
+          ctx.interrupt_signal_number = g_run_interrupt_signal_number.load();
           break;
         }
 
@@ -3053,7 +3300,10 @@ int ExecuteStreaming(const RunOptions& options, std::string_view success_prefix,
         ctx.logger.Warn(
             "interrupt received; finalizing run with partial duration",
             {{"completed_duration_ms", std::to_string(ctx.non_soak_completed_duration.count())},
-             {"requested_duration_ms", std::to_string(ctx.run_plan.duration.count())}});
+             {"requested_duration_ms", std::to_string(ctx.run_plan.duration.count())},
+             {"signal", std::string(SignalNumberToName(ctx.interrupt_signal_number == 0
+                                                           ? g_run_interrupt_signal_number.load()
+                                                           : ctx.interrupt_signal_number))}});
       } else if (ctx.disconnect_failure) {
         ctx.logger.Warn(
             "device disconnect handling exhausted retries; finalizing partial run",
@@ -3663,14 +3913,20 @@ int EmitFinalConsoleSummary(const RunOptions& options, std::string_view success_
   }
 
   if (ctx.interrupted_by_signal) {
+    const int signal_number = ctx.interrupt_signal_number == 0
+                                  ? g_run_interrupt_signal_number.load()
+                                  : ctx.interrupt_signal_number;
     ctx.logger.Warn(
         "run interrupted by signal",
         {{"frames_total", std::to_string(ctx.frames.size())},
          {"frames_received", std::to_string(ctx.received_count)},
          {"frames_dropped", std::to_string(ctx.dropped_count)},
          {"completed_duration_ms", std::to_string(ctx.non_soak_completed_duration.count())},
-         {"requested_duration_ms", std::to_string(ctx.run_plan.duration.count())}});
-    std::cerr << "warning: run interrupted by Ctrl+C; finalized partial artifact bundle\n";
+         {"requested_duration_ms", std::to_string(ctx.run_plan.duration.count())},
+         {"signal", std::string(SignalNumberToName(signal_number))}});
+    std::cerr << "warning: run interrupted by "
+              << SignalNumberToName(signal_number == 0 ? SIGINT : signal_number)
+              << "; finalized partial artifact bundle\n";
     return kExitFailure;
   }
   if (ctx.disconnect_failure) {

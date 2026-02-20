@@ -1,88 +1,98 @@
-# 0116 — Deterministic Linux Webcam Mock-Provider Test Path
+# feat(cli): harden camera run lifecycle
 
-## Goal
-Add a Linux-native deterministic test path for webcam V4L2 behavior that does not require `/dev/video*` access or real camera hardware.
+## Why this change
+A camera can stay open when a run is interrupted or when another process already has the device. That creates confusing follow-up failures (`device busy`, missing artifacts, wedged sessions). This change improves safety and operator guidance without changing output contracts.
 
-## What Was Implemented
+## What was implemented
 
-### 1) Added a dedicated Linux fake device smoke test
+### 1) Multi-signal interruption handling in run flow
 Files:
-- `tests/backends/webcam_linux_mock_provider_smoke.cpp`
+- `src/labops/cli/router.cpp`
 
-Change:
-- Added a new Linux-only smoke test binary centered on a test harness class:
-  - `FakeV4l2Device`
-- `FakeV4l2Device` injects scripted behavior via `V4l2CaptureDevice::IoOps` and never touches kernel devices.
-
-What the fake harness models:
-- `VIDIOC_QUERYCAP`, `VIDIOC_G_FMT`, `VIDIOC_S_FMT`
-- `VIDIOC_G_PARM`, `VIDIOC_S_PARM`
-- mmap stream bootstrap ioctls (`REQBUFS`, `QUERYBUF`, `QBUF`, `STREAMON`, `STREAMOFF`)
-- streaming dequeue path (`poll`, `DQBUF`, `QBUF`)
-- monotonic capture time progression through injected steady clock
+Changes:
+- Extended scoped signal handling from only `SIGINT` to:
+  - `SIGINT`
+  - `SIGTERM`
+  - `SIGHUP` (when available)
+- Recorded the triggering signal number in shared run state.
+- Updated interrupt messaging/logging to report the specific signal name (`SIGINT` / `SIGTERM` / `SIGHUP`).
 
 Why:
-- This creates a fully deterministic Linux-native validation path for V4L2 behavior in CI/dev environments without real camera hardware.
-- It prevents future Linux path regressions from being masked by machine/hardware differences.
+- Runs now clean up consistently when stopped by terminal close, service stop, or normal Ctrl+C.
 
-### 2) Added required behavioral coverage
+### 2) Single-run lock for camera-oriented runs
 Files:
-- `tests/backends/webcam_linux_mock_provider_smoke.cpp`
-
-New test cases:
-- `TestTimeoutSequenceClassification`
-  - scripted `poll` timeouts + one ready dequeue
-  - verifies emitted sequence `TIMEOUT -> TIMEOUT -> RECEIVED`
-  - verifies frame-id progression
-- `TestIncompleteBufferClassification`
-  - scripted ready dequeue with `bytesused=0` + `V4L2_BUF_FLAG_ERROR`
-  - verifies `INCOMPLETE` classification
-- `TestAdjustedFormatBehavior`
-  - scripted driver adjustments for width/height/pixel-format/fps
-  - verifies `ApplyRequestedFormatBestEffort` produces adjusted readback rows
-
-Why:
-- These are exactly the Linux behaviors engineers care about for triage quality:
-  timeout cadence, incomplete payload detection, and requested-vs-actual config drift.
-
-### 3) Wired test into build/test system
-Files:
+- `src/labops/cli/router.cpp`
+- `tests/labops/run_single_process_lock_smoke.cpp` (new)
 - `CMakeLists.txt`
 
-Change:
-- Added new smoke target:
-  - `webcam_linux_mock_provider_smoke`
+Changes:
+- Added `ScopedSingleRunLock` with lock file at `tmp/labops.lock`.
+- Lock behavior:
+  - detects active PID lock and fails fast with actionable message,
+  - removes stale lock files safely,
+  - writes current PID on acquire,
+  - auto-releases lock on teardown.
+- Enabled lock acquisition in run preparation for camera backends (`webcam`, and real-enabled stub path).
+- Added smoke test `run_single_process_lock_smoke` verifying fail-fast lock enforcement.
+- Registered new smoke test target in CMake.
 
 Why:
-- Makes deterministic Linux mock-provider coverage part of the normal `ctest` surface.
+- Prevents accidental concurrent runs that can leave camera devices busy and hard to diagnose.
 
-### 4) Updated backend test documentation
+### 3) Better webcam recovery hints on connect/selector failures
 Files:
-- `tests/backends/README.md`
+- `src/labops/cli/router.cpp`
 
-Change:
-- Documented `webcam_linux_mock_provider_smoke.cpp` purpose and coverage.
+Changes:
+- Added string-token based recovery hint generator for common webcam failure text (permission/busy/discovery patterns).
+- Emits platform-aware quick help, e.g.:
+  - macOS: `lsof -nP | rg -i "camera|avfoundation|coremediaio|labops"`
+  - Linux: `lsof /dev/video*`
+- Hooked hints into webcam selector resolution/connect/start failure paths.
 
 Why:
-- Keeps test intent visible for future contributors and avoids duplicated ad-hoc mocks.
+- Engineers get immediate next steps instead of generic failure output.
 
-## Verification Performed
+### 4) Documentation updates
+Files:
+- `src/labops/cli/README.md`
+- `tests/labops/README.md`
 
-1. Formatting:
+Changes:
+- Documented new lock behavior (`tmp/labops.lock`) for camera runs.
+- Updated interrupt docs to include all supported stop signals.
+- Added smoke test entry for run-lock contract.
+
+Why:
+- Keeps ops and test documentation aligned with runtime behavior.
+
+### 5) Formatting-only collateral update
+Files:
+- `tests/backends/webcam_linux_mock_provider_smoke.cpp`
+
+Changes:
+- `clang-format` normalization only.
+
+Why:
+- Keep style gate green and consistent.
+
+## Verification performed
+
+1. Formatting
 - `bash tools/clang_format.sh --check`
 - Result: passed
 
-2. Build:
+2. Build
 - `cmake --build build`
 - Result: passed
 
-3. Focused coverage for webcam mock paths:
-- `ctest --test-dir build -R "webcam_linux_mock_provider_smoke|webcam_linux_v4l2_capture_device_smoke|webcam_opencv_mock_provider_smoke" --output-on-failure`
-- Result: passed (`3/3`)
-
-4. Full regression:
+3. Full regression suite
 - `ctest --test-dir build --output-on-failure`
-- Result: passed (`82/82`)
+- Result: passed (`83/83`)
 
 ## Outcome
-Linux-native webcam logic now has an explicit deterministic mock-provider test path, covering timeout sequences, incomplete frame classification, and adjusted format behavior without requiring real devices.
+Camera run lifecycle is safer and easier to operate:
+- interruptions flush and clean up under more real-world stop paths,
+- duplicate concurrent camera runs are blocked deterministically,
+- webcam failure output now includes practical recovery commands.
