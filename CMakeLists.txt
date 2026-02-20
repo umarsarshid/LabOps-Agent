@@ -128,6 +128,7 @@ add_library(labops_backends
   src/backends/webcam/platform_probe.cpp
   src/backends/webcam/webcam_factory.cpp
   src/backends/webcam/linux/platform_probe_linux.cpp
+  src/backends/webcam/linux/v4l2_device_enumerator.cpp
   src/backends/webcam/macos/platform_probe_macos.cpp
   src/backends/webcam/testing/mock_frame_provider.cpp
   src/backends/webcam/windows/platform_probe_windows.cpp
@@ -972,6 +973,18 @@ add_labops_smoke_test(
   NAME list_devices_real_backend_smoke
   SOURCES
     tests/labops/list_devices_real_backend_smoke.cpp
+    src/labops/cli/router.cpp
+  INCLUDE_DIRS
+    src
+  LIBRARIES
+    ${LABOPS_CLI_SMOKE_LIBRARIES}
+)
+
+# Integration smoke test for webcam backend device listing contract.
+add_labops_smoke_test(
+  NAME list_devices_webcam_backend_smoke
+  SOURCES
+    tests/labops/list_devices_webcam_backend_smoke.cpp
     src/labops/cli/router.cpp
   INCLUDE_DIRS
     src

@@ -107,7 +107,7 @@ void PrintUsage(std::ostream& out) {
       << "  labops compare --baseline <dir|metrics.csv> --run <dir|metrics.csv> [--out <dir>]\n"
       << "  labops kb draft --run <run_folder> [--out <kb_draft.md>]\n"
       << "  labops list-backends\n"
-      << "  labops list-devices --backend <real>\n"
+      << "  labops list-devices --backend <real|webcam>\n"
       << "  labops validate <scenario.json>\n"
       << "  labops version\n";
 }
@@ -128,7 +128,7 @@ void PrintKbUsage(std::ostream& out) {
 
 void PrintListDevicesUsage(std::ostream& out) {
   out << "usage:\n"
-      << "  labops list-devices --backend <real>\n";
+      << "  labops list-devices --backend <real|webcam>\n";
 }
 
 // SIGINT is handled as a cooperative stop request for active runs.
@@ -681,11 +681,11 @@ bool ParseListDevicesOptions(const std::vector<std::string_view>& args, ListDevi
   }
 
   if (options.backend.empty()) {
-    error = "list-devices requires --backend <real>";
+    error = "list-devices requires --backend <real|webcam>";
     return false;
   }
-  if (options.backend != "real") {
-    error = "list-devices currently supports only --backend real";
+  if (options.backend != "real" && options.backend != "webcam") {
+    error = "list-devices currently supports only --backend real or --backend webcam";
     return false;
   }
 
@@ -3599,48 +3599,85 @@ int CommandListDevices(const std::vector<std::string_view>& args) {
     return kExitUsage;
   }
 
-  if (!backends::real_sdk::IsRealBackendEnabledAtBuild()) {
-    std::cerr << "error: BACKEND_NOT_AVAILABLE: real backend "
-              << backends::real_sdk::RealBackendAvailabilityStatusText() << '\n';
+  if (options.backend == "real") {
+    if (!backends::real_sdk::IsRealBackendEnabledAtBuild()) {
+      std::cerr << "error: BACKEND_NOT_AVAILABLE: real backend "
+                << backends::real_sdk::RealBackendAvailabilityStatusText() << '\n';
+      return kExitFailure;
+    }
+
+    std::vector<backends::real_sdk::DeviceInfo> devices;
+    if (!backends::real_sdk::EnumerateConnectedDevices(devices, error)) {
+      const RealFailureDetails mapped_discovery_error = MapRealFailure("device_discovery", error);
+      std::cerr << "error: DEVICE_DISCOVERY_FAILED: " << mapped_discovery_error.formatted_message
+                << '\n';
+      return kExitFailure;
+    }
+
+    std::cout << "backend: real\n";
+    std::cout << "status: enabled\n";
+    std::cout << "devices: " << devices.size() << '\n';
+    if (devices.empty()) {
+      std::cout << "note: no cameras detected\n";
+      std::cout
+          << "hint: set LABOPS_REAL_DEVICE_FIXTURE to a descriptor CSV for local validation\n";
+      return kExitSuccess;
+    }
+
+    for (std::size_t i = 0; i < devices.size(); ++i) {
+      const backends::real_sdk::DeviceInfo& device = devices[i];
+      std::cout << "device[" << i << "].model: " << device.model << '\n';
+      std::cout << "device[" << i << "].serial: " << device.serial << '\n';
+      std::cout << "device[" << i
+                << "].user_id: " << (device.user_id.empty() ? "(none)" : device.user_id) << '\n';
+      std::cout << "device[" << i << "].transport: " << device.transport << '\n';
+      if (device.firmware_version.has_value()) {
+        std::cout << "device[" << i << "].firmware_version: " << device.firmware_version.value()
+                  << '\n';
+      }
+      if (device.sdk_version.has_value()) {
+        std::cout << "device[" << i << "].sdk_version: " << device.sdk_version.value() << '\n';
+      }
+      if (device.ip_address.has_value()) {
+        std::cout << "device[" << i << "].ip: " << device.ip_address.value() << '\n';
+      }
+      if (device.mac_address.has_value()) {
+        std::cout << "device[" << i << "].mac: " << device.mac_address.value() << '\n';
+      }
+    }
+    return kExitSuccess;
+  }
+
+  std::vector<backends::webcam::WebcamDeviceInfo> devices;
+  if (!backends::webcam::EnumerateConnectedDevices(devices, error)) {
+    std::cerr << "error: DEVICE_DISCOVERY_FAILED: " << error << '\n';
     return kExitFailure;
   }
 
-  std::vector<backends::real_sdk::DeviceInfo> devices;
-  if (!backends::real_sdk::EnumerateConnectedDevices(devices, error)) {
-    const RealFailureDetails mapped_discovery_error = MapRealFailure("device_discovery", error);
-    std::cerr << "error: DEVICE_DISCOVERY_FAILED: " << mapped_discovery_error.formatted_message
-              << '\n';
-    return kExitFailure;
+  const backends::webcam::WebcamBackendAvailability availability =
+      backends::webcam::GetWebcamBackendAvailability();
+  std::cout << "backend: webcam\n";
+  std::cout << "status: " << (availability.available ? "enabled" : "best_effort") << '\n';
+  if (!availability.available) {
+    std::cout << "status_reason: " << availability.reason << '\n';
   }
-
-  std::cout << "backend: real\n";
-  std::cout << "status: enabled\n";
   std::cout << "devices: " << devices.size() << '\n';
   if (devices.empty()) {
-    std::cout << "note: no cameras detected\n";
-    std::cout << "hint: set LABOPS_REAL_DEVICE_FIXTURE to a descriptor CSV for local validation\n";
+    std::cout << "note: no webcams detected\n";
+    std::cout << "hint: set LABOPS_WEBCAM_DEVICE_FIXTURE to a descriptor CSV for local "
+                 "validation\n";
     return kExitSuccess;
   }
 
   for (std::size_t i = 0; i < devices.size(); ++i) {
-    const backends::real_sdk::DeviceInfo& device = devices[i];
-    std::cout << "device[" << i << "].model: " << device.model << '\n';
-    std::cout << "device[" << i << "].serial: " << device.serial << '\n';
-    std::cout << "device[" << i
-              << "].user_id: " << (device.user_id.empty() ? "(none)" : device.user_id) << '\n';
-    std::cout << "device[" << i << "].transport: " << device.transport << '\n';
-    if (device.firmware_version.has_value()) {
-      std::cout << "device[" << i << "].firmware_version: " << device.firmware_version.value()
-                << '\n';
+    const backends::webcam::WebcamDeviceInfo& device = devices[i];
+    std::cout << "device[" << i << "].id: " << device.device_id << '\n';
+    std::cout << "device[" << i << "].friendly_name: " << device.friendly_name << '\n';
+    if (device.bus_info.has_value()) {
+      std::cout << "device[" << i << "].bus_info: " << device.bus_info.value() << '\n';
     }
-    if (device.sdk_version.has_value()) {
-      std::cout << "device[" << i << "].sdk_version: " << device.sdk_version.value() << '\n';
-    }
-    if (device.ip_address.has_value()) {
-      std::cout << "device[" << i << "].ip: " << device.ip_address.value() << '\n';
-    }
-    if (device.mac_address.has_value()) {
-      std::cout << "device[" << i << "].mac: " << device.mac_address.value() << '\n';
+    if (device.capture_index.has_value()) {
+      std::cout << "device[" << i << "].capture_index: " << device.capture_index.value() << '\n';
     }
   }
   return kExitSuccess;

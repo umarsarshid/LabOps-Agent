@@ -37,8 +37,10 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
     actionable errors.
   - enumerates webcam inventories from either:
     - `LABOPS_WEBCAM_DEVICE_FIXTURE` (deterministic CI/dev path), or
+    - Linux native V4L2 query (`/dev/video*` + `VIDIOC_QUERYCAP`) when running
+      on Linux without fixture override, or
     - OpenCV index probing (`0..LABOPS_WEBCAM_MAX_PROBE_INDEX`, default `8`)
-      when fixture is not provided.
+      as fallback when native discovery returns no devices.
   - fixture CSV supports optional `capture_index` so selector tests can target
     deterministic open indices without depending on real attached hardware.
   - resolves selectors deterministically using stable ordering:

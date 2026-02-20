@@ -24,16 +24,14 @@ As commands grow (`run`, `validate`, `version`, and later `bundle`, `agent`, `ba
 - Parse KB drafting contracts (`kb draft --run <run_folder> [--out <kb_draft.md>]`).
 - Surface backend availability contracts (`list-backends`) with human-readable
   status reasons for `sim`, `webcam`, and `real`.
-- Surface backend device-discovery contract (`list-devices --backend real`)
-  including friendly `BACKEND_NOT_AVAILABLE` messaging when real backend is not
-  active.
-  - when enabled, prints normalized per-device identity fields
+- Surface backend device-discovery contract (`list-devices --backend real|webcam`).
+  - `real`: preserves friendly `BACKEND_NOT_AVAILABLE` behavior when the real
+    backend is not active and prints normalized real-device identity fields
     (`model`, `serial`, `user_id`, `transport`, optional `ip`/`mac`,
-    optional `firmware_version`/`sdk_version`) from real-backend descriptor
-    mapping.
-  - translates discovery failures into stable/actionable real-backend error
-    codes (for example `REAL_DEVICE_NOT_FOUND`, `REAL_TIMEOUT`,
-    `REAL_SDK_UNAVAILABLE`).
+    optional `firmware_version`/`sdk_version`) from descriptor mapping.
+  - `webcam`: prints normalized webcam inventory
+    (`id`, `friendly_name`, optional `bus_info`, optional `capture_index`)
+    using fixture, Linux V4L2, or OpenCV fallback discovery.
 - Route scenario validation through schema loader with actionable errors.
 - Parse and validate scenario-level `device_selector` plus CLI `--device`
   overrides; resolve selectors deterministically before backend connect so

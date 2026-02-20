@@ -1,4 +1,5 @@
 #include "backends/webcam/device_selector.hpp"
+#include "backends/webcam/linux/v4l2_device_enumerator.hpp"
 #include "backends/webcam/opencv_webcam_impl.hpp"
 
 #include <algorithm>
@@ -315,12 +316,23 @@ bool EnumerateConnectedDevices(std::vector<WebcamDeviceInfo>& devices, std::stri
       devices.push_back(mapped);
     }
   } else {
-    const std::size_t probe_limit = ResolveProbeLimit();
-    const std::vector<std::size_t> discovered_indices =
-        OpenCvWebcamImpl::EnumerateDeviceIndices(probe_limit);
-    devices.reserve(discovered_indices.size());
-    for (const std::size_t index : discovered_indices) {
-      devices.push_back(MakeOpenCvDiscoveredDevice(index));
+#if defined(__linux__)
+    // Prefer native Linux discovery first so list-devices and selector flows
+    // report actual V4L2 device identities even when OpenCV is also enabled.
+    std::vector<WebcamDeviceInfo> v4l2_devices;
+    std::string v4l2_error;
+    if (EnumerateV4l2Devices(v4l2_devices, v4l2_error) && !v4l2_devices.empty()) {
+      devices = std::move(v4l2_devices);
+    } else
+#endif
+    {
+      const std::size_t probe_limit = ResolveProbeLimit();
+      const std::vector<std::size_t> discovered_indices =
+          OpenCvWebcamImpl::EnumerateDeviceIndices(probe_limit);
+      devices.reserve(discovered_indices.size());
+      for (const std::size_t index : discovered_indices) {
+        devices.push_back(MakeOpenCvDiscoveredDevice(index));
+      }
     }
   }
 

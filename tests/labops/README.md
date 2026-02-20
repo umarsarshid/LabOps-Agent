@@ -84,6 +84,10 @@ This keeps each test focused on contract verification instead of setup code.
   optional IP/MAC plus optional firmware/SDK version fields from descriptor
   fixture data) and friendly
   `BACKEND_NOT_AVAILABLE` messaging when disabled.
+- `list_devices_webcam_backend_smoke.cpp`: verifies
+  `labops list-devices --backend webcam` returns deterministic webcam inventory
+  output from fixture-backed discovery (id, friendly_name, bus_info,
+  capture_index) with stable ordering.
 - `run_device_selector_resolution_smoke.cpp`: verifies
   `labops run ... --device <selector>` resolves the requested real device
   deterministically, logs selected identity/version fields, writes `run.json`

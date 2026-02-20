@@ -38,11 +38,16 @@ Why this structure exists:
 - `labops version`: prints tool version.
 - `labops list-backends`: prints backend availability at a glance (for example
   `sim` enabled and whether `real` is enabled or disabled with reason).
-- `labops list-devices --backend real`: lists real-backend devices when
-  available; returns friendly `BACKEND_NOT_AVAILABLE` messaging when the real
-  backend is disabled in current build/runtime configuration; when enabled,
-  prints per-device identity fields (`model`, `serial`, `user_id`, `transport`,
-  optional `ip`/`mac`, optional `firmware_version`/`sdk_version`).
+- `labops list-devices --backend real|webcam`: device discovery contract.
+  - `real`: lists real-backend devices when available; returns friendly
+    `BACKEND_NOT_AVAILABLE` messaging when the real backend is disabled in
+    current build/runtime configuration; when enabled, prints per-device
+    identity fields (`model`, `serial`, `user_id`, `transport`, optional
+    `ip`/`mac`, optional `firmware_version`/`sdk_version`).
+  - `webcam`: lists webcam devices via fixture discovery, Linux native V4L2
+    query (`/dev/video*` + `VIDIOC_QUERYCAP`), or OpenCV fallback probing and
+    prints normalized identity fields (`id`, `friendly_name`, optional
+    `bus_info`, optional `capture_index`).
 - `labops validate <scenario.json>`: validates scenario schema and prints
   actionable field-level errors when invalid.
 - `labops run <scenario.json> --out <dir> [--device <selector>] [--sdk-log] [--zip] [--redact] [--soak --checkpoint-interval-ms <ms> [--soak-stop-file <path>] [--resume <checkpoint.json>]] [--apply-netem --netem-iface <iface> [--apply-netem-force]]`: emits a per-run bundle under

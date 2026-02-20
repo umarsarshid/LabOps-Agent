@@ -9,8 +9,13 @@ Linux webcam support will be implemented using V4L2 (`/dev/video*`). Keeping Lin
 ## Current contents
 
 - `platform_probe_linux.hpp/.cpp`: Linux availability stub for webcam backend.
-  - currently reports `BACKEND_NOT_AVAILABLE` reason until V4L2 capture code is
-    added.
+  - reports Linux webcam backend availability status.
+- `v4l2_device_enumerator.hpp/.cpp`:
+  - native Linux webcam discovery implementation.
+  - scans `/dev/video*` character devices.
+  - uses `VIDIOC_QUERYCAP` to read camera name/capabilities.
+  - maps discovered cameras into normalized `WebcamDeviceInfo` rows used by
+    `list-devices` and selector resolution.
 
 ## Connection to the project
 
