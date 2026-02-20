@@ -1,10 +1,12 @@
 #include "backends/webcam/linux/v4l2_capture_device.hpp"
 
+#include <array>
 #include <cctype>
 #include <cerrno>
 #include <cmath>
 #include <cstring>
 #include <iomanip>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -15,6 +17,7 @@
 #include <fcntl.h>
 #include <linux/videodev2.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #endif
 
@@ -121,6 +124,11 @@ V4l2CaptureDevice::IoOps V4l2CaptureDevice::DefaultIoOps() {
   ops.ioctl_fn = [](const int fd, const unsigned long request, void* arg) {
     return ::ioctl(fd, request, arg);
   };
+  ops.mmap_fn = [](void* addr, const std::size_t length, const int prot, const int flags,
+                   const int fd, const std::int64_t offset) -> void* {
+    return ::mmap(addr, length, prot, flags, fd, static_cast<off_t>(offset));
+  };
+  ops.munmap_fn = [](void* addr, const std::size_t length) { return ::munmap(addr, length); };
 #else
   ops.open_fn = [](const char* /*path*/, const int /*flags*/) {
     errno = ENOSYS;
@@ -131,6 +139,15 @@ V4l2CaptureDevice::IoOps V4l2CaptureDevice::DefaultIoOps() {
     return -1;
   };
   ops.ioctl_fn = [](const int /*fd*/, const unsigned long /*request*/, void* /*arg*/) {
+    errno = ENOSYS;
+    return -1;
+  };
+  ops.mmap_fn = [](void* /*addr*/, const std::size_t /*length*/, const int /*prot*/,
+                   const int /*flags*/, const int /*fd*/, const std::int64_t /*offset*/) -> void* {
+    errno = ENOSYS;
+    return nullptr;
+  };
+  ops.munmap_fn = [](void* /*addr*/, const std::size_t /*length*/) {
     errno = ENOSYS;
     return -1;
   };
@@ -231,6 +248,12 @@ bool V4l2CaptureDevice::Close(std::string& error) {
     return true;
   }
 
+  std::string stream_error;
+  if (!StopStreaming(stream_error)) {
+    error = "failed to stop V4L2 streaming before close: " + stream_error;
+    return false;
+  }
+
   if (!io_ops_.close_fn) {
     error = "V4L2 close operation is not configured";
     return false;
@@ -246,6 +269,9 @@ bool V4l2CaptureDevice::Close(std::string& error) {
   effective_capabilities_ = 0U;
   buffer_type_ = 0U;
   capture_method_ = V4l2CaptureMethod::kMmapStreaming;
+  mmap_buffers_.clear();
+  mmap_buffers_allocated_ = false;
+  streaming_ = false;
   return true;
 }
 
@@ -441,6 +467,244 @@ bool V4l2CaptureDevice::ApplyRequestedFormatBestEffort(const V4l2RequestedFormat
 
 bool V4l2CaptureDevice::IsOpen() const {
   return fd_ >= 0;
+}
+
+bool V4l2CaptureDevice::StartMmapStreaming(const std::size_t requested_buffer_count,
+                                           V4l2StreamStartInfo& stream_info, std::string& error) {
+  error.clear();
+  stream_info = V4l2StreamStartInfo{};
+
+  if (!IsOpen()) {
+    error = "device must be open before starting streaming";
+    return false;
+  }
+
+#if !defined(__linux__)
+  (void)requested_buffer_count;
+  error = "V4L2 capture is only supported on Linux";
+  return false;
+#else
+  if (capture_method_ != V4l2CaptureMethod::kMmapStreaming) {
+    error = "mmap streaming is unavailable for this device (selected capture method: " +
+            std::string(ToString(capture_method_)) + ")";
+    return false;
+  }
+  if (!io_ops_.mmap_fn || !io_ops_.munmap_fn) {
+    error = "V4L2 mmap operations are not configured";
+    return false;
+  }
+  if (streaming_) {
+    error = "V4L2 stream is already running";
+    return false;
+  }
+
+  const std::size_t buffer_target = requested_buffer_count == 0U ? 4U : requested_buffer_count;
+  if (buffer_target > static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
+    error = "requested buffer count is out of range";
+    return false;
+  }
+
+  if (!mmap_buffers_.empty() || mmap_buffers_allocated_) {
+    std::string cleanup_error;
+    if (!StopStreaming(cleanup_error)) {
+      error = "failed to reset prior stream state: " + cleanup_error;
+      return false;
+    }
+  }
+
+  auto release_allocated_buffers = [&](std::string& release_error) -> bool {
+    bool success = true;
+    for (const MmapBuffer& buffer : mmap_buffers_) {
+      if (buffer.address == nullptr || buffer.length == 0U) {
+        continue;
+      }
+      if (io_ops_.munmap_fn(buffer.address, buffer.length) != 0 && success) {
+        release_error = "failed to munmap V4L2 buffer: " + std::string(std::strerror(errno));
+        success = false;
+      }
+    }
+    mmap_buffers_.clear();
+
+    if (mmap_buffers_allocated_) {
+      v4l2_requestbuffers release_req{};
+      release_req.count = 0U;
+      release_req.type = buffer_type_;
+      release_req.memory = V4L2_MEMORY_MMAP;
+      if (IoctlRetry(fd_, VIDIOC_REQBUFS, &release_req) != 0 && success) {
+        release_error = "failed to release V4L2 mmap buffers: " + std::string(std::strerror(errno));
+        success = false;
+      }
+      mmap_buffers_allocated_ = false;
+    }
+    streaming_ = false;
+    return success;
+  };
+
+  v4l2_requestbuffers req{};
+  req.count = static_cast<std::uint32_t>(buffer_target);
+  req.type = buffer_type_;
+  req.memory = V4L2_MEMORY_MMAP;
+  if (IoctlRetry(fd_, VIDIOC_REQBUFS, &req) != 0) {
+    error = "VIDIOC_REQBUFS failed: " + std::string(std::strerror(errno));
+    return false;
+  }
+  if (req.count == 0U) {
+    error = "VIDIOC_REQBUFS returned zero buffers";
+    return false;
+  }
+  mmap_buffers_allocated_ = true;
+  mmap_buffers_.reserve(req.count);
+
+  constexpr std::size_t kMaxPlanes = 8U;
+  for (std::uint32_t i = 0U; i < req.count; ++i) {
+    v4l2_buffer query{};
+    query.type = buffer_type_;
+    query.memory = V4L2_MEMORY_MMAP;
+    query.index = i;
+    std::array<v4l2_plane, kMaxPlanes> query_planes{};
+    if (buffer_type_ == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+      query.m.planes = query_planes.data();
+      query.length = static_cast<decltype(query.length)>(query_planes.size());
+    }
+
+    if (IoctlRetry(fd_, VIDIOC_QUERYBUF, &query) != 0) {
+      std::string cleanup_error;
+      (void)release_allocated_buffers(cleanup_error);
+      error = "VIDIOC_QUERYBUF failed for buffer " + std::to_string(i) + ": " +
+              std::string(std::strerror(errno));
+      return false;
+    }
+
+    std::size_t buffer_length = 0U;
+    std::uint32_t buffer_offset = 0U;
+    std::size_t plane_count = 0U;
+    if (buffer_type_ == V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+      buffer_length = query.length;
+      buffer_offset = query.m.offset;
+    } else {
+      plane_count = query.length;
+      if (plane_count == 0U) {
+        std::string cleanup_error;
+        (void)release_allocated_buffers(cleanup_error);
+        error = "VIDIOC_QUERYBUF returned zero planes for buffer " + std::to_string(i);
+        return false;
+      }
+      buffer_length = query_planes[0].length;
+      buffer_offset = query_planes[0].m.mem_offset;
+    }
+    if (buffer_length == 0U) {
+      std::string cleanup_error;
+      (void)release_allocated_buffers(cleanup_error);
+      error = "VIDIOC_QUERYBUF returned empty buffer length for buffer " + std::to_string(i);
+      return false;
+    }
+
+    void* mapped = io_ops_.mmap_fn(nullptr, buffer_length, PROT_READ | PROT_WRITE, MAP_SHARED, fd_,
+                                   static_cast<std::int64_t>(buffer_offset));
+    if (mapped == MAP_FAILED) {
+      std::string cleanup_error;
+      (void)release_allocated_buffers(cleanup_error);
+      error =
+          "mmap failed for buffer " + std::to_string(i) + ": " + std::string(std::strerror(errno));
+      return false;
+    }
+
+    mmap_buffers_.push_back(MmapBuffer{.address = mapped, .length = buffer_length});
+
+    v4l2_buffer qbuf{};
+    qbuf.type = buffer_type_;
+    qbuf.memory = V4L2_MEMORY_MMAP;
+    qbuf.index = i;
+    std::array<v4l2_plane, kMaxPlanes> qbuf_planes{};
+    if (buffer_type_ == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+      qbuf.m.planes = qbuf_planes.data();
+      qbuf.length = static_cast<decltype(qbuf.length)>(plane_count);
+    }
+    if (IoctlRetry(fd_, VIDIOC_QBUF, &qbuf) != 0) {
+      std::string cleanup_error;
+      (void)release_allocated_buffers(cleanup_error);
+      error = "VIDIOC_QBUF failed for buffer " + std::to_string(i) + ": " +
+              std::string(std::strerror(errno));
+      return false;
+    }
+  }
+
+  int stream_type = static_cast<int>(buffer_type_);
+  if (IoctlRetry(fd_, VIDIOC_STREAMON, &stream_type) != 0) {
+    std::string cleanup_error;
+    (void)release_allocated_buffers(cleanup_error);
+    error = "VIDIOC_STREAMON failed: " + std::string(std::strerror(errno));
+    return false;
+  }
+
+  streaming_ = true;
+  stream_info.buffer_type = buffer_type_;
+  stream_info.buffer_count = mmap_buffers_.size();
+  return true;
+#endif
+}
+
+bool V4l2CaptureDevice::StopStreaming(std::string& error) {
+  error.clear();
+
+  if (!IsOpen()) {
+    mmap_buffers_.clear();
+    mmap_buffers_allocated_ = false;
+    streaming_ = false;
+    return true;
+  }
+
+#if !defined(__linux__)
+  error = "V4L2 capture is only supported on Linux";
+  return false;
+#else
+  std::string first_error;
+
+  if (streaming_) {
+    int stream_type = static_cast<int>(buffer_type_);
+    if (IoctlRetry(fd_, VIDIOC_STREAMOFF, &stream_type) != 0) {
+      first_error = "VIDIOC_STREAMOFF failed: " + std::string(std::strerror(errno));
+    }
+  }
+  streaming_ = false;
+
+  if (!io_ops_.munmap_fn) {
+    if (first_error.empty()) {
+      first_error = "V4L2 munmap operation is not configured";
+    }
+  } else {
+    for (const MmapBuffer& buffer : mmap_buffers_) {
+      if (buffer.address == nullptr || buffer.length == 0U) {
+        continue;
+      }
+      if (io_ops_.munmap_fn(buffer.address, buffer.length) != 0 && first_error.empty()) {
+        first_error = "failed to munmap V4L2 buffer: " + std::string(std::strerror(errno));
+      }
+    }
+  }
+  mmap_buffers_.clear();
+
+  if (mmap_buffers_allocated_) {
+    v4l2_requestbuffers req{};
+    req.count = 0U;
+    req.type = buffer_type_;
+    req.memory = V4L2_MEMORY_MMAP;
+    if (IoctlRetry(fd_, VIDIOC_REQBUFS, &req) != 0 && first_error.empty()) {
+      first_error = "failed to release V4L2 mmap buffers: " + std::string(std::strerror(errno));
+    }
+  }
+  mmap_buffers_allocated_ = false;
+
+  if (!first_error.empty()) {
+    error = first_error;
+    return false;
+  }
+  return true;
+#endif
+}
+
+bool V4l2CaptureDevice::IsStreaming() const {
+  return streaming_;
 }
 
 const std::string& V4l2CaptureDevice::DevicePath() const {

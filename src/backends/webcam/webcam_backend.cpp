@@ -400,6 +400,30 @@ bool WebcamBackend::Connect(std::string& error) {
       params_["webcam.linux_capture.apply_error"] = native_probe_error;
     }
 
+    if (native_open_info.capture_method == V4l2CaptureMethod::kMmapStreaming) {
+      V4l2StreamStartInfo stream_start_info;
+      if (linux_capture_probe_.StartMmapStreaming(/*requested_buffer_count=*/4U, stream_start_info,
+                                                  native_probe_error)) {
+        params_["webcam.linux_capture.stream_start"] = "ok";
+        params_["webcam.linux_capture.stream_buffer_count"] =
+            std::to_string(stream_start_info.buffer_count);
+        params_["webcam.linux_capture.stream_buffer_type"] =
+            std::to_string(stream_start_info.buffer_type);
+
+        std::string native_stream_stop_error;
+        if (!linux_capture_probe_.StopStreaming(native_stream_stop_error)) {
+          error = "failed to stop Linux V4L2 streaming probe: " + native_stream_stop_error;
+          return false;
+        }
+      } else {
+        params_["webcam.linux_capture.stream_start_error"] = native_probe_error;
+      }
+    } else {
+      params_["webcam.linux_capture.stream_start"] = "skipped";
+      params_["webcam.linux_capture.stream_start_reason"] =
+          "mmap streaming unavailable for selected capture method";
+    }
+
     std::string native_close_error;
     if (!linux_capture_probe_.Close(native_close_error)) {
       error = "failed to close Linux V4L2 probe device: " + native_close_error;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -54,6 +55,12 @@ struct V4l2ApplyResult {
   std::vector<V4l2AppliedControl> controls;
 };
 
+// Evidence emitted after successfully initializing mmap streaming buffers.
+struct V4l2StreamStartInfo {
+  std::uint32_t buffer_type = 0U;
+  std::size_t buffer_count = 0U;
+};
+
 // Thin Linux V4L2 open/close helper used by webcam backend initialization.
 //
 // Why this exists:
@@ -66,6 +73,10 @@ public:
     std::function<int(const char* path, int flags)> open_fn;
     std::function<int(int fd)> close_fn;
     std::function<int(int fd, unsigned long request, void* arg)> ioctl_fn;
+    std::function<void*(void* addr, std::size_t length, int prot, int flags, int fd,
+                        std::int64_t offset)>
+        mmap_fn;
+    std::function<int(void* addr, std::size_t length)> munmap_fn;
   };
 
   static IoOps DefaultIoOps();
@@ -80,8 +91,12 @@ public:
   bool Close(std::string& error);
   bool ApplyRequestedFormatBestEffort(const V4l2RequestedFormat& request, V4l2ApplyResult& result,
                                       std::string& error);
+  bool StartMmapStreaming(std::size_t requested_buffer_count, V4l2StreamStartInfo& stream_info,
+                          std::string& error);
+  bool StopStreaming(std::string& error);
 
   bool IsOpen() const;
+  bool IsStreaming() const;
   const std::string& DevicePath() const;
   V4l2CaptureMethod CaptureMethod() const;
 
@@ -89,6 +104,11 @@ public:
                                   std::string& reason);
 
 private:
+  struct MmapBuffer {
+    void* address = nullptr;
+    std::size_t length = 0U;
+  };
+
   int IoctlRetry(int fd, unsigned long request, void* arg) const;
 
   IoOps io_ops_;
@@ -97,6 +117,9 @@ private:
   std::uint32_t effective_capabilities_ = 0U;
   std::uint32_t buffer_type_ = 0U;
   V4l2CaptureMethod capture_method_ = V4l2CaptureMethod::kMmapStreaming;
+  std::vector<MmapBuffer> mmap_buffers_;
+  bool mmap_buffers_allocated_ = false;
+  bool streaming_ = false;
 };
 
 } // namespace labops::backends::webcam

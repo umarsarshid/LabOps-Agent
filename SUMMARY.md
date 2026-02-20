@@ -1,147 +1,128 @@
 # LabOps Summary
 
-## Commit: feat(webcam/linux): apply requested format with readback evidence
+## Commit: feat(webcam/linux): add V4L2 mmap streaming bootstrap
 
 Date: 2026-02-20
 
 ### Goal
-Implement milestone `0112` for Linux webcam runs:
-- Apply requested `width/height/pixel_format` via `VIDIOC_S_FMT`
-- Apply requested `fps` via `VIDIOC_S_PARM` when supported
-- Keep behavior best-effort (do not hard-fail unsupported controls)
-- Emit explicit unsupported/adjusted evidence
-- Record requested vs actual values so artifacts reflect what the driver really accepted
+Implement milestone `0113` by adding Linux-native V4L2 mmap streaming startup lifecycle:
+- `VIDIOC_REQBUFS`
+- `VIDIOC_QUERYBUF`
+- `mmap`
+- `VIDIOC_QBUF`
+- `VIDIOC_STREAMON`
 
 Done criteria:
-- `CONFIG_UNSUPPORTED` is emitted when a control cannot be applied/supported
-- `CONFIG_ADJUSTED` is emitted when the driver negotiates to a different value
-- `camera_config.json` and `config_report.md` include stable requested vs actual evidence for webcam controls
+- native mmap stream startup path exists and is test-covered
+- startup/teardown errors are explicit and actionable
+- webcam backend captures Linux stream-start evidence during connect
 
 ### What was implemented
 
-1. Added Linux native V4L2 best-effort format apply/readback API
+1. Added mmap streaming lifecycle API to Linux V4L2 capture helper
 - Updated: `src/backends/webcam/linux/v4l2_capture_device.hpp`
 - Updated: `src/backends/webcam/linux/v4l2_capture_device.cpp`
 
-New structs:
-- `V4l2RequestedFormat`
-- `V4l2AppliedControl`
-- `V4l2ApplyResult`
+New contracts:
+- `V4l2StreamStartInfo`
+- `StartMmapStreaming(requested_buffer_count, stream_info, error)`
+- `StopStreaming(error)`
+- `IsStreaming()`
 
-New method:
-- `ApplyRequestedFormatBestEffort(...)`
-
-Behavior:
-- Applies width/height/pixel format through `VIDIOC_S_FMT`
-- Applies fps through `VIDIOC_G_PARM`/`VIDIOC_S_PARM`/readback `VIDIOC_G_PARM`
-- Produces one per-control row with:
-  - `supported`
-  - `applied`
-  - `adjusted`
-  - `requested_value`
-  - `actual_value`
-  - actionable `reason`
-- Treats unsupported/rejected controls as per-control unsupported rows (best-effort)
-- Preserves hard failure only for true contract misuse (e.g., device not open)
+New internal state:
+- mapped buffer table (`address`, `length`)
+- buffer-allocation state flag
+- streaming state flag
 
 Why:
-- Engineers need negotiated readback, not only requested intent.
-- Drivers often adjust camera values; recording this removes false assumptions and reduces flaky threshold debugging.
+- open/query capability checks are not enough for real capture readiness.
+- this adds the real kernel handshake for streaming so Linux webcam readiness is proven, not assumed.
 
-2. Upgraded webcam backend evidence model to include unsupported + adjusted + readback rows
-- Updated: `src/backends/webcam/webcam_backend.hpp`
+2. Extended IO abstraction to support mmap/munmap in production and tests
+- Updated: `V4l2CaptureDevice::IoOps`
+  - added `mmap_fn`
+  - added `munmap_fn`
+- default Linux IO ops now bind to:
+  - `::mmap`
+  - `::munmap`
+
+Why:
+- keeps Linux runtime behavior and no-hardware tests aligned.
+- allows deterministic mmap lifecycle testing in CI without real webcams.
+
+3. Implemented robust startup and cleanup behavior
+- `StartMmapStreaming(...)` now:
+  - validates device is open and method is `mmap_streaming`
+  - requests buffers via `VIDIOC_REQBUFS`
+  - queries each buffer via `VIDIOC_QUERYBUF`
+  - maps each buffer via `mmap`
+  - queues each buffer via `VIDIOC_QBUF`
+  - starts stream via `VIDIOC_STREAMON`
+- `StopStreaming(...)` now:
+  - stops stream via `VIDIOC_STREAMOFF` when active
+  - unmaps buffers via `munmap`
+  - releases kernel buffers via `VIDIOC_REQBUFS(count=0)`
+- `Close(...)` now enforces stream cleanup before FD close.
+
+Why:
+- avoids leaked mappings/buffers and keeps repeated runs stable.
+- makes failure modes actionable (`REQBUFS`, `QUERYBUF`, `QBUF`, `STREAMON`, `STREAMOFF`, `munmap` each report clear context).
+
+4. Wired Linux mmap stream-start probe evidence into webcam backend connect flow
 - Updated: `src/backends/webcam/webcam_backend.cpp`
 
-Changes:
-- Added backend-side row models:
-  - `AdjustedControl`
-  - `ReadbackRow`
-- Added state collections:
-  - `adjusted_controls_`
-  - `readback_rows_`
-  - `linux_native_config_applied_`
-- Added Linux-native apply integration:
-  - `ApplyLinuxRequestedConfigBestEffort(...)`
-- `Connect(...)` now:
-  - clears previous session config snapshot
-  - probes and applies Linux-native requested controls best-effort
-  - keeps OpenCV fallback behavior intact
-- `ApplyRequestedConfig(...)` now:
-  - short-circuits if Linux native apply already succeeded
-  - records readback/adjusted rows for OpenCV path too
-
-Dump config contract additions:
-- `webcam.native_apply_used`
-- `webcam.readback.count`
-- `webcam.readback.<i>.*`
-- `webcam.adjusted.count`
-- `webcam.adjusted.<i>.*`
-- existing `webcam.unsupported.*` retained
+Behavior on Linux during connect:
+- after native open + best-effort format apply, backend now tries mmap stream bootstrap probe.
+- on success records:
+  - `webcam.linux_capture.stream_start=ok`
+  - `webcam.linux_capture.stream_buffer_count`
+  - `webcam.linux_capture.stream_buffer_type`
+- on non-mmap devices records explicit skip reason.
+- on start failure records explicit `stream_start_error` evidence (best-effort, non-fatal to OpenCV bootstrap flow).
 
 Why:
-- Router and artifact layers need normalized evidence regardless of whether the applied path was V4L2-native or OpenCV fallback.
+- surfaces real Linux stream-readiness evidence in bundle/config diagnostics.
+- keeps current OpenCV bootstrap path working while native Linux path is built incrementally.
 
-3. Wired webcam config status events + config artifacts into run orchestration
-- Updated: `src/labops/cli/router.cpp`
-
-Added helpers:
-- `BuildWebcamApplyEvidence(...)`
-  - parses backend dump rows into typed apply evidence
-- `EmitWebcamConfigStatusEvents(...)`
-  - emits `CONFIG_UNSUPPORTED` and `CONFIG_ADJUSTED` from webcam apply evidence
-- `WriteWebcamConfigArtifacts(...)`
-  - writes:
-    - `config_verify.json`
-    - `camera_config.json`
-    - `config_report.md`
-
-Run flow change:
-- Webcam backend path now builds typed evidence and writes the same config artifacts/report style as real backend flow.
-
-Why:
-- This makes webcam runs produce engineer-usable config diagnostics with the same operational model already used by real backend triage.
-
-4. Expanded artifact curation/report notes for webcam controls
-- Updated: `src/artifacts/camera_config_writer.cpp`
-- Updated: `src/artifacts/config_report_writer.cpp`
-
-Changes:
-- Added curated generic keys:
-  - `width`, `height`, `fps`
-- Added report unit/negotiation notes:
-  - width/height via `VIDIOC_S_FMT`
-  - fps via `VIDIOC_S_PARM` when supported
-
-Why:
-- Keeps report readability high and avoids forcing engineers to decode low-level backend fields.
-
-5. Added deterministic Linux V4L2 apply/readback smoke coverage
+5. Added deterministic no-hardware streaming smoke coverage
 - Updated: `tests/backends/webcam_linux_v4l2_capture_device_smoke.cpp`
 
-New test coverage:
-- `TestApplyRequestedFormatCapturesAdjustedReadback`
-  - verifies adjusted rows for width/height/pixel format/fps
-- `TestApplyRequestedFormatCapturesUnsupported`
-  - verifies unsupported rows when `S_FMT` fails or `TIMEPERFRAME` unsupported
+Added test harness support for:
+- `VIDIOC_REQBUFS`
+- `VIDIOC_QUERYBUF`
+- `VIDIOC_QBUF`
+- `VIDIOC_STREAMON`
+- `VIDIOC_STREAMOFF`
+- fake `mmap`/`munmap`
 
-Also extended fake ioctl harness to model:
-- `G_FMT/S_FMT`
-- `G_PARM/S_PARM`
-- adjustable negotiated values
-- unsupported/failure toggles
+New tests:
+- `TestMmapStreamingStartStop`
+  - validates full startup and teardown call sequence/counters
+- `TestMmapStreamingFailureIsActionable`
+  - validates actionable error when `REQBUFS` fails
+- `TestMmapStreamingRejectsReadFallbackDevices`
+  - validates mmap start is rejected when device is read-fallback only
 
 Why:
-- Protects the exact best-effort/adjusted semantics in CI without hardware dependency.
+- protects the exact stream startup contract in CI without camera dependencies.
+
+6. Updated module docs to reflect new Linux streaming bootstrap stage
+- Updated:
+  - `src/backends/webcam/linux/README.md`
+  - `src/backends/webcam/README.md`
+  - `tests/backends/README.md`
+
+Why:
+- keeps contributor handoff docs aligned with real implementation.
 
 ### Files changed
 - `src/backends/webcam/linux/v4l2_capture_device.hpp`
 - `src/backends/webcam/linux/v4l2_capture_device.cpp`
-- `src/backends/webcam/webcam_backend.hpp`
 - `src/backends/webcam/webcam_backend.cpp`
-- `src/labops/cli/router.cpp`
-- `src/artifacts/camera_config_writer.cpp`
-- `src/artifacts/config_report_writer.cpp`
 - `tests/backends/webcam_linux_v4l2_capture_device_smoke.cpp`
+- `src/backends/webcam/linux/README.md`
+- `src/backends/webcam/README.md`
+- `tests/backends/README.md`
 - `SUMMARY.md`
 
 ### Verification
@@ -154,14 +135,14 @@ Why:
 - Command: `cmake --build build`
 - Result: passed
 
-3. Focused tests
+3. Focused webcam tests
 - Command:
-  - `ctest --test-dir build -R "webcam_linux_v4l2_capture_device_smoke|webcam_backend_smoke|run_webcam_selector_resolution_smoke|list_devices_webcam_backend_smoke|real_apply_mode_events_smoke" --output-on-failure`
-- Result: passed (`5/5`)
+  - `ctest --test-dir build -R "webcam_linux_v4l2_capture_device_smoke|webcam_backend_smoke|run_webcam_selector_resolution_smoke|list_devices_webcam_backend_smoke" --output-on-failure`
+- Result: passed (`4/4`)
 
-4. Full suite
+4. Full regression suite
 - Command: `ctest --test-dir build --output-on-failure`
 - Result: passed (`81/81`)
 
 ### Outcome
-Linux webcam runs now apply requested format/fps best-effort, emit explicit unsupported/adjusted evidence events, and persist requested-vs-actual config diagnostics in standard triage artifacts (`config_verify.json`, `camera_config.json`, `config_report.md`).
+Linux webcam backend now includes real mmap streaming bootstrap lifecycle with explicit evidence and deterministic CI coverage, which materially improves confidence that streaming can actually start on Linux before the full native frame acquisition loop is introduced.

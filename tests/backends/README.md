@@ -43,7 +43,9 @@ stable interface regardless of real hardware availability.
 - `webcam_linux_v4l2_capture_device_smoke.cpp`: validates Linux native V4L2
   device open/close lifecycle and capture-method selection (`mmap` preferred,
   `read()` fallback) using injected IO ops (no webcam required), including
-  actionable failures for open/querycap/capability/close paths.
+  actionable failures for open/querycap/capability/close paths plus mmap
+  streaming bootstrap lifecycle (`REQBUFS`, `QUERYBUF`, `mmap`, `QBUF`,
+  `STREAMON`, `STREAMOFF`).
 - `real_backend_factory_smoke.cpp`: validates real-backend factory behavior in
   both build states (enabled -> real skeleton, disabled -> sdk_stub fallback)
   and verifies enabled-lifecycle start/stop safety without requiring camera

@@ -1,5 +1,6 @@
 #include "backends/webcam/linux/v4l2_capture_device.hpp"
 
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -9,6 +10,7 @@
 #if defined(__linux__)
 #include <cstdio>
 #include <linux/videodev2.h>
+#include <sys/mman.h>
 #endif
 
 namespace {
@@ -37,6 +39,13 @@ struct FakeIoState {
   int open_calls = 0;
   int close_calls = 0;
   int ioctl_calls = 0;
+  int reqbuf_calls = 0;
+  int querybuf_calls = 0;
+  int qbuf_calls = 0;
+  int streamon_calls = 0;
+  int streamoff_calls = 0;
+  int mmap_calls = 0;
+  int munmap_calls = 0;
 
   int open_result_fd = 17;
   int close_result = 0;
@@ -68,6 +77,15 @@ struct FakeIoState {
   std::uint32_t adjusted_height = 720U;
   std::uint32_t adjusted_fourcc = v4l2_fourcc('Y', 'U', 'Y', 'V');
   double adjusted_fps = 59.94;
+
+  bool fail_reqbuf = false;
+  bool fail_querybuf = false;
+  bool fail_qbuf = false;
+  bool fail_streamon = false;
+  bool fail_streamoff = false;
+  bool fail_mmap = false;
+  bool fail_munmap = false;
+  std::uint32_t reqbuf_count_return = 4U;
 };
 
 std::optional<double> FpsFromTimePerFrame(const v4l2_fract& tpf) {
@@ -168,6 +186,73 @@ labops::backends::webcam::V4l2CaptureDevice::IoOps MakeIoOps(FakeIoState& state)
               return 0;
             }
 
+            if (request == VIDIOC_REQBUFS) {
+              ++state.reqbuf_calls;
+              auto* req = static_cast<v4l2_requestbuffers*>(arg);
+              if (state.fail_reqbuf) {
+                errno = EINVAL;
+                return -1;
+              }
+              if (req->memory != V4L2_MEMORY_MMAP) {
+                errno = EINVAL;
+                return -1;
+              }
+              if (req->count == 0U) {
+                return 0;
+              }
+              req->count = state.reqbuf_count_return;
+              return 0;
+            }
+
+            if (request == VIDIOC_QUERYBUF) {
+              ++state.querybuf_calls;
+              if (state.fail_querybuf) {
+                errno = EINVAL;
+                return -1;
+              }
+              auto* buffer = static_cast<v4l2_buffer*>(arg);
+              if (buffer->type == V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+                buffer->length = 4096U;
+                buffer->m.offset = buffer->index * 4096U;
+              } else {
+                if (buffer->m.planes == nullptr || buffer->length == 0U) {
+                  errno = EINVAL;
+                  return -1;
+                }
+                buffer->m.planes[0].length = 4096U;
+                buffer->m.planes[0].m.mem_offset = buffer->index * 4096U;
+                buffer->length = 1U;
+              }
+              return 0;
+            }
+
+            if (request == VIDIOC_QBUF) {
+              ++state.qbuf_calls;
+              if (state.fail_qbuf) {
+                errno = EIO;
+                return -1;
+              }
+              return 0;
+            }
+
+            if (request == VIDIOC_STREAMON) {
+              ++state.streamon_calls;
+              if (state.fail_streamon) {
+                errno = EBUSY;
+                return -1;
+              }
+              return 0;
+            }
+
+            if (request == VIDIOC_STREAMOFF) {
+              ++state.streamoff_calls;
+              if (state.fail_streamoff) {
+                errno = EIO;
+                return -1;
+              }
+              return 0;
+            }
+
             if (request == VIDIOC_G_PARM) {
               if (state.fail_g_parm) {
                 errno = EINVAL;
@@ -211,6 +296,26 @@ labops::backends::webcam::V4l2CaptureDevice::IoOps MakeIoOps(FakeIoState& state)
 
             errno = EINVAL;
             return -1;
+          },
+      .mmap_fn = [&state](void* /*addr*/, const std::size_t /*length*/, const int /*prot*/,
+                          const int /*flags*/, const int /*fd*/,
+                          const std::int64_t /*offset*/) -> void* {
+        ++state.mmap_calls;
+        if (state.fail_mmap) {
+          errno = ENOMEM;
+          return MAP_FAILED;
+        }
+        return reinterpret_cast<void*>(static_cast<std::uintptr_t>(0x1000000U) +
+                                       static_cast<std::uintptr_t>(state.mmap_calls * 0x1000));
+      },
+      .munmap_fn =
+          [&state](void* /*addr*/, const std::size_t /*length*/) {
+            ++state.munmap_calls;
+            if (state.fail_munmap) {
+              errno = EIO;
+              return -1;
+            }
+            return 0;
           },
   };
 }
@@ -443,6 +548,92 @@ void TestApplyRequestedFormatCapturesUnsupported() {
     Fail("expected close to succeed");
   }
 }
+
+void TestMmapStreamingStartStop() {
+  FakeIoState state;
+  state.device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING | V4L2_CAP_READWRITE;
+  state.reqbuf_count_return = 3U;
+
+  labops::backends::webcam::V4l2CaptureDevice device(MakeIoOps(state));
+  labops::backends::webcam::V4l2OpenInfo info;
+  std::string error;
+  if (!device.Open("/dev/video11", info, error)) {
+    Fail("expected open to succeed before mmap streaming test");
+  }
+
+  labops::backends::webcam::V4l2StreamStartInfo stream_info;
+  if (!device.StartMmapStreaming(/*requested_buffer_count=*/3U, stream_info, error)) {
+    Fail("expected mmap streaming to start");
+  }
+  AssertTrue(device.IsStreaming(), "expected stream to be marked running");
+  AssertTrue(stream_info.buffer_count == 3U, "expected stream buffer count from reqbuf");
+  AssertTrue(state.reqbuf_calls >= 1, "expected VIDIOC_REQBUFS calls");
+  AssertTrue(state.querybuf_calls == 3, "expected one VIDIOC_QUERYBUF per buffer");
+  AssertTrue(state.qbuf_calls == 3, "expected one VIDIOC_QBUF per buffer");
+  AssertTrue(state.mmap_calls == 3, "expected one mmap per buffer");
+  AssertTrue(state.streamon_calls == 1, "expected one VIDIOC_STREAMON");
+
+  if (!device.StopStreaming(error)) {
+    Fail("expected stream stop to succeed");
+  }
+  AssertTrue(!device.IsStreaming(), "expected stream stopped flag");
+  AssertTrue(state.streamoff_calls == 1, "expected one VIDIOC_STREAMOFF");
+  AssertTrue(state.munmap_calls == 3, "expected one munmap per buffer");
+  AssertTrue(state.reqbuf_calls >= 2, "expected reqbuf release call");
+
+  if (!device.Close(error)) {
+    Fail("expected close to succeed after stream stop");
+  }
+}
+
+void TestMmapStreamingFailureIsActionable() {
+  FakeIoState state;
+  state.device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+  state.fail_reqbuf = true;
+  labops::backends::webcam::V4l2CaptureDevice device(MakeIoOps(state));
+
+  labops::backends::webcam::V4l2OpenInfo info;
+  std::string error;
+  if (!device.Open("/dev/video13", info, error)) {
+    Fail("expected open to succeed before reqbuf failure test");
+  }
+
+  labops::backends::webcam::V4l2StreamStartInfo stream_info;
+  if (device.StartMmapStreaming(/*requested_buffer_count=*/4U, stream_info, error)) {
+    Fail("expected mmap streaming start to fail when REQBUFS fails");
+  }
+  AssertContains(error, "VIDIOC_REQBUFS failed");
+  AssertTrue(!device.IsStreaming(), "stream should remain stopped after start failure");
+
+  state.fail_reqbuf = false;
+  if (!device.Close(error)) {
+    Fail("expected close to succeed after failed start");
+  }
+}
+
+void TestMmapStreamingRejectsReadFallbackDevices() {
+  FakeIoState state;
+  state.device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_READWRITE;
+  labops::backends::webcam::V4l2CaptureDevice device(MakeIoOps(state));
+
+  labops::backends::webcam::V4l2OpenInfo info;
+  std::string error;
+  if (!device.Open("/dev/video14", info, error)) {
+    Fail("expected read-fallback open to succeed");
+  }
+  AssertTrue(info.capture_method == labops::backends::webcam::V4l2CaptureMethod::kReadFallback,
+             "expected read fallback mode");
+
+  labops::backends::webcam::V4l2StreamStartInfo stream_info;
+  if (device.StartMmapStreaming(/*requested_buffer_count=*/2U, stream_info, error)) {
+    Fail("expected mmap streaming start to fail on read-fallback device");
+  }
+  AssertContains(error, "mmap streaming is unavailable");
+
+  if (!device.Close(error)) {
+    Fail("expected close to succeed after read-fallback start rejection");
+  }
+}
 #endif
 
 } // namespace
@@ -458,6 +649,9 @@ int main() {
   TestCloseFailureIsActionable();
   TestApplyRequestedFormatCapturesAdjustedReadback();
   TestApplyRequestedFormatCapturesUnsupported();
+  TestMmapStreamingStartStop();
+  TestMmapStreamingFailureIsActionable();
+  TestMmapStreamingRejectsReadFallbackDevices();
   std::cout << "webcam_linux_v4l2_capture_device_smoke: ok\n";
   return 0;
 #endif

@@ -26,6 +26,13 @@ Linux webcam support will be implemented using V4L2 (`/dev/video*`). Keeping Lin
   - validates `VIDIOC_QUERYCAP` and selects capture method:
     - prefer `mmap` streaming when available
     - fallback to `read()` when streaming is unavailable
+  - implements mmap stream bootstrap lifecycle:
+    - `VIDIOC_REQBUFS`
+    - `VIDIOC_QUERYBUF`
+    - `mmap`
+    - `VIDIOC_QBUF`
+    - `VIDIOC_STREAMON`
+    - paired teardown via `VIDIOC_STREAMOFF` + `munmap` + `VIDIOC_REQBUFS(count=0)`
   - returns explicit/actionable errors for open/querycap/capability/close
     failures.
 
