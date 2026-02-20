@@ -1,4 +1,5 @@
 #include "backends/webcam/opencv_webcam_impl.hpp"
+#include "backends/webcam/capture_clock.hpp"
 
 #include <algorithm>
 #include <climits>
@@ -53,11 +54,16 @@ std::uint32_t SafeFrameSizeBytes(const cv::Mat& frame) {
 } // namespace
 
 struct OpenCvWebcamImpl::Impl {
+  // Unified capture clock used to convert internal steady timestamps into
+  // contract-safe system-clock event timestamps.
+  CaptureClock capture_clock;
+
   bool test_mode_enabled = false;
   bool test_device_open = false;
   std::unique_ptr<IWebcamFrameProvider> test_provider;
   std::chrono::milliseconds test_frame_period = std::chrono::milliseconds(33);
-  std::chrono::system_clock::time_point test_stream_start{};
+  std::chrono::system_clock::time_point test_stream_start_wall{};
+  std::chrono::steady_clock::time_point test_stream_start_steady{};
   std::uint64_t emitted_period_cursor = 0U;
   double test_frame_width = 640.0;
   double test_frame_height = 480.0;
@@ -98,7 +104,10 @@ void OpenCvWebcamImpl::EnableTestMode(std::unique_ptr<IWebcamFrameProvider> prov
   impl_->test_frame_period = frame_period > std::chrono::milliseconds::zero()
                                  ? frame_period
                                  : std::chrono::milliseconds(1);
-  impl_->test_stream_start = stream_start_ts;
+  impl_->test_stream_start_wall = stream_start_ts;
+  impl_->test_stream_start_steady = std::chrono::steady_clock::time_point{};
+  impl_->capture_clock =
+      CaptureClock::Anchored(impl_->test_stream_start_wall, impl_->test_stream_start_steady);
   impl_->emitted_period_cursor = 0U;
 #if LABOPS_ENABLE_WEBCAM_OPENCV
   if (impl_->capture.isOpened()) {
@@ -112,7 +121,9 @@ void OpenCvWebcamImpl::DisableTestMode() {
   impl_->test_device_open = false;
   impl_->test_provider.reset();
   impl_->test_frame_period = std::chrono::milliseconds(33);
-  impl_->test_stream_start = std::chrono::system_clock::time_point{};
+  impl_->test_stream_start_wall = std::chrono::system_clock::time_point{};
+  impl_->test_stream_start_steady = std::chrono::steady_clock::time_point{};
+  impl_->capture_clock.ResetToNow();
   impl_->emitted_period_cursor = 0U;
 }
 
@@ -128,6 +139,8 @@ bool OpenCvWebcamImpl::OpenDevice(const std::size_t device_index, std::string& e
       error = "test mode requires a non-null frame provider";
       return false;
     }
+    impl_->capture_clock =
+        CaptureClock::Anchored(impl_->test_stream_start_wall, impl_->test_stream_start_steady);
     impl_->test_device_open = true;
     impl_->emitted_period_cursor = 0U;
     return true;
@@ -145,6 +158,7 @@ bool OpenCvWebcamImpl::OpenDevice(const std::size_t device_index, std::string& e
   }
   impl_->capture.release();
   impl_->capture = std::move(capture);
+  impl_->capture_clock.ResetToNow();
   return true;
 #else
   (void)device_index;
@@ -362,9 +376,10 @@ std::vector<FrameSample> OpenCvWebcamImpl::PullFrames(std::chrono::milliseconds 
       impl_->emitted_period_cursor += scripted.stall_periods;
       FrameSample frame;
       frame.frame_id = next_frame_id++;
-      frame.timestamp =
-          impl_->test_stream_start +
+      const auto captured_at =
+          impl_->test_stream_start_steady +
           impl_->test_frame_period * static_cast<std::int64_t>(impl_->emitted_period_cursor);
+      frame.timestamp = impl_->capture_clock.ToWallTime(captured_at);
       ++impl_->emitted_period_cursor;
 
       switch (scripted.outcome) {
@@ -419,7 +434,9 @@ std::vector<FrameSample> OpenCvWebcamImpl::PullFrames(std::chrono::milliseconds 
 
     FrameSample sample;
     sample.frame_id = next_frame_id++;
-    sample.timestamp = std::chrono::system_clock::now();
+    // Use monotonic capture time as the source of truth, then convert into
+    // the existing wall-clock artifact contract.
+    sample.timestamp = impl_->capture_clock.ToWallTime(read_finished_at);
 
     if (!read_ok) {
       sample.size_bytes = 0;

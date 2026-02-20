@@ -31,6 +31,9 @@ stable interface regardless of real hardware availability.
   deterministic resolution rules (`id` exact match, stable sorted `index`,
   `name_contains`, default index `0`) plus fixture-driven discovery via
   `LABOPS_WEBCAM_DEVICE_FIXTURE`.
+- `webcam_capture_clock_smoke.cpp`: validates the webcam monotonic capture
+  clock layer that maps `steady_clock` capture timestamps into
+  contract-compatible wall-clock timestamps without backward time drift.
 - `webcam_opencv_mock_provider_smoke.cpp`: validates webcam OpenCV-impl
   test-mode behavior using a deterministic `MockFrameProvider` (no camera
   required), including classification of received/timeout/incomplete outcomes

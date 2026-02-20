@@ -120,6 +120,7 @@ add_library(labops_backends
   src/backends/sim/scenario_config.cpp
   src/backends/sim/sim_camera_backend.cpp
   src/backends/webcam/capabilities.cpp
+  src/backends/webcam/capture_clock.cpp
   src/backends/webcam/device_model.cpp
   src/backends/webcam/device_selector.cpp
   src/backends/webcam/opencv_bootstrap.cpp
@@ -530,6 +531,16 @@ add_labops_smoke_test(
   NAME webcam_device_selector_smoke
   SOURCES
     tests/backends/webcam_device_selector_smoke.cpp
+  LIBRARIES
+    labops_backends
+)
+
+# Smoke test validating monotonic-to-wall timestamp conversion used by webcam
+# capture paths.
+add_labops_smoke_test(
+  NAME webcam_capture_clock_smoke
+  SOURCES
+    tests/backends/webcam_capture_clock_smoke.cpp
   LIBRARIES
     labops_backends
 )

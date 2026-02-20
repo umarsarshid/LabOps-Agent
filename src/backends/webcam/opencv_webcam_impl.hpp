@@ -48,6 +48,8 @@ public:
 // - set/read back core stream properties
 // - acquire frame samples for a time budget while classifying timeout/incomplete
 //   outcomes for event + metric pipelines
+// - stamp frames from monotonic capture timing while preserving the existing
+//   system-clock timestamp contract for downstream artifacts
 class OpenCvWebcamImpl {
 public:
   OpenCvWebcamImpl();
