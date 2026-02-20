@@ -40,6 +40,10 @@ stable interface regardless of real hardware availability.
   and deterministic stall-gap timestamp behavior, plus metrics category
   rollups (`timeout`, `incomplete`, `generic_dropped`) matching real-backend
   semantics.
+- `webcam_linux_v4l2_capture_device_smoke.cpp`: validates Linux native V4L2
+  device open/close lifecycle and capture-method selection (`mmap` preferred,
+  `read()` fallback) using injected IO ops (no webcam required), including
+  actionable failures for open/querycap/capability/close paths.
 - `real_backend_factory_smoke.cpp`: validates real-backend factory behavior in
   both build states (enabled -> real skeleton, disabled -> sdk_stub fallback)
   and verifies enabled-lifecycle start/stop safety without requiring camera

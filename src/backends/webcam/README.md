@@ -78,6 +78,8 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
 - `linux/`, `macos/`, `windows/`:
   - platform-specific availability probes that currently report clear
     unavailability reasons.
+  - Linux now includes native V4L2 open/close capture-method selection
+    (`mmap` preferred, `read()` fallback) with explicit errors.
 - `testing/`:
   - deterministic webcam test providers used by `opencv_webcam_impl` test mode.
 

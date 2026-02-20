@@ -128,6 +128,7 @@ void WebcamBackend::ClearSessionConfigSnapshot() {
   unsupported_controls_.clear();
   RemoveKeysWithPrefix("webcam.actual_", params_);
   RemoveKeysWithPrefix("webcam.unsupported.", params_);
+  RemoveKeysWithPrefix("webcam.linux_capture.", params_);
 }
 
 void WebcamBackend::RecordUnsupportedControl(std::string key, std::string requested_value,
@@ -251,6 +252,31 @@ bool WebcamBackend::Connect(std::string& error) {
   if (!ResolveDeviceIndex(device_index, error)) {
     return false;
   }
+
+#if defined(__linux__)
+  const std::string native_device_path = "/dev/video" + std::to_string(device_index);
+  V4l2OpenInfo native_open_info;
+  std::string native_probe_error;
+  if (linux_capture_probe_.Open(native_device_path, native_open_info, native_probe_error)) {
+    params_["webcam.linux_capture.path"] = native_open_info.device_path;
+    params_["webcam.linux_capture.driver"] = native_open_info.driver_name;
+    params_["webcam.linux_capture.card"] = native_open_info.card_name;
+    params_["webcam.linux_capture.capabilities_hex"] = native_open_info.capabilities_hex;
+    params_["webcam.linux_capture.method"] = ToString(native_open_info.capture_method);
+    params_["webcam.linux_capture.method_reason"] = native_open_info.capture_method_reason;
+
+    std::string native_close_error;
+    if (!linux_capture_probe_.Close(native_close_error)) {
+      error = "failed to close Linux V4L2 probe device: " + native_close_error;
+      return false;
+    }
+  } else {
+    // Keep probe errors as evidence but do not fail OpenCV bootstrap path yet.
+    params_["webcam.linux_capture.path"] = native_device_path;
+    params_["webcam.linux_capture.error"] = native_probe_error;
+  }
+#endif
+
   if (!opencv_.OpenDevice(device_index, error)) {
     return false;
   }

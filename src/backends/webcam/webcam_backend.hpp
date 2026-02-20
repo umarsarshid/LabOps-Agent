@@ -1,6 +1,7 @@
 #pragma once
 
 #include "backends/camera_backend.hpp"
+#include "backends/webcam/linux/v4l2_capture_device.hpp"
 #include "backends/webcam/opencv_webcam_impl.hpp"
 #include "backends/webcam/platform_probe.hpp"
 
@@ -52,6 +53,9 @@ private:
   bool ApplyRequestedConfig(std::string& error);
 
   PlatformAvailability platform_;
+  // Native Linux descriptor probe used to record capture-method selection
+  // evidence (mmap preferred, read fallback) before OpenCV bootstrap opens.
+  V4l2CaptureDevice linux_capture_probe_;
   OpenCvWebcamImpl opencv_;
   BackendConfig params_;
   RequestedConfig requested_;

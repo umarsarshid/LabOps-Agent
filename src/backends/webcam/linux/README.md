@@ -21,6 +21,13 @@ Linux webcam support will be implemented using V4L2 (`/dev/video*`). Keeping Lin
     `VIDIOC_QUERYCTRL` (+ menu labels via `VIDIOC_QUERYMENU`).
   - maps discovered cameras into normalized `WebcamDeviceInfo` rows used by
     `list-devices` and selector resolution.
+- `v4l2_capture_device.hpp/.cpp`:
+  - native Linux descriptor open/close helper for runtime capture setup.
+  - validates `VIDIOC_QUERYCAP` and selects capture method:
+    - prefer `mmap` streaming when available
+    - fallback to `read()` when streaming is unavailable
+  - returns explicit/actionable errors for open/querycap/capability/close
+    failures.
 
 ## Connection to the project
 

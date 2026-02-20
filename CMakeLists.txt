@@ -128,6 +128,7 @@ add_library(labops_backends
   src/backends/webcam/platform_probe.cpp
   src/backends/webcam/webcam_factory.cpp
   src/backends/webcam/linux/platform_probe_linux.cpp
+  src/backends/webcam/linux/v4l2_capture_device.cpp
   src/backends/webcam/linux/v4l2_device_enumerator.cpp
   src/backends/webcam/macos/platform_probe_macos.cpp
   src/backends/webcam/testing/mock_frame_provider.cpp
@@ -556,6 +557,16 @@ add_labops_smoke_test(
   LIBRARIES
     labops_backends
     labops_metrics
+)
+
+# Smoke test validating Linux V4L2 device open/close lifecycle and capture
+# method selection (mmap preferred, read fallback) with actionable failures.
+add_labops_smoke_test(
+  NAME webcam_linux_v4l2_capture_device_smoke
+  SOURCES
+    tests/backends/webcam_linux_v4l2_capture_device_smoke.cpp
+  LIBRARIES
+    labops_backends
 )
 
 # Smoke test for real-backend factory behavior:

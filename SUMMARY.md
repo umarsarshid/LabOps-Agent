@@ -1,97 +1,110 @@
 # LabOps Summary
 
-## Commit: feat(webcam/linux): model V4L2 supported controls
+## Commit: feat(webcam/linux): add V4L2 open and capture-method selection
 
 Date: 2026-02-20
 
 ### Goal
-Implement milestone `0110` by populating Linux V4L2 `supported_controls` for webcam devices and exposing that support clearly in device reports.
+Implement milestone `0111` by adding Linux-native V4L2 device open/close handling and deterministic capture-path selection:
+- prefer `mmap` streaming
+- fallback to `read()` when streaming is unavailable
 
-Target support coverage:
-- width/height from V4L2 format/size enumeration
-- pixel formats from `VIDIOC_ENUM_FMT`
-- fps list/range best-effort from `VIDIOC_ENUM_FRAMEINTERVALS`
-- exposure/gain/auto-exposure best-effort from `VIDIOC_QUERYCTRL`
+Done criteria:
+- open/close lifecycle is stable
+- failures are explicit/actionable
 
 ### What was implemented
 
-1. Expanded Linux V4L2 discovery to build supported-controls snapshot
-- Updated: `src/backends/webcam/linux/v4l2_device_enumerator.cpp`
-- Updated: `src/backends/webcam/linux/v4l2_device_enumerator.hpp`
+1. Added native Linux V4L2 open/close helper module
+- Added: `src/backends/webcam/linux/v4l2_capture_device.hpp`
+- Added: `src/backends/webcam/linux/v4l2_capture_device.cpp`
 
-Added internal discovery pipeline:
-- robust ioctl wrapper (`IoctlRetry`) to tolerate `EINTR`
-- pixel-format discovery:
-  - `VIDIOC_ENUM_FMT` per capture type
-  - fourcc decode to readable strings
-- width/height discovery:
-  - `VIDIOC_ENUM_FRAMESIZES`
-  - supports discrete and stepwise/continuous sizing
-  - records min/max and step (when available)
-- fps discovery (best-effort):
-  - `VIDIOC_ENUM_FRAMEINTERVALS`
-  - records discrete fps values where available
-  - records fps min/max for stepwise/continuous intervals
-- control discovery (best-effort):
-  - `VIDIOC_QUERYCTRL` for `EXPOSURE_ABSOLUTE`, `GAIN`, `EXPOSURE_AUTO`
-  - `VIDIOC_QUERYMENU` for menu-based controls
-  - maps to normalized `WebcamControlSpec` with:
-    - `value_type`
-    - range hints
-    - enum values
-    - `read_only`
+New contracts:
+- `V4l2CaptureDevice::Open(...)`
+- `V4l2CaptureDevice::Close(...)`
+- `V4l2CaptureDevice::ChooseCaptureMethod(...)`
+- `V4l2OpenInfo` evidence payload
 
-Why:
-- This turns Linux discovery from “device identity only” into “identity + capability evidence”.
-- Engineers can now see upfront what knobs are actually available before attempting a run.
-
-2. Added explicit webcam supported-control reporting in CLI device report
-- Updated: `src/labops/cli/router.cpp`
-
-Added helper output path:
-- `device[i].supported_controls.count: N`
-- per supported control:
-  - `id`
-  - `value_type`
-  - `range_min`, `range_max`, `range_step` (when present)
-  - `enum_values` (when present)
-  - `read_only`
+Behavior:
+- opens device descriptor with non-blocking flags
+- validates `VIDIOC_QUERYCAP`
+- computes effective capabilities (`device_caps` fallback to `capabilities`)
+- validates capture capability presence
+- selects capture method with deterministic rules:
+  - if streaming is present -> `mmap_streaming`
+  - else if read/write is present -> `read_fallback`
+  - else fail with explicit reason
+- returns clear errors for:
+  - open failure
+  - querycap failure
+  - unsupported capability set
+  - close failure
+- close is idempotent (`Close()` on already closed device returns success)
 
 Why:
-- Milestone “done when” asks for explicit support listing in the device report.
-- This keeps report output human-readable and automation-friendly.
+- this isolates Linux descriptor lifecycle from generic backend flow.
+- this gives one source of truth for method selection and error text.
+- this lays the foundation for full native Linux frame acquisition in later commits.
 
-3. Strengthened webcam list-devices smoke contract
-- Updated: `tests/labops/list_devices_webcam_backend_smoke.cpp`
+2. Wired Linux native probe into webcam backend connect path (best-effort evidence)
+- Updated: `src/backends/webcam/webcam_backend.hpp`
+- Updated: `src/backends/webcam/webcam_backend.cpp`
 
-New assertions:
-- each fixture-discovered device explicitly prints:
-  - `supported_controls.count: 0`
+Behavior in `Connect(...)` on Linux:
+- probes `/dev/video<index>` through `V4l2CaptureDevice`
+- on success records evidence into backend config:
+  - `webcam.linux_capture.path`
+  - `webcam.linux_capture.driver`
+  - `webcam.linux_capture.card`
+  - `webcam.linux_capture.capabilities_hex`
+  - `webcam.linux_capture.method`
+  - `webcam.linux_capture.method_reason`
+- on probe failure records:
+  - `webcam.linux_capture.path`
+  - `webcam.linux_capture.error`
+- keeps current OpenCV bootstrap run path unchanged
 
 Why:
-- Guarantees the device report always includes explicit support visibility, even when controls are absent.
+- exposes native open/method-selection decisions in artifacts immediately.
+- keeps existing run behavior stable while native capture pipeline is built incrementally.
 
-4. Updated module docs for handoff clarity
+3. Added deterministic smoke test for V4L2 open/close + method selection
+- Added: `tests/backends/webcam_linux_v4l2_capture_device_smoke.cpp`
+- Updated: `CMakeLists.txt` (new backend source + smoke target)
+
+Test coverage (no hardware required):
+- mmap preference when both streaming + read are available
+- read fallback when streaming is unavailable
+- actionable failures for:
+  - open syscall failure
+  - `VIDIOC_QUERYCAP` failure
+  - no capture capability
+  - no usable capture method
+  - close failure
+- idempotent close behavior
+
+Why:
+- validates lifecycle and error contract in CI without depending on real webcams.
+
+4. Updated module/test docs
 - Updated:
-  - `src/backends/webcam/README.md`
   - `src/backends/webcam/linux/README.md`
-  - `src/labops/README.md`
-  - `src/labops/cli/README.md`
-  - `tests/labops/README.md`
+  - `src/backends/webcam/README.md`
+  - `tests/backends/README.md`
 
 Why:
-- Keeps behavior/docs aligned so future engineers do not need code archeology.
+- keeps implementation details and expected behavior clear for future contributors.
 
 ### Files changed
-- `src/backends/webcam/linux/v4l2_device_enumerator.cpp`
-- `src/backends/webcam/linux/v4l2_device_enumerator.hpp`
-- `src/labops/cli/router.cpp`
-- `tests/labops/list_devices_webcam_backend_smoke.cpp`
-- `src/backends/webcam/README.md`
+- `CMakeLists.txt`
+- `src/backends/webcam/linux/v4l2_capture_device.hpp`
+- `src/backends/webcam/linux/v4l2_capture_device.cpp`
+- `src/backends/webcam/webcam_backend.hpp`
+- `src/backends/webcam/webcam_backend.cpp`
+- `tests/backends/webcam_linux_v4l2_capture_device_smoke.cpp`
 - `src/backends/webcam/linux/README.md`
-- `src/labops/README.md`
-- `src/labops/cli/README.md`
-- `tests/labops/README.md`
+- `src/backends/webcam/README.md`
+- `tests/backends/README.md`
 - `SUMMARY.md`
 
 ### Verification
@@ -106,12 +119,12 @@ Why:
 
 3. Focused tests
 - Command:
-  - `ctest --test-dir build -R "list_devices_webcam_backend_smoke|webcam_device_model_smoke|webcam_device_selector_smoke|run_webcam_selector_resolution_smoke|list_backends_smoke" --output-on-failure`
+  - `ctest --test-dir build -R "webcam_linux_v4l2_capture_device_smoke|webcam_backend_smoke|list_devices_webcam_backend_smoke|webcam_device_selector_smoke|run_webcam_selector_resolution_smoke" --output-on-failure`
 - Result: passed (`5/5`)
 
 4. Full regression suite
 - Command: `ctest --test-dir build --output-on-failure`
-- Result: passed (`80/80`)
+- Result: passed (`81/81`)
 
 ### Outcome
-Linux webcam discovery now captures and exposes supported-control evidence in a normalized form, and `labops list-devices --backend webcam` explicitly reports what each device supports.
+LabOps now has a native Linux V4L2 open/close lifecycle module with explicit capture-method selection (`mmap` preferred, `read` fallback) and actionable failure diagnostics, plus deterministic tests protecting this behavior.
