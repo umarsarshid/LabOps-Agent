@@ -108,5 +108,6 @@ For any webcam backend change:
 ## Related Docs
 
 - `src/backends/webcam/README.md` (module-level implementation notes)
+- `docs/webcam_linux_troubleshooting.md` (Linux runtime triage notes)
 - `docs/scenario_schema.md` (scenario contract)
 - `docs/triage_bundle_spec.md` (artifact contract)

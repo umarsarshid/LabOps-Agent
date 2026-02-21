@@ -1,88 +1,68 @@
-# refactor(webcam): prefer Linux V4L2 with OpenCV fallback
+# docs(webcam): add Linux troubleshooting notes
 
 ## Why this change
-Linux webcam behavior still treated OpenCV as the primary availability gate in some paths. That made native-first behavior incomplete and could incorrectly report webcam as unavailable on Linux when OpenCV was off.
-
-This refactor makes Linux native V4L2 the default path and keeps OpenCV as fallback only when needed.
+Linux webcam issues were spread across logs and backend docs but we did not have a dedicated operator-facing troubleshooting playbook like the real backend page. Engineers needed a quick, practical guide for common Linux webcam failures.
 
 ## What was implemented
 
-### 1) Linux platform availability now reflects native V4L2-first design
+### 1) Added a dedicated Linux webcam troubleshooting playbook
 File:
-- `src/backends/webcam/linux/platform_probe_linux.cpp`
+- `docs/webcam_linux_troubleshooting.md`
 
 Changes:
-- Linux probe now reports webcam backend as available through native V4L2 path.
-- OpenCV is now reported as fallback context (enabled/disabled), not the gate that decides Linux availability.
-- Preserved capability reporting for `pixel_format` and `frame_rate` as `best_effort`.
+- Added an AE/QA-style troubleshooting document with:
+  - quick triage flow (backend status -> discovery -> manual smoke -> key artifacts)
+  - symptom-driven sections for:
+    - permissions on `/dev/video*`
+    - busy device / camera in use
+    - driver-clamped FPS (requested vs actual)
+    - auto exposure causing timing jitter
+    - native V4L2 fallback to OpenCV path
+  - actionable checks, fix patterns, and evidence checklist for escalation
+  - related docs links
 
 Why:
-- Linux native V4L2 code is compiled independently of OpenCV and should be the default backend path.
+- Gives hardware/software engineers a practical runbook to reduce back-and-forth and speed root-cause isolation.
 
-### 2) Webcam connect selection logic now enforces native-first + conditional fallback
+### 2) Linked troubleshooting doc from webcam policy page
 File:
-- `src/backends/webcam/webcam_backend.cpp`
+- `docs/webcam_backend.md`
 
 Changes:
-- Added session evidence cleanup for `webcam.capture_*` keys.
-- Added explicit backend selection evidence key:
-  - `webcam.capture_backend = linux_v4l2` when native mmap path is selected
-  - `webcam.capture_backend = opencv_fallback` when fallback is used
-- Linux connect flow now:
-  - tries native V4L2 open first
-  - uses native path immediately when mmap streaming is available
-  - records fallback reason when native path cannot be used
-  - only attempts OpenCV fallback when OpenCV bootstrap is compiled
-  - returns actionable `BACKEND_CONNECT_FAILED` when native is unavailable and OpenCV fallback is not compiled
-  - returns combined actionable error when native path is unavailable and OpenCV fallback also fails
+- Added `docs/webcam_linux_troubleshooting.md` under related docs.
 
 Why:
-- Makes backend choice deterministic and explicit.
-- Prevents silent fallback attempts when fallback is not compiled.
-- Gives better operator diagnostics in Linux lab environments.
+- Keeps policy and operational troubleshooting connected in one navigation path.
 
-### 3) Smoke coverage tightened for Linux availability expectation
-Files:
-- `tests/backends/webcam_backend_smoke.cpp`
-- `tests/labops/list_backends_smoke.cpp`
+### 3) Linked troubleshooting doc from docs index
+File:
+- `docs/README.md`
 
 Changes:
-- Added Linux-only assertion in backend smoke test that platform probe is available via native path.
-- Added Linux-only assertion in `list_backends_smoke` to require `webcam ✅ enabled`.
+- Added Linux webcam troubleshooting playbook entry.
 
 Why:
-- Locks the expected Linux availability contract so future changes do not regress native-first behavior.
+- Improves discoverability from the documentation root.
 
-### 4) Documentation updated for backend-selection behavior
-Files:
+### 4) Linked troubleshooting doc from module README
+File:
 - `src/backends/webcam/README.md`
-- `src/backends/webcam/linux/README.md`
 
 Changes:
-- Clarified that Linux prefers native V4L2 and uses OpenCV only as fallback.
-- Clarified Linux platform probe semantics and fallback context reporting.
+- Added related docs section linking to webcam policy and Linux troubleshooting playbook.
 
 Why:
-- Keeps contributor and operator docs aligned with runtime behavior.
+- Keeps implementation docs connected to operator runbooks.
 
 ## Verification performed
 
-1. Formatting
+1. Formatting/style gate
 - `bash tools/clang_format.sh --check`
 - Result: passed
 
-2. Configure + build
-- `cmake -S . -B build`
+2. Build verification
 - `cmake --build build`
 - Result: passed
 
-3. Focused tests
-- `ctest --test-dir build -R "webcam_backend_smoke|list_backends_smoke|list_devices_webcam_backend_smoke|run_webcam_selector_resolution_smoke" --output-on-failure`
-- Result: passed (`4/4`)
-
-4. Full regression
-- `ctest --test-dir build --output-on-failure`
-- Result: passed (`83/83`)
-
 ## Outcome
-On Linux, webcam backend behavior is now explicitly native-first (V4L2) with OpenCV fallback only when needed and available, with clearer diagnostics and stronger regression coverage.
+Linux webcam troubleshooting now has a dedicated, internal-note-style runbook with practical checks and evidence expectations, aligned with the tone and structure of the real backend troubleshooting documentation.

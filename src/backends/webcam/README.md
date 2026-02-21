@@ -116,3 +116,8 @@ no-hardware environments.
   - CI: OFF
 - If requested but OpenCV is not installed, the build falls back to
   non-OpenCV webcam scaffolding and reports bootstrap as disabled.
+
+## Related docs
+
+- `docs/webcam_backend.md` (policy and transition plan)
+- `docs/webcam_linux_troubleshooting.md` (Linux lab triage playbook)

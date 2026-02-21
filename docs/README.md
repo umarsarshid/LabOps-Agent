@@ -16,6 +16,7 @@ The codebase needs companion documentation for workflows, bundle contracts, play
 - Real-backend local setup/safety guide (`real_backend_setup.md`).
 - Real-backend troubleshooting playbook (`real_backend_troubleshooting.md`).
 - Webcam backend transition policy (`webcam_backend.md`).
+- Linux webcam troubleshooting playbook (`webcam_linux_troubleshooting.md`).
 - Non-functional refactor roadmap (`code_smartness_levelup.md`).
 - Release/readiness verification guidance.
 - Incident and troubleshooting playbooks.
