@@ -61,6 +61,10 @@ int main() {
     AssertContains(stdout_text, webcam_availability.reason);
   }
 
+#if defined(__linux__)
+  AssertContains(stdout_text, "webcam ✅ enabled");
+#endif
+
   const bool has_real_enabled = stdout_text.find("real ✅ enabled") != std::string::npos;
   const bool has_real_sdk_missing =
       stdout_text.find("real ⚠️ disabled (SDK not found)") != std::string::npos;

@@ -1,80 +1,88 @@
-# test(webcam/linux): add manual smoke target
+# refactor(webcam): prefer Linux V4L2 with OpenCV fallback
 
 ## Why this change
-Developers need a one-command check to confirm a Linux machine can run the native webcam path end-to-end (connect, stream, write bundle) without relying on CI.
+Linux webcam behavior still treated OpenCV as the primary availability gate in some paths. That made native-first behavior incomplete and could incorrectly report webcam as unavailable on Linux when OpenCV was off.
+
+This refactor makes Linux native V4L2 the default path and keeps OpenCV as fallback only when needed.
 
 ## What was implemented
 
-### 1) Added Linux manual webcam smoke target in CMake
+### 1) Linux platform availability now reflects native V4L2-first design
 File:
-- `CMakeLists.txt`
+- `src/backends/webcam/linux/platform_probe_linux.cpp`
 
 Changes:
-- Added a new developer-only custom build target:
-  - `webcam_linux_smoke_manual`
-- Linux behavior:
-  - creates output root `tmp/manual_webcam_linux_smoke`
-  - runs:
-    - `labops run tests/manual/webcam_linux_smoke_scenario.json --out tmp/manual_webcam_linux_smoke`
-- Non-Linux behavior:
-  - target still exists, but prints a clear Linux-only message and exits cleanly.
+- Linux probe now reports webcam backend as available through native V4L2 path.
+- OpenCV is now reported as fallback context (enabled/disabled), not the gate that decides Linux availability.
+- Preserved capability reporting for `pixel_format` and `frame_rate` as `best_effort`.
 
 Why:
-- Gives Linux developers one command for lab bring-up.
-- Keeps cross-platform developer experience clean (no missing target confusion).
-- Stays out of CI because it is a custom target, not a `ctest` test.
+- Linux native V4L2 code is compiled independently of OpenCV and should be the default backend path.
 
-### 2) Added dedicated Linux webcam manual scenario fixture
+### 2) Webcam connect selection logic now enforces native-first + conditional fallback
 File:
-- `tests/manual/webcam_linux_smoke_scenario.json`
+- `src/backends/webcam/webcam_backend.cpp`
 
 Changes:
-- New 5-second webcam scenario with:
-  - `backend: "webcam"`
-  - `apply_mode: "best_effort"`
-  - webcam selector `index: 0`
-  - requested format hints (`1280x720`, `30 fps`, `MJPG`)
-  - permissive thresholds for bring-up diagnostics.
+- Added session evidence cleanup for `webcam.capture_*` keys.
+- Added explicit backend selection evidence key:
+  - `webcam.capture_backend = linux_v4l2` when native mmap path is selected
+  - `webcam.capture_backend = opencv_fallback` when fallback is used
+- Linux connect flow now:
+  - tries native V4L2 open first
+  - uses native path immediately when mmap streaming is available
+  - records fallback reason when native path cannot be used
+  - only attempts OpenCV fallback when OpenCV bootstrap is compiled
+  - returns actionable `BACKEND_CONNECT_FAILED` when native is unavailable and OpenCV fallback is not compiled
+  - returns combined actionable error when native path is unavailable and OpenCV fallback also fails
 
 Why:
-- Provides a stable, checked-in fixture for manual Linux validation.
-- Avoids ad-hoc local JSON files when onboarding or troubleshooting.
+- Makes backend choice deterministic and explicit.
+- Prevents silent fallback attempts when fallback is not compiled.
+- Gives better operator diagnostics in Linux lab environments.
 
-### 3) Updated manual testing docs
+### 3) Smoke coverage tightened for Linux availability expectation
 Files:
-- `tests/manual/README.md`
-- `tests/README.md`
+- `tests/backends/webcam_backend_smoke.cpp`
+- `tests/labops/list_backends_smoke.cpp`
 
 Changes:
-- Documented new Linux webcam manual command.
-- Documented output path:
-  - `tmp/manual_webcam_linux_smoke/<run_id>/`
-- Clarified non-Linux fallback behavior for the target.
+- Added Linux-only assertion in backend smoke test that platform probe is available via native path.
+- Added Linux-only assertion in `list_backends_smoke` to require `webcam ✅ enabled`.
 
 Why:
-- Keeps manual workflow discoverable and consistent for future engineers.
+- Locks the expected Linux availability contract so future changes do not regress native-first behavior.
+
+### 4) Documentation updated for backend-selection behavior
+Files:
+- `src/backends/webcam/README.md`
+- `src/backends/webcam/linux/README.md`
+
+Changes:
+- Clarified that Linux prefers native V4L2 and uses OpenCV only as fallback.
+- Clarified Linux platform probe semantics and fallback context reporting.
+
+Why:
+- Keeps contributor and operator docs aligned with runtime behavior.
 
 ## Verification performed
 
-1. Formatting:
+1. Formatting
 - `bash tools/clang_format.sh --check`
 - Result: passed
 
-2. Build:
+2. Configure + build
+- `cmake -S . -B build`
 - `cmake --build build`
 - Result: passed
 
-3. Scenario validation:
-- `./build/labops validate tests/manual/webcam_linux_smoke_scenario.json`
-- Result: `valid: tests/manual/webcam_linux_smoke_scenario.json`
+3. Focused tests
+- `ctest --test-dir build -R "webcam_backend_smoke|list_backends_smoke|list_devices_webcam_backend_smoke|run_webcam_selector_resolution_smoke" --output-on-failure`
+- Result: passed (`4/4`)
 
-4. Manual target command:
-- `cmake --build build --target webcam_linux_smoke_manual`
-- Result on this non-Linux host: prints Linux-only message and succeeds.
-
-5. Full regression:
+4. Full regression
 - `ctest --test-dir build --output-on-failure`
 - Result: passed (`83/83`)
 
 ## Outcome
-A developer can now run one command (`webcam_linux_smoke_manual`) to quickly validate Linux webcam bring-up and produce a normal run bundle, while CI remains hardware-independent.
+On Linux, webcam backend behavior is now explicitly native-first (V4L2) with OpenCV fallback only when needed and available, with clearer diagnostics and stronger regression coverage.

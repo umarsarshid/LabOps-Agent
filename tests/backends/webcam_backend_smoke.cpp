@@ -1,3 +1,4 @@
+#include "backends/webcam/platform_probe.hpp"
 #include "backends/webcam/webcam_backend.hpp"
 
 #include <cstdlib>
@@ -21,6 +22,14 @@ void AssertContains(const std::string& text, std::string_view expected) {
 
 int main() {
   labops::backends::webcam::WebcamBackend backend;
+
+#if defined(__linux__)
+  const labops::backends::webcam::PlatformAvailability linux_probe =
+      labops::backends::webcam::ProbePlatformAvailability();
+  if (!linux_probe.available) {
+    Fail("expected Linux webcam probe to be available via native V4L2 path");
+  }
+#endif
 
   std::string error;
   if (!backend.SetParam("device.index", "9999", error)) {

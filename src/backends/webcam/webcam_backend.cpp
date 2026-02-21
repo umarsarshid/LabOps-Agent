@@ -161,6 +161,7 @@ void WebcamBackend::ClearSessionConfigSnapshot() {
   linux_native_capture_selected_ = false;
   RemoveKeysWithPrefix("webcam.actual_", params_);
   RemoveKeysWithPrefix("webcam.adjusted.", params_);
+  RemoveKeysWithPrefix("webcam.capture_", params_);
   RemoveKeysWithPrefix("webcam.readback.", params_);
   RemoveKeysWithPrefix("webcam.unsupported.", params_);
   RemoveKeysWithPrefix("webcam.linux_capture.", params_);
@@ -402,6 +403,7 @@ bool WebcamBackend::Connect(std::string& error) {
   }
   ClearSessionConfigSnapshot();
   capture_clock_.ResetToNow();
+  params_["webcam.capture_backend"] = "unresolved";
 
   std::string close_error;
   (void)opencv_.CloseDevice(close_error);
@@ -424,6 +426,7 @@ bool WebcamBackend::Connect(std::string& error) {
 
     if (native_open_info.capture_method == V4l2CaptureMethod::kMmapStreaming) {
       params_["webcam.linux_capture.stream_start"] = "deferred_until_start";
+      params_["webcam.capture_backend"] = "linux_v4l2";
       linux_native_capture_selected_ = true;
       connected_ = true;
       next_frame_id_ = 0;
@@ -434,6 +437,9 @@ bool WebcamBackend::Connect(std::string& error) {
     params_["webcam.linux_capture.stream_start"] = "skipped";
     params_["webcam.linux_capture.stream_start_reason"] =
         "mmap streaming unavailable for selected capture method";
+    native_probe_error =
+        "linux V4L2 selected read fallback, but mmap streaming is required for this run path";
+    params_["webcam.capture_fallback_reason"] = native_probe_error;
 
     std::string native_close_error;
     if (!linux_capture_probe_.Close(native_close_error)) {
@@ -445,13 +451,36 @@ bool WebcamBackend::Connect(std::string& error) {
     // Keep probe errors as evidence but do not fail OpenCV bootstrap path yet.
     params_["webcam.linux_capture.path"] = native_device_path;
     params_["webcam.linux_capture.error"] = native_probe_error;
+    params_["webcam.capture_fallback_reason"] = native_probe_error;
+  }
+
+  if (!IsOpenCvBootstrapEnabled()) {
+    if (!native_probe_error.empty()) {
+      error = "BACKEND_CONNECT_FAILED: " + native_probe_error +
+              "; OpenCV fallback is not compiled in this build";
+    } else {
+      error = "BACKEND_CONNECT_FAILED: Linux V4L2 path is unavailable and OpenCV fallback is not "
+              "compiled in this build";
+    }
+    return false;
   }
 #endif
 
-  if (!opencv_.OpenDevice(device_index, error)) {
+  std::string opencv_open_error;
+  if (!opencv_.OpenDevice(device_index, opencv_open_error)) {
+#if defined(__linux__)
+    if (const auto reason_it = params_.find("webcam.capture_fallback_reason");
+        reason_it != params_.end() && !reason_it->second.empty()) {
+      error = "BACKEND_CONNECT_FAILED: Linux V4L2 path unavailable (" + reason_it->second +
+              "); OpenCV fallback failed: " + opencv_open_error;
+      return false;
+    }
+#endif
+    error = opencv_open_error;
     return false;
   }
 
+  params_["webcam.capture_backend"] = "opencv_fallback";
   connected_ = true;
   next_frame_id_ = 0;
   params_["device.opened_index"] = std::to_string(device_index);

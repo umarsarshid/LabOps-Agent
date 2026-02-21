@@ -9,7 +9,15 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
 ## Current scope
 
 - `webcam_backend.hpp/.cpp`:
-  - implements `ICameraBackend` with OpenCV bootstrap capture support.
+  - implements `ICameraBackend` with Linux-native-first capture behavior.
+  - on Linux:
+    - tries native V4L2 first
+    - uses native mmap streaming path when available
+    - falls back to OpenCV only when native path cannot be used and OpenCV
+      bootstrap is compiled
+    - emits explicit fallback reason evidence in backend config
+  - on non-Linux:
+    - uses OpenCV bootstrap capture support.
   - opens a selected device index, attempts requested width/height/fps/fourcc,
     and captures requested-vs-actual readback in `dump_config()`.
   - on Linux, performs a native V4L2 mmap streaming probe
@@ -94,10 +102,11 @@ LabOps already has a deterministic sim backend and a vendor-SDK-oriented real ba
 
 ## Connection to the project
 
-This module is now operational through an OpenCV bootstrap path. It lets teams
-run real local webcam streams through the same LabOps run pipeline (events,
-metrics, bundles, summaries) while preserving fixture-driven deterministic
-selector behavior for CI and no-hardware environments.
+This module now runs Linux webcam streams through native V4L2 by default, with
+OpenCV as fallback when needed. It lets teams run real local webcam streams
+through the same LabOps run pipeline (events, metrics, bundles, summaries)
+while preserving fixture-driven deterministic selector behavior for CI and
+no-hardware environments.
 
 ## Build flag notes
 
